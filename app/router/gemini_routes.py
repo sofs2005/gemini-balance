@@ -321,10 +321,7 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         error_str = str(e)
         logger.error(f"Key verification failed: {error_str}")
 
-        is_429_error = "429" in error_str and (
-            "too many requests" in error_str.lower()
-            or "resource has been exhausted" in error_str.lower()
-        )
+        is_429_error = "429" in error_str
 
         if is_429_error:
             logger.info(
@@ -377,10 +374,7 @@ async def verify_selected_keys(
             error_message = str(e)
             logger.warning(f"Key verification failed for {api_key}: {error_message}")
 
-            is_429_error = "429" in error_message and (
-                "too many requests" in error_message.lower()
-                or "resource has been exhausted" in error_message.lower()
-            )
+            is_429_error = "429" in error_message
 
             if is_429_error:
                 logger.info(

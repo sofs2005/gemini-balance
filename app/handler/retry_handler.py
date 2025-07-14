@@ -38,11 +38,8 @@ class RetryHandler:
                         model_name = kwargs.get("model_name")
 
                         # 检查是否是 429 错误
-                        error_str = str(e).lower()
-                        is_429_error = "429" in error_str and (
-                            "too many requests" in error_str
-                            or "resource has been exhausted" in error_str
-                        )
+                        error_str = str(e)
+                        is_429_error = "429" in error_str
 
                         if is_429_error and model_name:
                             logger.info(
