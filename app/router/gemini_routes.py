@@ -31,6 +31,13 @@ async def get_next_working_key(key_manager: KeyManager = Depends(get_key_manager
     return await key_manager.get_next_working_key()
 
 
+async def get_next_working_key_for_model(
+    model_name: str, key_manager: KeyManager = Depends(get_key_manager)
+):
+    """获取下一个对特定模型可用的API密钥"""
+    return await key_manager.get_next_working_key(model_name=model_name)
+
+
 async def get_chat_service(key_manager: KeyManager = Depends(get_key_manager)):
     """获取Gemini聊天服务实例"""
     return GeminiChatService(settings.BASE_URL, key_manager)
@@ -100,7 +107,7 @@ async def generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
+    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):
@@ -129,7 +136,7 @@ async def stream_generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
+    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):

@@ -1,4 +1,5 @@
 
+import re
 from functools import wraps
 from typing import Callable, TypeVar
 
@@ -34,12 +35,34 @@ class RetryHandler:
                     key_manager = kwargs.get("key_manager")
                     if key_manager:
                         old_key = kwargs.get(self.key_arg)
-                        new_key = await key_manager.handle_api_failure(old_key, retries)
+                        model_name = kwargs.get("model_name")
+
+                        # 检查是否是 429 错误
+                        error_str = str(e).lower()
+                        is_429_error = "429" in error_str and (
+                            "too many requests" in error_str
+                            or "resource has been exhausted" in error_str
+                        )
+
+                        if is_429_error and model_name:
+                            logger.info(
+                                f"Detected 429 error for model '{model_name}' with key '{old_key}'. "
+                                "Marking key for cooldown."
+                            )
+                            await key_manager.mark_key_model_as_cooling(
+                                old_key, model_name
+                            )
+
+                        new_key = await key_manager.handle_api_failure(
+                            old_key, retries, model_name=model_name
+                        )
                         if new_key:
                             kwargs[self.key_arg] = new_key
                             logger.info(f"Switched to new API key: {new_key}")
                         else:
-                            logger.error(f"No valid API key available after {retries} retries.")
+                            logger.error(
+                                f"No valid API key available after {retries} retries."
+                            )
                             break
 
             logger.error(
