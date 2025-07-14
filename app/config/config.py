@@ -109,6 +109,7 @@ class Settings(BaseSettings):
 
     # 调度器配置
     CHECK_INTERVAL_HOURS: int = 1  # 默认检查间隔为1小时
+    GEMINI_QUOTA_RESET_HOUR: int = 16  # Gemini配额重置时间（24小时制，UTC+8）
     TIMEZONE: str = "Asia/Shanghai"  # 默认时区
 
     # github

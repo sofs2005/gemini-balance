@@ -1,6 +1,8 @@
 import asyncio
 from itertools import cycle
 from typing import Dict, Union
+from datetime import datetime, timedelta
+import pytz
 
 from app.config.config import settings
 from app.log.logger import get_key_manager_logger
@@ -22,6 +24,7 @@ class KeyManager:
         self.vertex_key_failure_counts: Dict[str, int] = {
             key: 0 for key in vertex_api_keys
         }
+        self.key_model_status: Dict[str, Dict[str, datetime]] = {}
         self.MAX_FAILURES = settings.MAX_FAILURES
         self.paid_key = settings.PAID_KEY
 
@@ -84,18 +87,42 @@ class KeyManager:
             )
             return False
 
-    async def get_next_working_key(self) -> str:
-        """获取下一可用的API key"""
+    async def get_next_working_key(self, model_name: str = None) -> str:
+        """
+        获取下一个可用的API key。
+        如果提供了 model_name，会额外检查该 key 是否因特定模型的配额问题而处于冷却状态。
+        """
         initial_key = await self.get_next_key()
         current_key = initial_key
 
-        while True:
-            if await self.is_key_valid(current_key):
-                return current_key
+        for _ in range(len(self.api_keys) + 1):
+            # 1. 检查通用有效性 (失败次数)
+            if not await self.is_key_valid(current_key):
+                current_key = await self.get_next_key()
+                if current_key == initial_key and _ > len(self.api_keys):
+                    logger.warning("All keys have been checked and none are generally valid.")
+                    return current_key # 返回最后一个检查的key，让上层处理
+                continue
 
-            current_key = await self.get_next_key()
-            if current_key == initial_key:
-                return current_key
+            # 2. 如果提供了模型，检查特定模型的冷却状态
+            if model_name:
+                now = datetime.now(pytz.utc)
+                model_statuses = self.key_model_status.get(current_key, {})
+                expiry_time = model_statuses.get(model_name)
+
+                if expiry_time and now < expiry_time:
+                    logger.info(f"Key {current_key} is in cooldown for model {model_name} until {expiry_time}. Skipping.")
+                    current_key = await self.get_next_key()
+                    if current_key == initial_key and _ > len(self.api_keys):
+                         logger.warning(f"All keys are in cooldown for model {model_name}.")
+                         return current_key # 返回最后一个检查的key
+                    continue
+            
+            # 3. 如果所有检查都通过，返回当前key
+            return current_key
+        
+        logger.error("Could not find a working key after a full cycle.")
+        return initial_key # Fallback
 
     async def get_next_working_vertex_key(self) -> str:
         """获取下一可用的 Vertex Express API key"""
@@ -110,7 +137,35 @@ class KeyManager:
             if current_key == initial_key:
                 return current_key
 
-    async def handle_api_failure(self, api_key: str, retries: int) -> str:
+    async def mark_key_model_as_cooling(self, api_key: str, model_name: str):
+        """
+        将指定 key 的特定 model 标记为冷却状态，直到下一个重置时间。
+        """
+        try:
+            tz = pytz.timezone(settings.TIMEZONE)
+        except pytz.UnknownTimeZoneError:
+            logger.error(f"Unknown timezone: {settings.TIMEZONE}. Falling back to UTC.")
+            tz = pytz.utc
+
+        now = datetime.now(tz)
+        reset_hour = settings.GEMINI_QUOTA_RESET_HOUR
+        
+        # 计算下一个重置时间
+        reset_time_today = now.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
+        if now >= reset_time_today:
+            # 如果当前时间已经超过今天的重置时间，则下一个重置点是明天
+            next_reset_time = reset_time_today + timedelta(days=1)
+        else:
+            # 否则是今天的重置时间
+            next_reset_time = reset_time_today
+
+        if api_key not in self.key_model_status:
+            self.key_model_status[api_key] = {}
+        
+        self.key_model_status[api_key][model_name] = next_reset_time.astimezone(pytz.utc)
+        logger.info(f"Key {api_key} for model {model_name} has been put into cooldown until {next_reset_time} ({settings.TIMEZONE}).")
+
+    async def handle_api_failure(self, api_key: str, retries: int, model_name: str = None) -> str:
         """处理API调用失败"""
         async with self.failure_count_lock:
             self.key_failure_counts[api_key] += 1
@@ -119,7 +174,7 @@ class KeyManager:
                     f"API key {api_key} has failed {self.MAX_FAILURES} times"
                 )
         if retries < settings.MAX_RETRIES:
-            return await self.get_next_working_key()
+            return await self.get_next_working_key(model_name=model_name)
         else:
             return ""
 

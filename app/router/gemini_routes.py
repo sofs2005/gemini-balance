@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from copy import deepcopy
 import asyncio
+import re
 from app.config.config import settings
 from app.log.logger import get_gemini_logger
 from app.core.security import SecurityService
@@ -29,6 +30,13 @@ async def get_key_manager():
 async def get_next_working_key(key_manager: KeyManager = Depends(get_key_manager)):
     """获取下一个可用的API密钥"""
     return await key_manager.get_next_working_key()
+
+
+async def get_next_working_key_for_model(
+    model_name: str, key_manager: KeyManager = Depends(get_key_manager)
+):
+    """获取下一个对特定模型可用的API密钥"""
+    return await key_manager.get_next_working_key(model_name=model_name)
 
 
 async def get_chat_service(key_manager: KeyManager = Depends(get_key_manager)):
@@ -100,7 +108,7 @@ async def generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
+    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):
@@ -129,7 +137,7 @@ async def stream_generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
+    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):
@@ -310,14 +318,27 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         if response:
             return JSONResponse({"status": "valid"})        
     except Exception as e:
-        logger.error(f"Key verification failed: {str(e)}")
-        
+        error_str = str(e)
+        logger.error(f"Key verification failed: {error_str}")
+
+        is_429_error = "429" in error_str and (
+            "too many requests" in error_str.lower()
+            or "resource has been exhausted" in error_str.lower()
+        )
+
+        if is_429_error:
+            logger.info(
+                f"Detected 429 error during single key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
+                "Marking key for cooldown."
+            )
+            await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
+
         async with key_manager.failure_count_lock:
             if api_key in key_manager.key_failure_counts:
                 key_manager.key_failure_counts[api_key] += 1
                 logger.warning(f"Verification exception for key: {api_key}, incrementing failure count")
         
-        return JSONResponse({"status": "invalid", "error": str(e)})
+        return JSONResponse({"status": "invalid", "error": error_str})
 
 
 @router.post("/verify-selected-keys")
@@ -355,6 +376,19 @@ async def verify_selected_keys(
         except Exception as e:
             error_message = str(e)
             logger.warning(f"Key verification failed for {api_key}: {error_message}")
+
+            is_429_error = "429" in error_message and (
+                "too many requests" in error_message.lower()
+                or "resource has been exhausted" in error_message.lower()
+            )
+
+            if is_429_error:
+                logger.info(
+                    f"Detected 429 error during bulk key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
+                    "Marking key for cooldown."
+                )
+                await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
+
             async with key_manager.failure_count_lock:
                 if api_key in key_manager.key_failure_counts:
                     key_manager.key_failure_counts[api_key] += 1
