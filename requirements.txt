@@ -18,3 +18,4 @@ databases
 python-dotenv
 apscheduler
 packaging
+pytz

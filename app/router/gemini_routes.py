@@ -321,15 +321,6 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         error_str = str(e)
         logger.error(f"Key verification failed: {error_str}")
 
-        # --- FORCED DEBUGGING LOGS ---
-        logger.error("--- DEBUGGING ---")
-        logger.error(f"Caught exception type: {type(e)}")
-        logger.error(f"Exception string content: {error_str}")
-        is_429 = "429" in error_str
-        logger.error(f"Result of '429 in error_str': {is_429}")
-        logger.error("--- END DEBUGGING ---")
-        # --- END FORCED DEBUGGING ---
-
         is_429_error = "429" in error_str
 
         if is_429_error:
@@ -382,15 +373,6 @@ async def verify_selected_keys(
         except Exception as e:
             error_message = str(e)
             logger.warning(f"Key verification failed for {api_key}: {error_message}")
-
-            # --- FORCED DEBUGGING LOGS ---
-            logger.error("--- DEBUGGING (BULK) ---")
-            logger.error(f"Caught exception type: {type(e)}")
-            logger.error(f"Exception string content: {error_message}")
-            is_429 = "429" in error_message
-            logger.error(f"Result of '429 in error_message': {is_429}")
-            logger.error("--- END DEBUGGING (BULK) ---")
-            # --- END FORCED DEBUGGING ---
 
             is_429_error = "429" in error_message
 
