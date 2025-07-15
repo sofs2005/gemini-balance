@@ -375,10 +375,25 @@ class GeminiChatService:
                     request_msg=payload
                 )
 
-                api_key = await self.key_manager.handle_api_failure(current_attempt_key, retries)
-                if api_key:
-                    logger.info(f"Switched to new API key: {api_key}")
+                is_429_error = "429" in error_log_msg
+                is_403_error = "403" in error_log_msg
+
+                new_key = None
+                if is_429_error:
+                    logger.info(f"Detected 429 error for model '{model}' with key '{current_attempt_key}'. Marking key for model-specific cooldown.")
+                    await self.key_manager.mark_key_model_as_cooling(current_attempt_key, model)
+                    new_key = await self.key_manager.get_next_working_key(model_name=model)
+                elif is_403_error:
+                    logger.warning(f"Detected 403 Forbidden error for key '{current_attempt_key}'. Marking key as failed immediately.")
+                    await self.key_manager.mark_key_as_failed(current_attempt_key)
+                    new_key = await self.key_manager.get_next_working_key(model_name=model)
                 else:
+                    new_key = await self.key_manager.handle_api_failure(current_attempt_key, retries, model_name=model)
+
+                if new_key and new_key != current_attempt_key:
+                    api_key = new_key
+                    logger.info(f"Switched to new API key: {api_key}")
+                elif not new_key:
                     logger.error(f"No valid API key available after {retries} retries.")
                     break
 
