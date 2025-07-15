@@ -37,26 +37,30 @@ class RetryHandler:
                         old_key = kwargs.get(self.key_arg)
                         model_name = kwargs.get("model_name")
 
-                        # 检查是否是 429 错误
                         error_str = str(e)
                         is_429_error = "429" in error_str
+                        is_403_error = "403" in error_str
 
+                        new_key = None
                         if is_429_error and model_name:
-                            logger.info(
-                                f"Detected 429 error for model '{model_name}' with key '{old_key}'. "
-                                "Marking key for cooldown."
-                            )
-                            await key_manager.mark_key_model_as_cooling(
-                                old_key, model_name
+                            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown.")
+                            await key_manager.mark_key_model_as_cooling(old_key, model_name)
+                            # 对于429错误，我们只获取下一个可用的key，而不对当前key进行通用失败计数
+                            new_key = await key_manager.get_next_working_key(model_name=model_name)
+                        elif is_403_error:
+                            logger.warning(f"Detected 403 Forbidden error for key '{old_key}'. Marking key as failed immediately.")
+                            await key_manager.mark_key_as_failed(old_key)
+                            new_key = await key_manager.get_next_working_key(model_name=model_name)
+                        else:
+                            # 对于其他所有错误，使用原始的失败计数和重试逻辑
+                            new_key = await key_manager.handle_api_failure(
+                                old_key, retries, model_name=model_name
                             )
 
-                        new_key = await key_manager.handle_api_failure(
-                            old_key, retries, model_name=model_name
-                        )
-                        if new_key:
+                        if new_key and new_key != old_key:
                             kwargs[self.key_arg] = new_key
                             logger.info(f"Switched to new API key: {new_key}")
-                        else:
+                        elif not new_key:
                             logger.error(
                                 f"No valid API key available after {retries} retries."
                             )

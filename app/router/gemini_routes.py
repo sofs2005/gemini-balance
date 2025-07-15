@@ -322,18 +322,23 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         logger.error(f"Key verification failed: {error_str}")
 
         is_429_error = "429" in error_str
+        is_403_error = "403" in error_str
 
         if is_429_error:
             logger.info(
                 f"Detected 429 error during single key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
-                "Marking key for cooldown."
+                "Marking key for cooldown only."
             )
             await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
-
-        async with key_manager.failure_count_lock:
-            if api_key in key_manager.key_failure_counts:
-                key_manager.key_failure_counts[api_key] += 1
-                logger.warning(f"Verification exception for key: {api_key}, incrementing failure count")
+        elif is_403_error:
+            logger.warning(f"Detected 403 Forbidden error for key '{api_key}'. Marking key as failed immediately.")
+            await key_manager.mark_key_as_failed(api_key)
+        else:
+            # For other errors, increment failure count
+            async with key_manager.failure_count_lock:
+                if api_key in key_manager.key_failure_counts:
+                    key_manager.key_failure_counts[api_key] += 1
+                    logger.warning(f"Verification exception for key: {api_key}, incrementing failure count")
         
         return JSONResponse({"status": "invalid", "error": error_str})
 
@@ -375,21 +380,27 @@ async def verify_selected_keys(
             logger.warning(f"Key verification failed for {api_key}: {error_message}")
 
             is_429_error = "429" in error_message
+            is_403_error = "403" in error_message
 
             if is_429_error:
                 logger.info(
                     f"Detected 429 error during bulk key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
-                    "Marking key for cooldown."
+                    "Marking key for cooldown only."
                 )
                 await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
-
-            async with key_manager.failure_count_lock:
-                if api_key in key_manager.key_failure_counts:
-                    key_manager.key_failure_counts[api_key] += 1
-                    logger.warning(f"Bulk verification exception for key: {api_key}, incrementing failure count")
-                else:
-                     key_manager.key_failure_counts[api_key] = 1
-                     logger.warning(f"Bulk verification exception for key: {api_key}, initializing failure count to 1")
+            elif is_403_error:
+                logger.warning(f"Detected 403 Forbidden error during bulk verification for key '{api_key}'. Marking key as failed immediately.")
+                await key_manager.mark_key_as_failed(api_key)
+            else:
+                # For other errors, increment failure count
+                async with key_manager.failure_count_lock:
+                    if api_key in key_manager.key_failure_counts:
+                        key_manager.key_failure_counts[api_key] += 1
+                        logger.warning(f"Bulk verification exception for key: {api_key}, incrementing failure count")
+                    else:
+                        key_manager.key_failure_counts[api_key] = 1
+                        logger.warning(f"Bulk verification exception for key: {api_key}, initializing failure count to 1")
+            
             failed_keys[api_key] = error_message
             return api_key, "invalid", error_message
 

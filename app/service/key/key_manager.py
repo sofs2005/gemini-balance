@@ -165,6 +165,13 @@ class KeyManager:
         self.key_model_status[api_key][model_name] = next_reset_time.astimezone(pytz.utc)
         logger.info(f"Key {api_key} for model {model_name} has been put into cooldown until {next_reset_time} ({settings.TIMEZONE}).")
 
+    async def mark_key_as_failed(self, api_key: str):
+        """立即将一个key标记为失败状态"""
+        async with self.failure_count_lock:
+            if api_key in self.key_failure_counts:
+                self.key_failure_counts[api_key] = self.MAX_FAILURES
+                logger.warning(f"API key {api_key} has been marked as failed immediately due to a critical error (e.g., 403).")
+
     async def handle_api_failure(self, api_key: str, retries: int, model_name: str = None) -> str:
         """处理API调用失败"""
         async with self.failure_count_lock:
