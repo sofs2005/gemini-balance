@@ -9,6 +9,8 @@ from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
+from app.handler.error_processor import handle_api_error_and_get_next_key
+from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
@@ -213,100 +215,24 @@ class GeminiChatService:
             response_copy["candidates"][0]["content"]["parts"][0]["text"] = text
         return response_copy
 
+    @RetryHandler()
     async def generate_content(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
         """生成内容"""
         payload = _build_payload(model, request)
-        start_time = time.perf_counter()
-        request_datetime = datetime.datetime.now()
-        is_success = False
-        status_code = None
-        response = None
+        response = await self.api_client.generate_content(payload, model, api_key)
+        return self.response_handler.handle_response(response, model, stream=False)
 
-        try:
-            response = await self.api_client.generate_content(payload, model, api_key)
-            is_success = True
-            status_code = 200
-            return self.response_handler.handle_response(response, model, stream=False)
-        except Exception as e:
-            is_success = False
-            error_log_msg = str(e)
-            logger.error(f"Normal API call failed with error: {error_log_msg}")
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
-
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=model,
-                error_type="gemini-chat-non-stream",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=payload
-            )
-            raise e
-        finally:
-            end_time = time.perf_counter()
-            latency_ms = int((end_time - start_time) * 1000)
-            await add_request_log(
-                model_name=model,
-                api_key=api_key,
-                is_success=is_success,
-                status_code=status_code,
-                latency_ms=latency_ms,
-                request_time=request_datetime
-            )
-
+    @RetryHandler()
     async def count_tokens(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
         """计算token数量"""
         # countTokens API只需要contents
         payload = {"contents": _filter_empty_parts(request.model_dump().get("contents", []))}
-        start_time = time.perf_counter()
-        request_datetime = datetime.datetime.now()
-        is_success = False
-        status_code = None
-        response = None
-
-        try:
-            response = await self.api_client.count_tokens(payload, model, api_key)
-            is_success = True
-            status_code = 200
-            return response
-        except Exception as e:
-            is_success = False
-            error_log_msg = str(e)
-            logger.error(f"Count tokens API call failed with error: {error_log_msg}")
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
-
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=model,
-                error_type="gemini-count-tokens",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=payload
-            )
-            raise e
-        finally:
-            end_time = time.perf_counter()
-            latency_ms = int((end_time - start_time) * 1000)
-            await add_request_log(
-                model_name=model,
-                api_key=api_key,
-                is_success=is_success,
-                status_code=status_code,
-                latency_ms=latency_ms,
-                request_time=request_datetime
-            )
+        response = await self.api_client.count_tokens(payload, model, api_key)
+        return response
 
     async def stream_generate_content(
         self, model: str, request: GeminiRequest, api_key: str
@@ -375,20 +301,9 @@ class GeminiChatService:
                     request_msg=payload
                 )
 
-                is_429_error = "429" in error_log_msg
-                is_403_error = "403" in error_log_msg
-
-                new_key = None
-                if is_429_error:
-                    logger.info(f"Detected 429 error for model '{model}' with key '{current_attempt_key}'. Marking key for model-specific cooldown.")
-                    await self.key_manager.mark_key_model_as_cooling(current_attempt_key, model)
-                    new_key = await self.key_manager.get_next_working_key(model_name=model)
-                elif is_403_error:
-                    logger.warning(f"Detected 403 Forbidden error for key '{current_attempt_key}'. Marking key as failed immediately.")
-                    await self.key_manager.mark_key_as_failed(current_attempt_key)
-                    new_key = await self.key_manager.get_next_working_key(model_name=model)
-                else:
-                    new_key = await self.key_manager.handle_api_failure(current_attempt_key, retries, model_name=model)
+                new_key = await handle_api_error_and_get_next_key(
+                    self.key_manager, e, current_attempt_key, model, retries
+                )
 
                 if new_key and new_key != current_attempt_key:
                     api_key = new_key

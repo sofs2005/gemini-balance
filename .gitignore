@@ -259,3 +259,6 @@ $RECYCLE.BIN/
 
 tests/
 default_db
+
+# Memory Bank - Should not be committed
+memory-bank/

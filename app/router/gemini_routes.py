@@ -10,6 +10,7 @@ from app.domain.gemini_models import GeminiContent, GeminiRequest, ResetSelected
 from app.service.chat.gemini_chat_service import GeminiChatService
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.service.model.model_service import ModelService
+from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.handler.retry_handler import RetryHandler
 from app.handler.error_handler import handle_route_errors
 from app.core.constants import API_VERSION
@@ -318,29 +319,12 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         if response:
             return JSONResponse({"status": "valid"})        
     except Exception as e:
-        error_str = str(e)
-        logger.error(f"Key verification failed: {error_str}")
-
-        is_429_error = "429" in error_str
-        is_403_error = "403" in error_str
-
-        if is_429_error:
-            logger.info(
-                f"Detected 429 error during single key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
-                "Marking key for cooldown only."
-            )
-            await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
-        elif is_403_error:
-            logger.warning(f"Detected 403 Forbidden error for key '{api_key}'. Marking key as failed immediately.")
-            await key_manager.mark_key_as_failed(api_key)
-        else:
-            # For other errors, increment failure count
-            async with key_manager.failure_count_lock:
-                if api_key in key_manager.key_failure_counts:
-                    key_manager.key_failure_counts[api_key] += 1
-                    logger.warning(f"Verification exception for key: {api_key}, incrementing failure count")
-        
-        return JSONResponse({"status": "invalid", "error": error_str})
+        logger.error(f"Key verification failed: {str(e)}")
+        # Use the centralized error handler to update key status, but ignore the returned new_key
+        await handle_api_error_and_get_next_key(
+            key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
+        )
+        return JSONResponse({"status": "invalid", "error": str(e)})
 
 
 @router.post("/verify-selected-keys")
@@ -378,29 +362,10 @@ async def verify_selected_keys(
         except Exception as e:
             error_message = str(e)
             logger.warning(f"Key verification failed for {api_key}: {error_message}")
-
-            is_429_error = "429" in error_message
-            is_403_error = "403" in error_message
-
-            if is_429_error:
-                logger.info(
-                    f"Detected 429 error during bulk key verification for model '{settings.TEST_MODEL}' with key '{api_key}'. "
-                    "Marking key for cooldown only."
-                )
-                await key_manager.mark_key_model_as_cooling(api_key, settings.TEST_MODEL)
-            elif is_403_error:
-                logger.warning(f"Detected 403 Forbidden error during bulk verification for key '{api_key}'. Marking key as failed immediately.")
-                await key_manager.mark_key_as_failed(api_key)
-            else:
-                # For other errors, increment failure count
-                async with key_manager.failure_count_lock:
-                    if api_key in key_manager.key_failure_counts:
-                        key_manager.key_failure_counts[api_key] += 1
-                        logger.warning(f"Bulk verification exception for key: {api_key}, incrementing failure count")
-                    else:
-                        key_manager.key_failure_counts[api_key] = 1
-                        logger.warning(f"Bulk verification exception for key: {api_key}, initializing failure count to 1")
-            
+            # Use the centralized error handler to update key status
+            await handle_api_error_and_get_next_key(
+                key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
+            )
             failed_keys[api_key] = error_message
             return api_key, "invalid", error_message
 

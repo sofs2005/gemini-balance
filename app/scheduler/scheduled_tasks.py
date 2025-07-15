@@ -3,6 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config.config import settings
 from app.domain.gemini_models import GeminiContent, GeminiRequest
+from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.log.logger import Logger
 from app.service.chat.gemini_chat_service import GeminiChatService
 from app.service.error_log.error_log_service import delete_old_error_logs
@@ -70,25 +71,17 @@ async def check_failed_keys():
                 )
                 await key_manager.reset_key_failure_count(key)
             except Exception as e:
-                logger.warning(
-                    f"Key {log_key} verification failed: {str(e)}. Incrementing failure count."
+                logger.warning(f"Key {log_key} verification failed: {str(e)}.")
+               # 调用通用错误处理器
+                await handle_api_error_and_get_next_key(
+                    key_manager=key_manager,
+                    error=e,
+                    old_key=key,
+                    model_name=settings.TEST_MODEL,
+                    # 在定时任务中，我们不进行重试，所以retries可以设为一个较大的值
+                    # 或者在handle_api_error_and_get_next_key中增加一个参数来区分调用场景
+                    retries=key_manager.MAX_FAILURES
                 )
-                # 直接操作计数器，需要加锁
-                async with key_manager.failure_count_lock:
-                    # 再次检查 key 是否存在且失败次数未达上限
-                    if (
-                        key in key_manager.key_failure_counts
-                        and key_manager.key_failure_counts[key]
-                        < key_manager.MAX_FAILURES
-                    ):
-                        key_manager.key_failure_counts[key] += 1
-                        logger.info(
-                            f"Failure count for key {log_key} incremented to {key_manager.key_failure_counts[key]}."
-                        )
-                    elif key in key_manager.key_failure_counts:
-                        logger.warning(
-                            f"Key {log_key} reached MAX_FAILURES ({key_manager.MAX_FAILURES}). Not incrementing further."
-                        )
 
     except Exception as e:
         logger.error(
