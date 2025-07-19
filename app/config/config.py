@@ -51,8 +51,8 @@ class Settings(BaseSettings):
         return v
 
     # API相关配置
-    API_KEYS: List[str]
-    ALLOWED_TOKENS: List[str]
+    API_KEYS: List[str]=[]
+    ALLOWED_TOKENS: List[str]=[]
     BASE_URL: str = f"https://generativelanguage.googleapis.com/{API_VERSION}"
     AUTH_TOKEN: str = ""
     MAX_FAILURES: int = 3
@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     AUTO_DELETE_REQUEST_LOGS_DAYS: int = 30
     SAFETY_SETTINGS: List[Dict[str, str]] = DEFAULT_SAFETY_SETTINGS
 
+    # Files API
+    FILES_CLEANUP_ENABLED: bool = True
+    FILES_CLEANUP_INTERVAL_HOURS: int = 1
+    FILES_USER_ISOLATION_ENABLED: bool = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -9,6 +9,7 @@ from app.core.security import SecurityService
 from app.domain.gemini_models import GeminiContent, GeminiRequest, ResetSelectedKeysRequest, VerifySelectedKeysRequest
 from app.service.chat.gemini_chat_service import GeminiChatService
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
+from app.service.tts.native.tts_routes import get_tts_chat_service
 from app.service.model.model_service import ModelService
 from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.handler.retry_handler import RetryHandler
@@ -118,11 +119,41 @@ async def generate_content(
     async with handle_route_errors(logger, operation_name, failure_message="Content generation failed"):
         logger.info(f"Handling Gemini content generation request for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+
+        # 检测是否为原生Gemini TTS请求
+        is_native_tts = False
+        if "tts" in model_name.lower() and request.generationConfig:
+            # 直接从解析后的request对象获取TTS配置
+            response_modalities = request.generationConfig.responseModalities or []
+            speech_config = request.generationConfig.speechConfig or {}
+
+            # 如果包含AUDIO模态和语音配置，则认为是原生TTS请求
+            if "AUDIO" in response_modalities and speech_config:
+                is_native_tts = True
+                logger.info("Detected native Gemini TTS request")
+                logger.info(f"TTS responseModalities: {response_modalities}")
+                logger.info(f"TTS speechConfig: {speech_config}")
+
         logger.info(f"Using API key: {api_key}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
 
+        # 所有原生TTS请求都使用TTS增强服务
+        if is_native_tts:
+            try:
+                logger.info("Using native TTS enhanced service")
+                tts_service = await get_tts_chat_service(key_manager)
+                response = await tts_service.generate_content(
+                    model=model_name,
+                    request=request,
+                    api_key=api_key
+                )
+                return response
+            except Exception as e:
+                logger.warning(f"Native TTS processing failed, falling back to standard service: {e}")
+
+        # 使用标准服务处理所有其他请求（非TTS）
         response = await chat_service.generate_content(
             model=model_name,
             request=request,
@@ -307,7 +338,7 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
                     parts=[{"text": "hi"}],
                 )
             ],
-            generation_config={"temperature": 0.7, "top_p": 1.0, "max_output_tokens": 10}
+            generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
         )
         
         response = await chat_service.generate_content(
@@ -317,7 +348,9 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         )
         
         if response:
-            return JSONResponse({"status": "valid"})        
+            # 如果密钥验证成功，则重置其失败计数
+            await key_manager.reset_key_failure_count(api_key)
+            return JSONResponse({"status": "valid"})
     except Exception as e:
         logger.error(f"Key verification failed: {str(e)}")
         # Use the centralized error handler to update key status, but ignore the returned new_key
@@ -350,7 +383,7 @@ async def verify_selected_keys(
         try:
             gemini_request = GeminiRequest(
                 contents=[GeminiContent(role="user", parts=[{"text": "hi"}])],
-                generation_config={"temperature": 0.7, "top_p": 1.0, "max_output_tokens": 10}
+                generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
             )
             await chat_service.generate_content(
                 settings.TEST_MODEL,
@@ -358,6 +391,8 @@ async def verify_selected_keys(
                 api_key
             )
             successful_keys.append(api_key)
+            # 如果密钥验证成功，则重置其失败计数
+            await key_manager.reset_key_failure_count(api_key)
             return api_key, "valid", None
         except Exception as e:
             error_message = str(e)
