@@ -1421,6 +1421,59 @@ endblock %} {% block head_extra_styles %}
           </div>
         </div>
 
+        <!-- 启用网址上下文 -->
+        <div class="mb-6 flex items-center justify-between">
+          <label for="URL_CONTEXT_ENABLED" class="font-semibold text-gray-700"
+            >启用网址上下文</label
+          >
+          <div
+            class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
+          >
+            <input
+              type="checkbox"
+              name="URL_CONTEXT_ENABLED"
+              id="URL_CONTEXT_ENABLED"
+              class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+            />
+            <label
+              for="URL_CONTEXT_ENABLED"
+              class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
+            ></label>
+          </div>
+        </div>
+
+        <!-- 网址上下文模型列表 -->
+        <div class="mb-6">
+          <label
+            for="URL_CONTEXT_MODELS"
+            class="block font-semibold mb-2 text-gray-700"
+            >网址上下文模型列表</label
+          >
+          <div class="array-container" id="URL_CONTEXT_MODELS_container">
+            <!-- 数组项将在这里动态添加 -->
+          </div>
+          <div class="flex justify-end gap-2 mt-2">
+            <button
+              type="button"
+              title="从列表选择模型添加到下方"
+              class="model-helper-trigger-btn p-2 rounded-md text-violet-300 hover:bg-violet-700 transition-colors"
+              data-target-array-key="URL_CONTEXT_MODELS"
+            >
+              <i class="fas fa-list-ul"></i>
+            </button>
+            <button
+              type="button"
+              class="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2"
+              onclick="addArrayItem('URL_CONTEXT_MODELS')"
+            >
+              <i class="fas fa-plus"></i> 添加模型
+            </button>
+          </div>
+          <small class="text-gray-500 mt-1 block"
+            >支持网址上下文功能的模型列表</small
+          >
+        </div>
+
         <!-- 显示搜索链接 -->
         <div class="mb-6 flex items-center justify-between">
           <label for="SHOW_SEARCH_LINK" class="font-semibold text-gray-700"
@@ -1523,7 +1576,7 @@ endblock %} {% block head_extra_styles %}
                             </button>
                         </div> -->
           <small class="text-gray-500 mt-1 block"
-            >为每个思考模型设置预算（整数，最大值
+            >为每个思考模型设置预算（-1为auto，最大值
             32767），此项与上方模型列表自动关联。</small
           >
         </div>

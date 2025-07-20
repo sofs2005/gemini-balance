@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     IMAGE_MODELS: List[str] = ["gemini-2.0-flash-exp"]
     FILTERED_MODELS: List[str] = DEFAULT_FILTER_MODELS
     TOOLS_CODE_EXECUTION_ENABLED: bool = False
+    # 是否启用网址上下文
+    URL_CONTEXT_ENABLED: bool = False
+    URL_CONTEXT_MODELS: List[str] = ["gemini-2.5-pro","gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-2.0-flash-live-001"]
     SHOW_SEARCH_LINK: bool = True
     SHOW_THINKING_PROCESS: bool = True
     THINKING_MODELS: List[str] = []

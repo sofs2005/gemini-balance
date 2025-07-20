@@ -87,6 +87,10 @@ def _build_tools(
 
     if model.endswith("-search"):
         tool["googleSearch"] = {}
+        
+    real_model = _get_real_model(model)
+    if real_model in settings.URL_CONTEXT_MODELS and settings.URL_CONTEXT_ENABLED:
+        tool["urlContext"] = {}
 
     # 将 request 中的 tools 合并到 tools 中
     if request.tools:
@@ -126,8 +130,21 @@ def _build_tools(
     if tool.get("functionDeclarations"):
         tool.pop("googleSearch", None)
         tool.pop("codeExecution", None)
+        tool.pop("urlContext",None)
 
     return [tool] if tool else []
+
+
+def _get_real_model(model: str) -> str:
+    if model.endswith("-search"):
+        model = model[:-7]
+    if model.endswith("-image"):
+        model = model[:-6]
+    if model.endswith("-non-thinking"):
+        model = model[:-13]
+    if "-search" in model and "-non-thinking" in model:
+        model = model[:-20]
+    return model
 
 
 def _get_safety_settings(model: str) -> List[Dict[str, str]]:
@@ -184,9 +201,12 @@ def _build_payload(
         payload["generationConfig"]["responseModalities"] = ["Text", "Image"]
     
     if request.model.endswith("-non-thinking"):
-        payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
+        if "gemini-2.5-pro" in request.model:
+            payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 128}
+        else:
+            payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0} 
     
-    if request.model in settings.THINKING_BUDGET_MAP:
+    elif _get_real_model(request.model) in settings.THINKING_BUDGET_MAP:
         if settings.SHOW_THINKING_PROCESS:
             payload["generationConfig"]["thinkingConfig"] = {
                 "thinkingBudget": settings.THINKING_BUDGET_MAP.get(request.model, 1000),
