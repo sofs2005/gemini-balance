@@ -10,7 +10,19 @@ from fastapi.templating import Jinja2Templates
 from app.core.security import verify_auth_token
 from app.config.config import settings
 from app.log.logger import get_routes_logger
-from app.router import error_log_routes, gemini_routes, openai_routes, config_routes, stats_routes, version_routes, openai_compatiable_routes, vertex_express_routes, files_routes, key_routes
+from app.router import (
+    config_routes,
+    error_log_routes,
+    files_routes,
+    gemini_routes,
+    key_routes,
+    openai_compatiable_routes,
+    openai_routes,
+    scheduler_routes,
+    stats_routes,
+    version_routes,
+    vertex_express_routes,
+)
 from app.service.key.key_manager import get_key_manager_instance
 from app.service.stats.stats_service import StatsService
 
@@ -31,6 +43,7 @@ def setup_routers(app: FastAPI) -> None:
     app.include_router(gemini_routes.router_v1beta)
     app.include_router(config_routes.router)
     app.include_router(error_log_routes.router)
+    app.include_router(scheduler_routes.router)
 
     app.include_router(stats_routes.router)
     app.include_router(version_routes.router)
@@ -69,10 +82,13 @@ def setup_page_routes(app: FastAPI) -> None:
                 return RedirectResponse(url="/", status_code=302)
 
             if verify_auth_token(auth_token):
-                logger.warning(f"🔑 ADMIN LOGIN: Setting cookie with max_age={settings.ADMIN_SESSION_EXPIRE} seconds ({settings.ADMIN_SESSION_EXPIRE/86400:.1f} days)")
-                response = RedirectResponse(url="/config", status_code=302)
+                logger.info("Successful authentication")
+                response = RedirectResponse(url="/keys", status_code=302)
                 response.set_cookie(
-                    key="auth_token", value=auth_token, httponly=True, max_age=settings.ADMIN_SESSION_EXPIRE
+                    key="auth_token",
+                    value=auth_token,
+                    httponly=True,
+                    max_age=settings.ADMIN_SESSION_EXPIRE,
                 )
                 return response
             logger.warning("Failed authentication attempt with invalid token")
