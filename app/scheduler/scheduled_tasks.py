@@ -41,29 +41,26 @@ async def check_failed_keys():
         keys_skipped_failed = 0
         keys_skipped_cooling = 0
 
-        async with key_manager.failure_count_lock:  # 访问共享数据需要加锁
-            # 复制一份以避免在迭代时修改字典
-            failure_counts_copy = key_manager.key_failure_counts.copy()
+        # 遍历所有密钥进行筛选
+        for key in key_manager.api_keys:
+            # 1. 使用标准方法检查密钥是否已失效 (包括403等直接失效的情况)
+            if not await key_manager.is_key_valid(key):
+                keys_skipped_failed += 1
+                continue
 
-            for key, fail_count in failure_counts_copy.items():
-                # 1. 跳过已确定失效的密钥 (失败次数 >= MAX_FAILURES)
-                if fail_count >= key_manager.MAX_FAILURES:
-                    keys_skipped_failed += 1
+            # 2. 检查是否在429冷却期内 (针对测试模型)
+            model_statuses = key_manager.key_model_status.get(key, {})
+            test_model_expiry = model_statuses.get(settings.TEST_MODEL)
+
+            if test_model_expiry:
+                now = datetime.now(pytz.utc)
+                if now < test_model_expiry:
+                    keys_skipped_cooling += 1
+                    logger.debug(f"Skipping key {redact_key_for_logging(key)} - in cooldown for {settings.TEST_MODEL} until {test_model_expiry}")
                     continue
 
-                # 2. 检查是否在429冷却期内 (针对测试模型)
-                model_statuses = key_manager.key_model_status.get(key, {})
-                test_model_expiry = model_statuses.get(settings.TEST_MODEL)
-
-                if test_model_expiry:
-                    now = datetime.now(pytz.utc)
-                    if now < test_model_expiry:
-                        keys_skipped_cooling += 1
-                        logger.debug(f"Skipping key {redact_key_for_logging(key)} - in cooldown for {settings.TEST_MODEL} until {test_model_expiry}")
-                        continue
-
-                # 3. 其他所有密钥都需要检测
-                keys_to_check.append(key)
+            # 3. 所有其他密钥都需要检测 (包括失败次数为0的正常密钥)
+            keys_to_check.append(key)
 
         # 输出详细的检测统计信息
         total_keys = len(key_manager.api_keys)
