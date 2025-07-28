@@ -1,5 +1,7 @@
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime
+import pytz
 
 from app.config.config import settings
 from app.domain.gemini_models import GeminiContent, GeminiRequest
@@ -34,22 +36,46 @@ async def check_failed_keys():
         # 注意：这里直接创建实例，而不是通过依赖注入，因为这是后台任务
         chat_service = GeminiChatService(settings.BASE_URL, key_manager)
 
-        # 获取需要检查的 key 列表 (失败次数 > 0)
+        # 获取需要检查的 key 列表 - 智能筛选逻辑
         keys_to_check = []
+        keys_skipped_failed = 0
+        keys_skipped_cooling = 0
+
         async with key_manager.failure_count_lock:  # 访问共享数据需要加锁
             # 复制一份以避免在迭代时修改字典
             failure_counts_copy = key_manager.key_failure_counts.copy()
-            keys_to_check = [
-                key for key, count in failure_counts_copy.items() if count > 0
-            ]  # 检查所有失败次数大于0的key
+
+            for key, fail_count in failure_counts_copy.items():
+                # 1. 跳过已确定失效的密钥 (失败次数 >= MAX_FAILURES)
+                if fail_count >= key_manager.MAX_FAILURES:
+                    keys_skipped_failed += 1
+                    continue
+
+                # 2. 检查是否在429冷却期内 (针对测试模型)
+                model_statuses = key_manager.key_model_status.get(key, {})
+                test_model_expiry = model_statuses.get(settings.TEST_MODEL)
+
+                if test_model_expiry:
+                    now = datetime.now(pytz.utc)
+                    if now < test_model_expiry:
+                        keys_skipped_cooling += 1
+                        logger.debug(f"Skipping key {redact_key_for_logging(key)} - in cooldown for {settings.TEST_MODEL} until {test_model_expiry}")
+                        continue
+
+                # 3. 其他所有密钥都需要检测
+                keys_to_check.append(key)
+
+        # 输出详细的检测统计信息
+        total_keys = len(key_manager.api_keys)
+        logger.info(f"Key verification summary:")
+        logger.info(f"  Total keys: {total_keys}")
+        logger.info(f"  Keys to check: {len(keys_to_check)}")
+        logger.info(f"  Skipped (failed): {keys_skipped_failed}")
+        logger.info(f"  Skipped (cooling): {keys_skipped_cooling}")
 
         if not keys_to_check:
-            logger.info("No keys with failure count > 0 found. Skipping verification.")
+            logger.info("No keys need verification. All keys are either failed or in cooldown.")
             return
-
-        logger.info(
-            f"Found {len(keys_to_check)} keys with failure count > 0 to verify."
-        )
 
         for key in keys_to_check:
             # 隐藏部分 key 用于日志记录
