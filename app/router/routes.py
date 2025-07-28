@@ -104,8 +104,8 @@ def setup_page_routes(app: FastAPI) -> None:
                 "keys_status.html",
                 {
                     "request": request,
-                    "valid_keys": {},
-                    "invalid_keys": {},
+                    "valid_keys": keys_status["valid_keys"],
+                    "invalid_keys": keys_status["invalid_keys"],
                     "total_keys": total_keys,
                     "valid_key_count": valid_key_count,
                     "invalid_key_count": invalid_key_count,
