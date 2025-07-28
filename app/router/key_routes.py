@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.core.security import verify_auth_token
+from app.config.config import settings
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
@@ -23,6 +24,13 @@ async def get_keys_paginated(
         return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
 
     all_keys_with_status = await key_manager.get_all_keys_with_fail_count()
+
+    # 调试信息
+    from app.log.logger import get_key_manager_logger
+    debug_logger = get_key_manager_logger()
+    debug_logger.info(f"KeyManager api_keys count: {len(key_manager.api_keys)}")
+    debug_logger.info(f"Settings API_KEYS count: {len(settings.API_KEYS)}")
+    debug_logger.info(f"All keys with status: {all_keys_with_status}")
 
     # Filter by status
     if status == "valid":
