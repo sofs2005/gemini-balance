@@ -18,6 +18,7 @@ from app.service.image.image_create_service import ImageCreateService
 from app.service.tts.tts_service import TTSService
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.service.model.model_service import ModelService
+from app.utils.helpers import redact_key_for_logging
 
 router = APIRouter()
 logger = get_openai_logger()
@@ -59,8 +60,8 @@ async def list_models(
     operation_name = "list_models"
     async with handle_route_errors(logger, operation_name):
         logger.info("Handling models list request")
-        api_key = await key_manager.get_first_valid_key()
-        logger.info(f"Using API key: {api_key}")
+        api_key = await key_manager.get_random_valid_key()
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
         return await model_service.get_gemini_openai_models(api_key)
 
 
@@ -84,7 +85,7 @@ async def chat_completion(
     async with handle_route_errors(logger, operation_name):
         logger.info(f"Handling chat completion request for model: {request.model}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {current_api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(current_api_key)}")
 
         if not await model_service.check_model_support(request.model):
             raise HTTPException(
@@ -129,7 +130,7 @@ async def embedding(
     async with handle_route_errors(logger, operation_name):
         logger.info(f"Handling embedding request for model: {request.model}")
         api_key = await key_manager.get_next_working_key()
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
         response = await embedding_service.create_embedding(
             input_text=request.input, model=request.model, api_key=api_key
         )
@@ -170,6 +171,6 @@ async def text_to_speech(
     async with handle_route_errors(logger, operation_name):
         logger.info(f"Handling TTS request for model: {request.model}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
         audio_data = await tts_service.create_tts(request, api_key)
         return Response(content=audio_data, media_type="audio/wav")

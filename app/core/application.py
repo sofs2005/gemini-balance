@@ -9,7 +9,7 @@ from app.config.config import settings, sync_initial_settings
 from app.database.connection import connect_to_db, disconnect_from_db
 from app.database.initialization import initialize_database
 from app.exception.exceptions import setup_exception_handlers
-from app.log.logger import get_application_logger
+from app.log.logger import get_application_logger, setup_access_logging
 from app.middleware.middleware import setup_middlewares
 from app.router.routes import setup_routers
 from app.scheduler.scheduled_tasks import start_scheduler, stop_scheduler
@@ -149,5 +149,8 @@ def create_app() -> FastAPI:
 
     # 配置路由
     setup_routers(app)
+
+    # 配置访问日志API密钥隐藏
+    setup_access_logging()
 
     return app

@@ -6,7 +6,7 @@ import datetime
 import json
 from typing import Any, Dict, List, Type, get_args, get_origin
 
-from pydantic import ValidationError, ValidationInfo, field_validator
+from pydantic import ValidationError, ValidationInfo, field_validator, Field
 from pydantic_settings import BaseSettings
 from sqlalchemy import insert, select, update
 
@@ -131,6 +131,14 @@ class Settings(BaseSettings):
     FILES_CLEANUP_ENABLED: bool = True
     FILES_CLEANUP_INTERVAL_HOURS: int = 1
     FILES_USER_ISOLATION_ENABLED: bool = True
+
+    # Admin Session Configuration
+    ADMIN_SESSION_EXPIRE: int = Field(
+        default=3600,
+        ge=300,
+        le=86400,
+        description="Admin session expiration time in seconds (5 minutes to 24 hours)"
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

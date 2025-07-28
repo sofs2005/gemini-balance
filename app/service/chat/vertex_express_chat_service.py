@@ -14,6 +14,7 @@ from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
 from app.database.services import add_error_log, add_request_log
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
 
@@ -340,7 +341,7 @@ class GeminiChatService:
 
                 api_key = await self.key_manager.handle_api_failure(current_attempt_key, retries)
                 if api_key:
-                    logger.info(f"Switched to new API key: {api_key}")
+                    logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
                 else:
                     logger.error(f"No valid API key available after {retries} retries.")
                     break

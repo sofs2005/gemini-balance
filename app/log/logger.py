@@ -1,7 +1,9 @@
 import logging
 import platform
 import sys
+import re
 from typing import Dict, Optional
+from app.utils.helpers import redact_key_for_logging as _redact_key_for_logging
 
 # ANSI转义序列颜色代码
 COLORS = {
@@ -11,6 +13,8 @@ COLORS = {
     "ERROR": "\033[31m",  # 红色
     "CRITICAL": "\033[1;31m",  # 红色加粗
 }
+
+
 
 # Windows系统启用ANSI支持
 if platform.system() == "Windows":
@@ -33,6 +37,50 @@ class ColoredFormatter(logging.Formatter):
         # 创建包含文件名和行号的固定宽度字符串
         record.fileloc = f"[{record.filename}:{record.lineno}]"
         return super().format(record)
+
+
+class AccessLogFormatter(logging.Formatter):
+    """
+    Custom access log formatter that redacts API keys in URLs
+    """
+
+    # API key patterns to match in URLs
+    API_KEY_PATTERNS = [
+        r'\bAIza[0-9A-Za-z_-]{35}',  # Google API keys (like Gemini)
+        r'\bsk-[0-9A-Za-z_-]{20,}',  # OpenAI and general sk- prefixed keys
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Compile regex patterns for better performance
+        self.compiled_patterns = [re.compile(pattern) for pattern in self.API_KEY_PATTERNS]
+
+    def format(self, record):
+        # Format the record normally first
+        formatted_msg = super().format(record)
+
+        # Redact API keys in the formatted message
+        return self._redact_api_keys_in_message(formatted_msg)
+
+    def _redact_api_keys_in_message(self, message: str) -> str:
+        """
+        Replace API keys in log message with redacted versions
+        """
+        try:
+            for pattern in self.compiled_patterns:
+                def replace_key(match):
+                    key = match.group(0)
+                    return _redact_key_for_logging(key)
+
+                message = pattern.sub(replace_key, message)
+
+            return message
+        except Exception as e:
+            # Log the error but don't expose the original message in case it contains keys
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error redacting API keys in access log: {e}")
+            return "[LOG_REDACTION_ERROR]"
 
 
 # 日志格式 - 使用 fileloc 并设置固定宽度 (例如 30)
@@ -234,4 +282,44 @@ def get_files_logger():
 
 def get_vertex_express_logger():
     return Logger.setup_logger("vertex_express")
+
+
+def setup_access_logging():
+    """
+    Configure uvicorn access logging with API key redaction
+
+    This function sets up a custom access log formatter that automatically
+    redacts API keys in HTTP access logs. It works by:
+
+    1. Intercepting uvicorn's access log messages
+    2. Using regex patterns to find API keys in URLs
+    3. Replacing them with redacted versions (first6...last6)
+
+    Supported API key formats:
+    - Google/Gemini API keys: AIza[35 chars]
+    - OpenAI API keys: sk-[48 chars]
+    - General sk- prefixed keys: sk-[20+ chars]
+
+    Usage:
+    - Automatically called in main.py when running with uvicorn
+    - For production deployment with gunicorn, ensure this is called in startup
+    """
+    # Get the uvicorn access logger
+    access_logger = logging.getLogger("uvicorn.access")
+
+    # Remove existing handlers to avoid duplicate logs
+    for handler in access_logger.handlers[:]:
+        access_logger.removeHandler(handler)
+
+    # Create new handler with our custom formatter that includes timestamp and log level
+    handler = logging.StreamHandler(sys.stdout)
+    access_formatter = AccessLogFormatter("%(asctime)s | %(levelname)-8s | %(message)s")
+    handler.setFormatter(access_formatter)
+
+    # Add the handler to uvicorn access logger
+    access_logger.addHandler(handler)
+    access_logger.setLevel(logging.INFO)
+    access_logger.propagate = False
+
+    return access_logger
 

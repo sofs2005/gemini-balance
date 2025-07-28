@@ -3,6 +3,7 @@ from starlette import status
 from app.core.security import verify_auth_token
 from app.service.stats.stats_service import StatsService
 from app.log.logger import get_stats_logger
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_stats_logger()
 
@@ -48,7 +49,7 @@ async def get_key_usage_details(key: str):
             return {}
         return usage_details
     except Exception as e:
-        logger.error(f"Error fetching key usage details for key {key[:4]}...: {e}")
+        logger.error(f"Error fetching key usage details for key {redact_key_for_logging(key)}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取密钥使用详情时出错: {e}"

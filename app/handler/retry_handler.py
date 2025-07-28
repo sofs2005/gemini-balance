@@ -6,6 +6,7 @@ from typing import Callable, TypeVar
 from app.config.config import settings
 from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.log.logger import get_retry_logger
+from app.utils.helpers import redact_key_for_logging
 
 T = TypeVar("T")
 logger = get_retry_logger()
@@ -44,11 +45,9 @@ class RetryHandler:
 
                         if new_key and new_key != old_key:
                             kwargs[self.key_arg] = new_key
-                            logger.info(f"Switched to new API key: {new_key}")
-                        elif not new_key:
-                            logger.error(
-                                f"No valid API key available after {retries} retries."
-                            )
+                            logger.info(f"Switched to new API key: {redact_key_for_logging(new_key)}")
+                        else:
+                            logger.error(f"No valid API key available after {retries} retries.")
                             break
 
             logger.error(

@@ -13,6 +13,7 @@ from app.database.services import (
 from app.domain.openai_models import ChatRequest, ImageGenerationRequest
 from app.service.client.api_client import OpenaiApiClient
 from app.service.key.key_manager import KeyManager
+from app.utils.helpers import redact_key_for_logging
 from app.log.logger import get_openai_compatible_logger
 
 logger = get_openai_compatible_logger()
@@ -159,7 +160,7 @@ class OpenAICompatiableService:
                         current_attempt_key, retries
                     )
                     if api_key:
-                        logger.info(f"Switched to new API key: {api_key}")
+                        logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
                     else:
                         logger.error(
                             f"No valid API key available after {retries} retries."

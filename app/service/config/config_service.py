@@ -230,7 +230,7 @@ class ConfigService:
             key_manager = await get_key_manager_instance()
             model_service = ModelService()
 
-            api_key = await key_manager.get_first_valid_key()
+            api_key = await key_manager.get_random_valid_key()
             if not api_key:
                 logger.error("No valid API keys available to fetch model list for UI.")
                 raise HTTPException(

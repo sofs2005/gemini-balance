@@ -16,6 +16,7 @@ from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
 from app.database.services import add_error_log, add_request_log, get_file_api_key
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
 
@@ -299,10 +300,10 @@ class GeminiChatService:
             logger.info(f"Request contains file references: {file_names}")
             file_api_key = await get_file_api_key(file_names[0])
             if file_api_key:
-                logger.info(f"Found API key for file {file_names[0]}: {file_api_key[:8]}...{file_api_key[-4:]}")
+                logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
                 api_key = file_api_key  # 使用文件的 API key
             else:
-                logger.warning(f"No API key found for file {file_names[0]}, using default key: {api_key[:8]}...{api_key[-4:]}")
+                logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
         
         payload = _build_payload(model, request)
         response = await self.api_client.generate_content(payload, model, api_key)
@@ -328,10 +329,10 @@ class GeminiChatService:
             logger.info(f"Request contains file references: {file_names}")
             file_api_key = await get_file_api_key(file_names[0])
             if file_api_key:
-                logger.info(f"Found API key for file {file_names[0]}: {file_api_key[:8]}...{file_api_key[-4:]}")
+                logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
                 api_key = file_api_key  # 使用文件的 API key
             else:
-                logger.warning(f"No API key found for file {file_names[0]}, using default key: {api_key[:8]}...{api_key[-4:]}")
+                logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
                 
         retries = 0
         max_retries = settings.MAX_RETRIES
@@ -402,8 +403,8 @@ class GeminiChatService:
 
                 if new_key and new_key != current_attempt_key:
                     api_key = new_key
-                    logger.info(f"Switched to new API key: {api_key}")
-                elif not new_key:
+                    logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
+                else:
                     logger.error(f"No valid API key available after {retries} retries.")
                     break
 

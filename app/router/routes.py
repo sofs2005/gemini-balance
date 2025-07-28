@@ -7,8 +7,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.core.security import verify_auth_token
+from app.config.config import settings
 from app.log.logger import get_routes_logger
-from app.router import error_log_routes, gemini_routes, openai_routes, config_routes, scheduler_routes, stats_routes, version_routes, openai_compatiable_routes, vertex_express_routes, files_routes
+from app.router import error_log_routes, gemini_routes, openai_routes, config_routes, scheduler_routes, stats_routes, version_routes, openai_compatiable_routes, vertex_express_routes, files_routes, key_routes
 from app.service.key.key_manager import get_key_manager_instance
 from app.service.stats.stats_service import StatsService
 
@@ -35,6 +36,7 @@ def setup_routers(app: FastAPI) -> None:
     app.include_router(openai_compatiable_routes.router)
     app.include_router(vertex_express_routes.router)
     app.include_router(files_routes.router)
+    app.include_router(key_routes.router)
 
     setup_page_routes(app)
 
@@ -69,7 +71,7 @@ def setup_page_routes(app: FastAPI) -> None:
                 logger.info("Successful authentication")
                 response = RedirectResponse(url="/config", status_code=302)
                 response.set_cookie(
-                    key="auth_token", value=auth_token, httponly=True, max_age=3600
+                    key="auth_token", value=auth_token, httponly=True, max_age=settings.ADMIN_SESSION_EXPIRE
                 )
                 return response
             logger.warning("Failed authentication attempt with invalid token")
@@ -102,8 +104,8 @@ def setup_page_routes(app: FastAPI) -> None:
                 "keys_status.html",
                 {
                     "request": request,
-                    "valid_keys": keys_status["valid_keys"],
-                    "invalid_keys": keys_status["invalid_keys"],
+                    "valid_keys": {},
+                    "invalid_keys": {},
                     "total_keys": total_keys,
                     "valid_key_count": valid_key_count,
                     "invalid_key_count": invalid_key_count,
@@ -112,7 +114,25 @@ def setup_page_routes(app: FastAPI) -> None:
             )
         except Exception as e:
             logger.error(f"Error retrieving keys status or API stats: {str(e)}")
-            raise
+            # Even if there's an error, render the page with whatever data is available
+            # or with empty/default values, so the frontend can still load.
+            return templates.TemplateResponse(
+                "keys_status.html",
+                {
+                    "request": request,
+                    "valid_keys": {},
+                    "invalid_keys": {},
+                    "total_keys": 0,
+                    "valid_key_count": 0,
+                    "invalid_key_count": 0,
+                    "api_stats": {  # Provide a default structure for api_stats
+                        "calls_1m": {"total": 0, "success": 0, "failure": 0},
+                        "calls_1h": {"total": 0, "success": 0, "failure": 0},
+                        "calls_24h": {"total": 0, "success": 0, "failure": 0},
+                        "calls_month": {"total": 0, "success": 0, "failure": 0},
+                    },
+                },
+            )
             
     @app.get("/config", response_class=HTMLResponse)
     async def config_page(request: Request):

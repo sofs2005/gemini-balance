@@ -11,6 +11,7 @@ from app.service.model.model_service import ModelService
 from app.handler.retry_handler import RetryHandler
 from app.handler.error_handler import handle_route_errors
 from app.core.constants import API_VERSION
+from app.utils.helpers import redact_key_for_logging
 
 router = APIRouter(prefix=f"/vertex-express/{API_VERSION}")
 logger = get_vertex_express_logger()
@@ -45,10 +46,10 @@ async def list_models(
     logger.info("Handling Gemini models list request")
 
     try:
-        api_key = await key_manager.get_first_valid_key()
+        api_key = await key_manager.get_random_valid_key()
         if not api_key:
             raise HTTPException(status_code=503, detail="No valid API keys available to fetch models.")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         models_data = await model_service.get_gemini_models(api_key)
         if not models_data or "models" not in models_data:
@@ -105,7 +106,7 @@ async def generate_content(
     async with handle_route_errors(logger, operation_name, failure_message="Content generation failed"):
         logger.info(f"Handling Gemini content generation request for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
@@ -133,7 +134,7 @@ async def stream_generate_content(
     async with handle_route_errors(logger, operation_name, failure_message="Streaming request initiation failed"):
         logger.info(f"Handling Gemini streaming content generation for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")

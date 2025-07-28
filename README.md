@@ -177,6 +177,7 @@ app/
 | `API_KEYS` | **Required**, list of Gemini API keys | `[]` |
 | `ALLOWED_TOKENS` | **Required**, list of access tokens | `[]` |
 | `AUTH_TOKEN` | Super admin token, defaults to the first of `ALLOWED_TOKENS` | `sk-123456` |
+| `ADMIN_SESSION_EXPIRE` | Admin session expiration time in seconds (5 minutes to 24 hours) | `3600` |
 | `TEST_MODEL` | Model for testing key validity | `gemini-1.5-flash` |
 | `IMAGE_MODELS` | Models supporting image generation | `["gemini-2.0-flash-exp"]` |
 | `SEARCH_MODELS` | Models supporting web search | `["gemini-2.0-flash-exp"]` |

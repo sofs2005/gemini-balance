@@ -511,7 +511,7 @@ class OpenAIChatService:
                     f"Streaming API call failed with error: {error_log_msg}. Attempt {retries} of {max_retries} with key {current_attempt_key}"
                 )
 
-                match = re.search(r"status code (\\d+)", error_log_msg)
+                match = re.search(r"status code (\d+)", error_log_msg)
                 if match:
                     status_code = int(match.group(1))
                 else:

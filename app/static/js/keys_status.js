@@ -502,7 +502,7 @@ function showVerificationResultModal(data) {
     messageElement.appendChild(successDiv);
   }
 
-  // 失败列表
+  // 失败列表 - 按错误码分组展示
   if (Object.keys(failedKeys).length > 0) {
     const failDiv = document.createElement("div");
     failDiv.className = "mb-1"; // 减少底部边距
@@ -531,66 +531,143 @@ function showVerificationResultModal(data) {
     failHeader.appendChild(copyFailBtn);
     failDiv.appendChild(failHeader);
 
-    const failList = document.createElement("ul");
-    failList.className =
-      "text-sm text-gray-600 max-h-32 overflow-y-auto bg-red-50 p-2 rounded border border-red-200 space-y-1"; // 增加最大高度和间距
+    // 按错误码分组失败的密钥
+    const errorGroups = {};
     Object.entries(failedKeys).forEach(([key, error]) => {
-      const li = document.createElement("li");
-      // li.className = 'flex justify-between items-center'; // Restore original layout
-      li.className = "flex flex-col items-start"; // Start with vertical layout
+      // 提取错误码或使用完整错误信息作为分组键
+      let errorCode = error;
+      
+      // 尝试提取常见的错误码模式
+      const errorCodePatterns = [
+        /status code (\d+)/,
+      ];
+      
+      for (const pattern of errorCodePatterns) {
+        const match = error.match(pattern);
+        if (match) {
+          errorCode = match[1] || match[0];
+          break;
+        }
+      }
+      
+      // 如果没有匹配到特定模式，使用500
+      if (errorCode === error) {
+        errorCode = 500;
+      }
+      
+      if (!errorGroups[errorCode]) {
+        errorGroups[errorCode] = [];
+      }
+      errorGroups[errorCode].push({ key, error });
+    });
 
-      const keySpanContainer = document.createElement("div");
-      keySpanContainer.className = "flex justify-between items-center w-full"; // Ensure key and button are on the same line initially
+    // 创建分组展示容器
+    const groupsContainer = document.createElement("div");
+    groupsContainer.className = "space-y-3 max-h-64 overflow-y-auto bg-red-50 p-2 rounded border border-red-200";
 
-      const keySpan = document.createElement("span");
-      keySpan.className = "font-mono";
-      // Store full key in dataset, display masked
-      keySpan.dataset.fullKey = key;
-      keySpan.textContent =
-        key.substring(0, 4) + "..." + key.substring(key.length - 4);
+    // 按错误码分组展示
+    Object.entries(errorGroups).forEach(([errorCode, keyErrorPairs]) => {
+      const groupDiv = document.createElement("div");
+      groupDiv.className = "border border-red-300 rounded-lg bg-white p-2";
 
-      const detailsButton = document.createElement("button");
-      detailsButton.className =
-        "ml-2 px-2 py-0.5 bg-red-200 hover:bg-red-300 text-red-700 text-xs rounded transition-colors";
-      detailsButton.innerHTML = '<i class="fas fa-info-circle mr-1"></i>详情';
-      detailsButton.dataset.error = error; // 将错误信息存储在 data 属性中
-      detailsButton.onclick = (e) => {
-        e.stopPropagation(); // Prevent modal close
-        const button = e.currentTarget;
-        const listItem = button.closest("li");
-        const errorMsg = button.dataset.error;
-        const errorDetailsId = `error-details-${key.replace(
-          /[^a-zA-Z0-9]/g,
-          ""
-        )}`; // Create unique ID
-        let errorDiv = listItem.querySelector(`#${errorDetailsId}`);
+      // 错误码标题
+      const groupHeader = document.createElement("div");
+      groupHeader.className = "flex justify-between items-center mb-2 cursor-pointer";
+      groupHeader.innerHTML = `
+        <div class="flex items-center gap-2">
+          <i class="fas fa-chevron-down group-toggle-icon text-red-600 transition-transform duration-200"></i>
+          <h5 class="font-semibold text-red-700 text-sm">错误码: ${errorCode}</h5>
+          <span class="bg-red-100 text-red-600 px-2 py-0.5 rounded-full text-xs font-medium">${keyErrorPairs.length} 个密钥</span>
+        </div>
+        <button class="px-2 py-0.5 bg-red-200 hover:bg-red-300 text-red-700 text-xs rounded transition-colors group-copy-btn">
+          <i class="fas fa-copy mr-1"></i>复制组内密钥
+        </button>
+      `;
 
-        if (errorDiv) {
-          // Collapse: Remove error div and reset li layout
-          errorDiv.remove();
-          // listItem.className = 'flex justify-between items-center'; // Restore original layout
-          listItem.className = "flex flex-col items-start"; // Keep vertical layout
-          button.innerHTML = '<i class="fas fa-info-circle mr-1"></i>详情'; // Restore button text
+      // 复制组内密钥功能
+      const groupCopyBtn = groupHeader.querySelector('.group-copy-btn');
+      groupCopyBtn.onclick = (e) => {
+        e.stopPropagation();
+        const groupKeys = keyErrorPairs.map(pair => pair.key);
+        copyToClipboard(groupKeys.join("\n"))
+          .then(() =>
+            showNotification(
+              `已复制 ${groupKeys.length} 个密钥 (错误码: ${errorCode})`,
+              "success"
+            )
+          )
+          .catch(() => showNotification("复制失败", "error"));
+      };
+
+      // 密钥列表容器
+      const keysList = document.createElement("div");
+      keysList.className = "group-keys-list space-y-1";
+
+      keyErrorPairs.forEach(({ key, error }) => {
+        const keyItem = document.createElement("div");
+        keyItem.className = "flex flex-col items-start bg-gray-50 p-2 rounded border";
+
+        const keySpanContainer = document.createElement("div");
+        keySpanContainer.className = "flex justify-between items-center w-full";
+
+        const keySpan = document.createElement("span");
+        keySpan.className = "font-mono text-sm";
+        keySpan.dataset.fullKey = key;
+        keySpan.textContent = key.substring(0, 4) + "..." + key.substring(key.length - 4);
+
+        const detailsButton = document.createElement("button");
+        detailsButton.className = "ml-2 px-2 py-0.5 bg-red-200 hover:bg-red-300 text-red-700 text-xs rounded transition-colors";
+        detailsButton.innerHTML = '<i class="fas fa-info-circle mr-1"></i>详情';
+        detailsButton.dataset.error = error;
+        detailsButton.onclick = (e) => {
+          e.stopPropagation();
+          const button = e.currentTarget;
+          const keyItem = button.closest(".bg-gray-50");
+          const errorMsg = button.dataset.error;
+          const errorDetailsId = `error-details-${key.replace(/[^a-zA-Z0-9]/g, "")}`;
+          let errorDiv = keyItem.querySelector(`#${errorDetailsId}`);
+
+          if (errorDiv) {
+            errorDiv.remove();
+            button.innerHTML = '<i class="fas fa-info-circle mr-1"></i>详情';
+          } else {
+            errorDiv = document.createElement("div");
+            errorDiv.id = errorDetailsId;
+            errorDiv.className = "w-full mt-2 text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100 whitespace-pre-wrap break-words";
+            errorDiv.textContent = errorMsg;
+            keyItem.appendChild(errorDiv);
+            button.innerHTML = '<i class="fas fa-chevron-up mr-1"></i>收起';
+          }
+        };
+
+        keySpanContainer.appendChild(keySpan);
+        keySpanContainer.appendChild(detailsButton);
+        keyItem.appendChild(keySpanContainer);
+        keysList.appendChild(keyItem);
+      });
+
+      // 分组折叠/展开功能
+      groupHeader.onclick = (e) => {
+        if (e.target.closest('.group-copy-btn')) return; // 避免复制按钮触发折叠
+        
+        const toggleIcon = groupHeader.querySelector('.group-toggle-icon');
+        const isCollapsed = keysList.style.display === 'none';
+        
+        if (isCollapsed) {
+          keysList.style.display = 'block';
+          toggleIcon.style.transform = 'rotate(0deg)';
         } else {
-          // Expand: Create and append error div, change li layout
-          errorDiv = document.createElement("div");
-          errorDiv.id = errorDetailsId;
-          errorDiv.className =
-            "w-full mt-1 pl-0 text-xs text-red-600 bg-red-50 p-1 rounded border border-red-100 whitespace-pre-wrap break-words"; // Adjusted padding
-          errorDiv.textContent = errorMsg;
-          listItem.appendChild(errorDiv);
-          listItem.className = "flex flex-col items-start"; // Change layout to vertical
-          button.innerHTML = '<i class="fas fa-chevron-up mr-1"></i>收起'; // Change button text
-          // Move button to be alongside the keySpan for vertical layout (already done)
+          keysList.style.display = 'none';
+          toggleIcon.style.transform = 'rotate(-90deg)';
         }
       };
 
-      keySpanContainer.appendChild(keySpan); // Add keySpan to container
-      keySpanContainer.appendChild(detailsButton); // Add button to container
-      li.appendChild(keySpanContainer); // Add container to list item
-      failList.appendChild(li);
+      groupDiv.appendChild(groupHeader);
+      groupDiv.appendChild(keysList);
+      groupsContainer.appendChild(groupDiv);
     });
-    failDiv.appendChild(failList);
+
+    failDiv.appendChild(groupsContainer);
     messageElement.appendChild(failDiv);
   }
 
@@ -602,82 +679,50 @@ function showVerificationResultModal(data) {
 }
 
 async function executeResetAll(type) {
-  try {
-    // 关闭确认模态框
-    closeResetModal();
+  closeResetModal();
+  const keysToReset = getSelectedKeys(type);
+  if (keysToReset.length === 0) {
+    showNotification("没有选中的密钥可重置", "warning");
+    return;
+  }
 
-    // 找到对应的重置按钮以显示加载状态
-    const resetButton = document.querySelector(
-      `button[data-reset-type="${type}"]`
-    );
-    if (!resetButton) {
-      showResultModal(
-        false,
-        `找不到${type === "valid" ? "有效" : "无效"}密钥区域的批量重置按钮`,
-        false
-      ); // Don't reload if button not found
-      return;
-    }
+  showProgressModal(`批量重置 ${keysToReset.length} 个密钥的失败计数`);
 
-    // 获取选中的密钥
-    const keysToReset = getSelectedKeys(type);
+  let successCount = 0;
+  let failCount = 0;
 
-    if (keysToReset.length === 0) {
-      showNotification(
-        `没有选中的${type === "valid" ? "有效" : "无效"}密钥可重置`,
-        "warning"
-      );
-      return;
-    }
-
-    // 禁用按钮并显示加载状态
-    resetButton.disabled = true;
-    const originalHtml = resetButton.innerHTML;
-    resetButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 重置中';
+  for (let i = 0; i < keysToReset.length; i++) {
+    const key = keysToReset[i];
+    const keyDisplay = `${key.substring(0, 4)}...${key.substring(
+      key.length - 4
+    )}`;
+    updateProgress(i, keysToReset.length, `正在重置: ${keyDisplay}`);
 
     try {
-      const options = {
+      const data = await fetchAPI(`/gemini/v1beta/reset-fail-count/${key}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keys: keysToReset, key_type: type }),
-      };
-      const data = await fetchAPI(
-        `/gemini/v1beta/reset-selected-fail-counts`,
-        options
-      );
-
-      // 根据重置结果显示模态框
+      });
       if (data.success) {
-        const message =
-          data.reset_count !== undefined
-            ? `成功重置 ${data.reset_count} 个选中的${
-                type === "valid" ? "有效" : "无效"
-              }密钥的失败次数`
-            : `成功重置 ${keysToReset.length} 个选中的密钥`;
-        showResultModal(true, message); // 成功后刷新页面
+        successCount++;
+        addProgressLog(`✅ ${keyDisplay}: 重置成功`);
       } else {
-        const errorMsg = data.message || "批量重置失败";
-        // 失败后不自动刷新页面，让用户看到错误信息
-        showResultModal(false, "批量重置失败: " + errorMsg, false);
+        failCount++;
+        addProgressLog(
+          `❌ ${keyDisplay}: 重置失败 - ${data.message || "未知错误"}`,
+          true
+        );
       }
     } catch (apiError) {
-      console.error("批量重置 API 请求失败:", apiError);
-      showResultModal(false, `批量重置请求失败: ${apiError.message}`, false);
-    } finally {
-      // 恢复按钮状态 (仅在不刷新的情况下)
-      if (
-        !document.getElementById("resultModal") ||
-        document.getElementById("resultModal").classList.contains("hidden") ||
-        document.getElementById("resultModalTitle").textContent.includes("失败")
-      ) {
-        resetButton.innerHTML = originalHtml;
-        resetButton.disabled = false;
-      }
+      failCount++;
+      addProgressLog(`❌ ${keyDisplay}: 请求失败 - ${apiError.message}`, true);
     }
-  } catch (error) {
-    console.error("批量重置处理失败:", error);
-    showResultModal(false, "批量重置处理失败: " + error.message, false); // 失败后不自动刷新
   }
+
+  updateProgress(
+    keysToReset.length,
+    keysToReset.length,
+    `重置完成！成功: ${successCount}, 失败: ${failCount}`
+  );
 }
 
 function scrollToTop() {
@@ -894,6 +939,12 @@ function initializeKeyFilterControls() {
   if (thresholdInput) {
     thresholdInput.addEventListener("input", filterValidKeys);
   }
+  
+  // 为无效密钥添加筛选控件监听器
+  const invalidThresholdInput = document.getElementById("invalidFailCountThreshold");
+  if (invalidThresholdInput) {
+    invalidThresholdInput.addEventListener("input", () => fetchAndDisplayKeys('invalid', 1));
+  }
 }
 
 function initializeGlobalBatchVerificationHandlers() {
@@ -929,56 +980,136 @@ function initializeGlobalBatchVerificationHandlers() {
 
   // executeVerifyAll 变为 initializeGlobalBatchVerificationHandlers 的局部函数
   async function executeVerifyAll(type) {
-    // Removed window.
-    try {
-      window.closeVerifyModal(); // Calls the global close function, which is fine.
-      const verifyButton = document.querySelector(
-        `#${type}BatchActions button:nth-child(1)`
-      ); // Assuming verify is the first button
-      let originalVerifyHtml = "";
-      if (verifyButton) {
-        originalVerifyHtml = verifyButton.innerHTML;
-        verifyButton.disabled = true;
-        verifyButton.innerHTML =
-          '<i class="fas fa-spinner fa-spin"></i> 验证中';
-      }
-      const keysToVerify = getSelectedKeys(type);
-      if (keysToVerify.length === 0) {
-        showNotification(
-          `没有选中的${type === "valid" ? "有效" : "无效"}密钥可验证`,
-          "warning"
-        );
-        if (verifyButton) {
-          // Restore button if no keys selected
-          verifyButton.innerHTML = originalVerifyHtml;
-        }
-        return;
-      }
-      showNotification("开始批量验证，请稍候...", "info");
-      const options = {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keys: keysToVerify }),
-      };
-      const data = await fetchAPI(
-        `/gemini/v1beta/verify-selected-keys`,
-        options
-      );
-      if (data) {
-        showVerificationResultModal(data);
-      } else {
-        throw new Error("API did not return verification data.");
-      }
-    } catch (apiError) {
-      console.error("批量验证处理失败:", apiError);
-      showResultModal(false, `批量验证处理失败: ${apiError.message}`, true);
-    } finally {
-      console.log("Bulk verification process finished.");
-      // Button state will be reset on page reload or by updateBatchActions
+    closeVerifyModal();
+    const keysToVerify = getSelectedKeys(type);
+    if (keysToVerify.length === 0) {
+      showNotification("没有选中的密钥可验证", "warning");
+      return;
     }
+
+    const batchSizeInput = document.getElementById("batchSize");
+    const batchSize = parseInt(batchSizeInput.value, 10) || 10;
+
+    showProgressModal(`批量验证 ${keysToVerify.length} 个密钥`);
+
+    let allSuccessfulKeys = [];
+    let allFailedKeys = {};
+    let processedCount = 0;
+
+    for (let i = 0; i < keysToVerify.length; i += batchSize) {
+      const batch = keysToVerify.slice(i, i + batchSize);
+      const progressText = `正在验证批次 ${Math.floor(i / batchSize) + 1} / ${Math.ceil(keysToVerify.length / batchSize)} (密钥 ${i + 1}-${Math.min(i + batchSize, keysToVerify.length)})`;
+      
+      updateProgress(i, keysToVerify.length, progressText);
+      addProgressLog(`处理批次: ${batch.length}个密钥...`);
+
+      try {
+        const options = {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keys: batch }),
+        };
+        const data = await fetchAPI(`/gemini/v1beta/verify-selected-keys`, options);
+
+        if (data) {
+          if (data.successful_keys && data.successful_keys.length > 0) {
+            allSuccessfulKeys = allSuccessfulKeys.concat(data.successful_keys);
+            addProgressLog(`✅ 批次成功: ${data.successful_keys.length} 个`);
+          }
+          if (data.failed_keys && Object.keys(data.failed_keys).length > 0) {
+            Object.assign(allFailedKeys, data.failed_keys);
+             addProgressLog(`❌ 批次失败: ${Object.keys(data.failed_keys).length} 个`, true);
+          }
+        } else {
+           addProgressLog(`- 批次返回空数据`, true);
+        }
+      } catch (apiError) {
+         addProgressLog(`❌ 批次请求失败: ${apiError.message}`, true);
+         // Mark all keys in this batch as failed due to API error
+         batch.forEach(key => {
+            allFailedKeys[key] = apiError.message;
+         });
+      }
+      processedCount += batch.length;
+      updateProgress(processedCount, keysToVerify.length, progressText);
+    }
+
+    updateProgress(
+      keysToVerify.length,
+      keysToVerify.length,
+      `所有批次验证完成！`
+    );
+    
+    // Close progress modal and show final results
+    closeProgressModal(false); // Don't reload yet
+    showVerificationResultModal({
+        successful_keys: allSuccessfulKeys,
+        failed_keys: allFailedKeys,
+        valid_count: allSuccessfulKeys.length,
+        invalid_count: Object.keys(allFailedKeys).length
+    });
   }
   // The confirmButton.onclick in showVerifyModal (defined earlier in initializeGlobalBatchVerificationHandlers)
   // will correctly reference this local executeVerifyAll due to closure.
+}
+
+// --- 进度条模态框函数 ---
+function showProgressModal(title) {
+  const modal = document.getElementById("progressModal");
+  const titleElement = document.getElementById("progressModalTitle");
+  const statusText = document.getElementById("progressStatusText");
+  const progressBar = document.getElementById("progressBar");
+  const progressPercentage = document.getElementById("progressPercentage");
+  const progressLog = document.getElementById("progressLog");
+  const closeButton = document.getElementById("progressModalCloseBtn");
+  const closeIcon = document.getElementById("closeProgressModalBtn");
+
+  titleElement.textContent = title;
+  statusText.textContent = "准备开始...";
+  progressBar.style.width = "0%";
+  progressPercentage.textContent = "0%";
+  progressLog.innerHTML = "";
+  closeButton.disabled = true;
+  closeIcon.disabled = true;
+
+  modal.classList.remove("hidden");
+}
+
+function updateProgress(processed, total, status) {
+  const progressBar = document.getElementById("progressBar");
+  const progressPercentage = document.getElementById("progressPercentage");
+  const statusText = document.getElementById("progressStatusText");
+  const closeButton = document.getElementById("progressModalCloseBtn");
+  const closeIcon = document.getElementById("closeProgressModalBtn");
+
+  const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
+  progressBar.style.width = `${percentage}%`;
+  progressPercentage.textContent = `${percentage}%`;
+  statusText.textContent = status;
+
+  if (processed === total) {
+    closeButton.disabled = false;
+    closeIcon.disabled = false;
+  }
+}
+
+function addProgressLog(message, isError = false) {
+  const progressLog = document.getElementById("progressLog");
+  const logEntry = document.createElement("div");
+  logEntry.textContent = message;
+  logEntry.className = isError
+    ? "text-danger-600"
+    : "text-gray-700";
+  progressLog.appendChild(logEntry);
+  progressLog.scrollTop = progressLog.scrollHeight; // Auto-scroll to bottom
+}
+
+function closeProgressModal(reload = false) {
+  const modal = document.getElementById("progressModal");
+  modal.classList.add("hidden");
+  if (reload) {
+    location.reload();
+  }
 }
 
 function initializeKeySelectionListeners() {
@@ -1100,62 +1231,217 @@ function initializeAutoRefreshControls() {
   }
 }
 
-// These variables are used by pagination and search, define them in a scope accessible by initializeKeyPaginationAndSearch
+// Debounce function
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+
+// --- Key List Display & Pagination ---
+
+/**
+ * Fetches and displays keys.
+ * @param {string} type 'valid' or 'invalid'
+ * @param {number} page Page number (1-based)
+ */
+async function fetchAndDisplayKeys(type, page = 1) {
+    const listElement = document.getElementById(`${type}Keys`);
+    const paginationControls = document.getElementById(`${type}PaginationControls`);
+    if (!listElement || !paginationControls) return;
+
+    // Show loading indicator
+    listElement.innerHTML = `<li><div class="text-center py-4 col-span-full"><i class="fas fa-spinner fa-spin"></i> Loading...</div></li>`;
+
+    // 根据类型选择对应的控件
+    const itemsPerPageSelect = document.getElementById(type === 'valid' ? "itemsPerPageSelect" : "invalidItemsPerPageSelect");
+    const limit = itemsPerPageSelect ? parseInt(itemsPerPageSelect.value, 10) : 10;
+    
+    const searchInput = document.getElementById(type === 'valid' ? "keySearchInput" : "invalidKeySearchInput");
+    const searchTerm = searchInput ? searchInput.value : '';
+
+    const thresholdInput = document.getElementById(type === 'valid' ? "failCountThreshold" : "invalidFailCountThreshold");
+    const failCountThreshold = thresholdInput ? (thresholdInput.value === '' ? null : parseInt(thresholdInput.value, 10)) : null;
+
+    try {
+        const params = new URLSearchParams({
+            page: page,
+            limit: limit,
+            status: type,
+        });
+        if (searchTerm) {
+            params.append('search', searchTerm);
+        }
+        if (failCountThreshold !== null) {
+            params.append('fail_count_threshold', failCountThreshold);
+        }
+
+        const data = await fetchAPI(`/api/keys?${params.toString()}`);
+
+        listElement.innerHTML = ""; // Clear loading indicator
+
+        const keys = data.keys || {};
+        if (Object.keys(keys).length > 0) {
+            Object.entries(keys).forEach(([key, fail_count]) => {
+                const listItem = createKeyListItem(key, fail_count, type);
+                listElement.appendChild(listItem);
+            });
+        } else {
+            listElement.innerHTML = `<li><div class="text-center py-4 col-span-full">No keys found.</div></li>`;
+        }
+
+        setupPaginationControls(type, data.current_page, data.total_pages);
+        updateBatchActions(type);
+
+    } catch (error) {
+        console.error(`Error fetching ${type} keys:`, error);
+        listElement.innerHTML = `<li><div class="text-center py-4 text-red-500 col-span-full">Error loading keys.</div></li>`;
+    }
+}
+
+
+/**
+ * Creates a single key list item element.
+ * @param {string} key The API key.
+ * @param {number} fail_count The failure count for the key.
+ * @param {string} type 'valid' or 'invalid'.
+ * @returns {HTMLElement} The created list item element.
+ */
+function createKeyListItem(key, fail_count, type) {
+    const li = document.createElement("li");
+    li.className = `bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-all duration-300 border ${type === 'valid' ? 'hover:border-success-300' : 'hover:border-danger-300'} transform hover:-translate-y-1`;
+    li.dataset.key = key;
+    li.dataset.failCount = fail_count;
+
+    const statusBadge = type === 'valid'
+        ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success-50 text-success-600"><i class="fas fa-check mr-1"></i> 有效</span>`
+        : `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger-50 text-danger-600"><i class="fas fa-times mr-1"></i> 无效</span>`;
+
+    li.innerHTML = `
+        <input type="checkbox" class="form-checkbox h-5 w-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mt-1 key-checkbox" data-key-type="${type}" value="${key}">
+        <div class="flex-grow">
+            <div class="flex flex-col justify-between h-full gap-3">
+                <div class="flex flex-wrap items-center gap-2">
+                    ${statusBadge}
+                    <div class="flex items-center gap-1">
+                        <span class="key-text font-mono" data-full-key="${key}">${key.substring(0, 4)}...${key.substring(key.length - 4)}</span>
+                        <button class="text-gray-500 hover:text-primary-600 transition-colors" onclick="toggleKeyVisibility(this)" title="Show/Hide Key">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-600">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        失败: ${fail_count}
+                    </span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button class="flex items-center gap-1 bg-success-600 hover:bg-success-700 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200" onclick="verifyKey('${key}', this)"><i class="fas fa-check-circle"></i> 验证</button>
+                    <button class="flex items-center gap-1 bg-gray-500 hover:bg-gray-600 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200" onclick="resetKeyFailCount('${key}', this)"><i class="fas fa-redo-alt"></i> 重置</button>
+                    <button class="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200" onclick="copyKey('${key}')"><i class="fas fa-copy"></i> 复制</button>
+                    <button class="flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200" onclick="showKeyUsageDetails('${key}')"><i class="fas fa-chart-pie"></i> 详情</button>
+                    <button class="flex items-center gap-1 bg-red-800 hover:bg-red-900 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200" onclick="showSingleKeyDeleteConfirmModal('${key}', this)"><i class="fas fa-trash-alt"></i> 删除</button>
+                </div>
+            </div>
+        </div>
+    `;
+    return li;
+}
+
+
+/**
+ * Sets up pagination controls.
+ * @param {string} type 'valid' or 'invalid'
+ * @param {number} currentPage Current page number
+ * @param {number} totalPages Total number of pages
+ */
+function setupPaginationControls(type, currentPage, totalPages) {
+    const controlsContainer = document.getElementById(`${type}PaginationControls`);
+    if (!controlsContainer) return;
+
+    controlsContainer.innerHTML = "";
+
+    if (totalPages <= 1) return;
+
+    // Previous Button
+    const prevButton = document.createElement("button");
+    prevButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    prevButton.className = `pagination-button px-3 py-1 rounded text-sm transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed`;
+    prevButton.disabled = currentPage === 1;
+    prevButton.onclick = () => fetchAndDisplayKeys(type, currentPage - 1);
+    controlsContainer.appendChild(prevButton);
+
+    // Page Number Buttons
+    for (let i = 1; i <= totalPages; i++) {
+        // Simple pagination for now, can be improved with ellipsis for many pages
+        const pageButton = document.createElement("button");
+        pageButton.textContent = i;
+        pageButton.className = `pagination-button px-3 py-1 rounded text-sm transition-colors duration-150 ease-in-out ${i === currentPage ? 'active font-semibold' : ''}`;
+        pageButton.onclick = () => fetchAndDisplayKeys(type, i);
+        controlsContainer.appendChild(pageButton);
+    }
+
+    // Next Button
+    const nextButton = document.createElement("button");
+    nextButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    nextButton.className = `pagination-button px-3 py-1 rounded text-sm transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed`;
+    nextButton.disabled = currentPage === totalPages;
+    nextButton.onclick = () => fetchAndDisplayKeys(type, currentPage + 1);
+    controlsContainer.appendChild(nextButton);
+}
 let allValidKeys = [];
-let allInvalidKeys = [];
-let filteredValidKeys = [];
-let itemsPerPage = 10; // Default
-let validCurrentPage = 1; // Also used by displayPage
-let invalidCurrentPage = 1; // Also used by displayPage
-
+  let allInvalidKeys = [];
+  let filteredValidKeys = [];
+  let itemsPerPage = 10; // Default
+  let validCurrentPage = 1; // Also used by displayPage
+  let invalidCurrentPage = 1; // Also used by displayPage
+  
 function initializeKeyPaginationAndSearch() {
-  const validKeysListElement = document.getElementById("validKeys");
-  const invalidKeysListElement = document.getElementById("invalidKeys");
-  const searchInput = document.getElementById("keySearchInput");
-  const itemsPerPageSelect = document.getElementById("itemsPerPageSelect");
-  const thresholdInput = document.getElementById("failCountThreshold"); // Already used by initializeKeyFilterControls
+    const debouncedFetchValidKeys = debounce(() => fetchAndDisplayKeys('valid', 1), 300);
+    const debouncedFetchInvalidKeys = debounce(() => fetchAndDisplayKeys('invalid', 1), 300);
 
-  if (validKeysListElement) {
-    allValidKeys = Array.from(
-      validKeysListElement.querySelectorAll("li[data-key]")
-    );
-    allValidKeys.forEach((li) => {
-      const keyTextSpan = li.querySelector(".key-text");
-      if (keyTextSpan && keyTextSpan.dataset.fullKey) {
-        li.dataset.key = keyTextSpan.dataset.fullKey;
-      }
-    });
-    filteredValidKeys = [...allValidKeys];
-  }
-  if (invalidKeysListElement) {
-    allInvalidKeys = Array.from(
-      invalidKeysListElement.querySelectorAll("li[data-key]")
-    );
-    allInvalidKeys.forEach((li) => {
-      const keyTextSpan = li.querySelector(".key-text");
-      if (keyTextSpan && keyTextSpan.dataset.fullKey) {
-        li.dataset.key = keyTextSpan.dataset.fullKey;
-      }
-    });
-  }
+    // 有效密钥的搜索和筛选控件
+    const searchInput = document.getElementById("keySearchInput");
+    if (searchInput) {
+        searchInput.addEventListener("input", debouncedFetchValidKeys);
+    }
 
-  if (itemsPerPageSelect) {
-    itemsPerPage = parseInt(itemsPerPageSelect.value, 10); // Initialize itemsPerPage
-    itemsPerPageSelect.addEventListener("change", () => {
-      itemsPerPage = parseInt(itemsPerPageSelect.value, 10);
-      filterAndSearchValidKeys(); // Re-filter and display page 1 for valid keys
-      displayPage("invalid", 1, allInvalidKeys); // Reset invalid keys to page 1
-    });
-  }
+    const thresholdInput = document.getElementById("failCountThreshold");
+    if (thresholdInput) {
+        thresholdInput.addEventListener("input", debouncedFetchValidKeys);
+    }
+    
+    const itemsPerPageSelect = document.getElementById("itemsPerPageSelect");
+    if (itemsPerPageSelect) {
+        itemsPerPageSelect.addEventListener("change", () => {
+             fetchAndDisplayKeys('valid', 1);
+        });
+    }
 
-  // Initial display calls
-  filterAndSearchValidKeys();
-  displayPage("invalid", 1, allInvalidKeys);
+    // 无效密钥的搜索和筛选控件
+    const invalidSearchInput = document.getElementById("invalidKeySearchInput");
+    if (invalidSearchInput) {
+        invalidSearchInput.addEventListener("input", debouncedFetchInvalidKeys);
+    }
 
-  // Event listeners for search and filter (thresholdInput listener is in initializeKeyFilterControls)
-  if (searchInput) {
-    searchInput.addEventListener("input", filterAndSearchValidKeys);
-  }
+    const invalidThresholdInput = document.getElementById("invalidFailCountThreshold");
+    if (invalidThresholdInput) {
+        invalidThresholdInput.addEventListener("input", debouncedFetchInvalidKeys);
+    }
+    
+    const invalidItemsPerPageSelect = document.getElementById("invalidItemsPerPageSelect");
+    if (invalidItemsPerPageSelect) {
+        invalidItemsPerPageSelect.addEventListener("change", () => {
+             fetchAndDisplayKeys('invalid', 1);
+        });
+    }
+
+    // Initial fetch
+    fetchAndDisplayKeys('valid');
+    fetchAndDisplayKeys('invalid');
 }
 
 function registerServiceWorker() {
@@ -1173,6 +1459,25 @@ function registerServiceWorker() {
   }
 }
 
+// 初始化下拉菜单
+function initializeDropdownMenu() {
+  // 阻止下拉菜单按钮的点击事件冒泡
+  const dropdownButton = document.getElementById('dropdownMenuButton');
+  if (dropdownButton) {
+    dropdownButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  }
+  
+  // 阻止下拉菜单内部点击事件冒泡
+  const dropdownMenu = document.getElementById('dropdownMenu');
+  if (dropdownMenu) {
+    dropdownMenu.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  }
+}
+
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
   initializePageAnimationsAndEffects();
@@ -1183,6 +1488,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeAutoRefreshControls();
   initializeKeyPaginationAndSearch(); // This will also handle initial display
   registerServiceWorker();
+  initializeDropdownMenu(); // 初始化下拉菜单
 
   // Initial batch actions update might be needed if not covered by displayPage
   // updateBatchActions('valid');
@@ -1649,77 +1955,11 @@ function displayPage(type, page, keyItemsArray) {
   );
   if (!listElement || !paginationControls) return;
 
-  // Update current page based on type
-  if (type === "valid") {
-    validCurrentPage = page;
-    // Read itemsPerPage from the select specifically for valid keys
-    const itemsPerPageSelect = document.getElementById("itemsPerPageSelect");
-    itemsPerPage = itemsPerPageSelect
-      ? parseInt(itemsPerPageSelect.value, 10)
-      : 10;
-  } else {
-    invalidCurrentPage = page;
-    // For invalid keys, use a fixed itemsPerPage or the same global one
-    // itemsPerPage = 10; // Or read from a different select if needed
-  }
-
-  const totalItems = keyItemsArray.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage);
-  page = Math.max(1, Math.min(page, totalPages || 1)); // Ensure page is valid
-
-  // Update current page variable again after validation
-  if (type === "valid") {
-    validCurrentPage = page;
-  } else {
-    invalidCurrentPage = page;
-  }
-
-  const startIndex = (page - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-
-  listElement.innerHTML = ""; // Clear current list content
-
-  const pageItems = keyItemsArray.slice(startIndex, endIndex);
-
-  if (pageItems.length > 0) {
-    pageItems.forEach((originalMasterItem) => {
-      const listItemClone = originalMasterItem.cloneNode(true);
-      // The checkbox's 'checked' state is cloned from the master item.
-      // Now, ensure the 'selected' class on the clone matches this cloned checkbox state.
-      const checkboxInClone = listItemClone.querySelector(".key-checkbox");
-      if (checkboxInClone) {
-        listItemClone.classList.toggle("selected", checkboxInClone.checked);
-      }
-      listElement.appendChild(listItemClone);
-    });
-  } else if (
-    totalItems === 0 &&
-    type === "valid" &&
-    (document.getElementById("failCountThreshold").value !== "0" ||
-      document.getElementById("keySearchInput").value !== "")
-  ) {
-    // Handle empty state after filtering/searching for valid keys
-    const noMatchMsgId = "no-valid-keys-msg";
-    let noMatchMsg = listElement.querySelector(`#${noMatchMsgId}`);
-    if (!noMatchMsg) {
-      noMatchMsg = document.createElement("li");
-      noMatchMsg.id = noMatchMsgId;
-      noMatchMsg.className = "text-center text-gray-500 py-4 col-span-full";
-      noMatchMsg.textContent = "没有符合条件的有效密钥";
-      listElement.appendChild(noMatchMsg);
-    }
-    noMatchMsg.style.display = "";
-  } else if (totalItems === 0) {
-    // Handle empty state for initially empty lists
-    const emptyMsg = document.createElement("li");
-    emptyMsg.className = "text-center text-gray-500 py-4 col-span-full";
-    emptyMsg.textContent = `暂无${type === "valid" ? "有效" : "无效"}密钥`;
-    listElement.appendChild(emptyMsg);
-  }
-
-  setupPaginationControls(type, page, totalPages, keyItemsArray);
+  // This function is now mostly handled by fetchAndDisplayKeys.
+  // We can simplify this or remove it if all display logic is in fetchAndDisplayKeys.
+  // For now, let's keep it for rendering the pagination controls as a separate step.
+  setupPaginationControls(type, page, totalPages);
   updateBatchActions(type); // Update batch actions based on the currently displayed page
-  // Re-attach event listeners for buttons inside the newly added list items if needed (using event delegation is better)
 }
 
 /**
@@ -1729,7 +1969,7 @@ function displayPage(type, page, keyItemsArray) {
  * @param {number} totalPages Total number of pages
  * @param {Array} keyItemsArray The array of li elements being paginated
  */
-function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
+function setupPaginationControls(type, currentPage, totalPages) {
   const controlsContainer = document.getElementById(
     `${type}PaginationControls`
   );
@@ -1754,7 +1994,7 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
   prevButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
   prevButton.className = `${baseButtonClasses} disabled:opacity-50 disabled:cursor-not-allowed`;
   prevButton.disabled = currentPage === 1;
-  prevButton.onclick = () => displayPage(type, currentPage - 1, keyItemsArray);
+  prevButton.onclick = () => fetchAndDisplayKeys(type, currentPage - 1);
   controlsContainer.appendChild(prevButton);
 
   // Page Number Buttons (Logic for ellipsis)
@@ -1771,7 +2011,7 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
     const firstPageButton = document.createElement("button");
     firstPageButton.textContent = "1";
     firstPageButton.className = `${baseButtonClasses}`;
-    firstPageButton.onclick = () => displayPage(type, 1, keyItemsArray);
+    firstPageButton.onclick = () => fetchAndDisplayKeys(type, 1);
     controlsContainer.appendChild(firstPageButton);
     if (startPage > 2) {
       const ellipsis = document.createElement("span");
@@ -1790,7 +2030,7 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
         ? "active font-semibold" // Relies on .pagination-button.active CSS for styling
         : "" // Non-active buttons just use .pagination-button style
     }`;
-    pageButton.onclick = () => displayPage(type, i, keyItemsArray);
+    pageButton.onclick = () => fetchAndDisplayKeys(type, i);
     controlsContainer.appendChild(pageButton);
   }
 
@@ -1805,7 +2045,7 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
     const lastPageButton = document.createElement("button");
     lastPageButton.textContent = totalPages;
     lastPageButton.className = `${baseButtonClasses}`;
-    lastPageButton.onclick = () => displayPage(type, totalPages, keyItemsArray);
+    lastPageButton.onclick = () => fetchAndDisplayKeys(type, totalPages);
     controlsContainer.appendChild(lastPageButton);
   }
 
@@ -1814,7 +2054,7 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
   nextButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
   nextButton.className = `${baseButtonClasses} disabled:opacity-50 disabled:cursor-not-allowed`;
   nextButton.disabled = currentPage === totalPages;
-  nextButton.onclick = () => displayPage(type, currentPage + 1, keyItemsArray);
+  nextButton.onclick = () => fetchAndDisplayKeys(type, currentPage + 1);
   controlsContainer.appendChild(nextButton);
 }
 
@@ -1825,26 +2065,181 @@ function setupPaginationControls(type, currentPage, totalPages, keyItemsArray) {
  * Updates the `filteredValidKeys` array and redisplays the first page.
  */
 function filterAndSearchValidKeys() {
-  const thresholdInput = document.getElementById("failCountThreshold");
-  const searchInput = document.getElementById("keySearchInput");
+    fetchAndDisplayKeys('valid', 1);
+}
 
-  const threshold = parseInt(thresholdInput.value, 10);
-  const filterThreshold = isNaN(threshold) || threshold < 0 ? 0 : threshold;
-  const searchTerm = searchInput.value.trim().toLowerCase();
+// --- 下拉菜单功能 ---
 
-  // Filter from the original full list (allValidKeys)
-  filteredValidKeys = allValidKeys.filter((item) => {
-    const failCount = parseInt(item.dataset.failCount, 10);
-    const fullKey = item.dataset.key || ""; // Use data-key which should hold the full key
+// 切换下拉菜单显示/隐藏
+window.toggleDropdownMenu = function() {
+  const dropdownMenu = document.getElementById('dropdownMenu');
+  const isVisible = dropdownMenu.classList.contains('show');
+  
+  if (isVisible) {
+    hideDropdownMenu();
+  } else {
+    showDropdownMenu();
+  }
+}
 
-    const failCountMatch = failCount >= filterThreshold;
-    const searchMatch =
-      searchTerm === "" || fullKey.toLowerCase().includes(searchTerm);
+// 显示下拉菜单
+function showDropdownMenu() {
+  const dropdownMenu = document.getElementById('dropdownMenu');
+  dropdownMenu.classList.add('show');
+  
+  // 点击其他地方时隐藏菜单
+  document.addEventListener('click', handleOutsideClick);
+}
 
-    return failCountMatch && searchMatch;
+// 隐藏下拉菜单
+function hideDropdownMenu() {
+  const dropdownMenu = document.getElementById('dropdownMenu');
+  dropdownMenu.classList.remove('show');
+  
+  // 移除事件监听器
+  document.removeEventListener('click', handleOutsideClick);
+}
+
+// 处理点击菜单外部区域
+function handleOutsideClick(event) {
+  const dropdownToggle = document.querySelector('.dropdown-toggle');
+  if (!dropdownToggle.contains(event.target)) {
+    hideDropdownMenu();
+  }
+}
+
+// 复制全部密钥
+async function copyAllKeys() {
+  hideDropdownMenu();
+  
+  try {
+    // 获取所有密钥（有效和无效）
+    const response = await fetchAPI('/api/keys/all');
+    
+    const allKeys = [...response.valid_keys, ...response.invalid_keys];
+    
+    if (allKeys.length === 0) {
+      showNotification("没有找到任何密钥", "warning");
+      return;
+    }
+    
+    const keysText = allKeys.join('\n');
+    await copyToClipboard(keysText);
+    showNotification(`已成功复制 ${allKeys.length} 个密钥到剪贴板`);
+    
+  } catch (error) {
+    console.error('复制全部密钥失败:', error);
+    showNotification(`复制失败: ${error.message}`, "error");
+  }
+}
+
+// 验证所有密钥
+window.verifyAllKeys = async function() {
+  hideDropdownMenu();
+  
+  try {
+    // 获取所有密钥（有效和无效）
+    const response = await fetchAPI('/api/keys/all');
+    
+    const allKeys = [...response.valid_keys, ...response.invalid_keys];
+    
+    if (allKeys.length === 0) {
+      showNotification("没有找到任何密钥可验证", "warning");
+      return;
+    }
+    
+    // 使用验证模态框显示确认对话框
+    showVerifyModalForAllKeys(allKeys);
+    
+  } catch (error) {
+    console.error('获取所有密钥失败:', error);
+    showNotification(`获取密钥失败: ${error.message}`, "error");
+  }
+}
+
+// 显示验证所有密钥的模态框
+function showVerifyModalForAllKeys(allKeys) {
+  const modalElement = document.getElementById("verifyModal");
+  const titleElement = document.getElementById("verifyModalTitle");
+  const messageElement = document.getElementById("verifyModalMessage");
+  const confirmButton = document.getElementById("confirmVerifyBtn");
+  
+  titleElement.textContent = "批量验证所有密钥";
+  messageElement.textContent = `确定要验证所有 ${allKeys.length} 个密钥吗？此操作可能需要较长时间。`;
+  confirmButton.disabled = false;
+  
+  // 设置确认按钮事件
+  confirmButton.onclick = () => executeVerifyAllKeys(allKeys);
+  
+  // 显示模态框
+  modalElement.classList.remove("hidden");
+}
+
+// 执行验证所有密钥
+async function executeVerifyAllKeys(allKeys) {
+  closeVerifyModal();
+  
+  // 获取批次大小
+  const batchSizeInput = document.getElementById("batchSize");
+  const batchSize = parseInt(batchSizeInput.value, 10) || 10;
+  
+  // 开始批量验证
+  showProgressModal(`批量验证所有 ${allKeys.length} 个密钥`);
+  
+  let allSuccessfulKeys = [];
+  let allFailedKeys = {};
+  let processedCount = 0;
+  
+  for (let i = 0; i < allKeys.length; i += batchSize) {
+    const batch = allKeys.slice(i, i + batchSize);
+    const progressText = `正在验证批次 ${Math.floor(i / batchSize) + 1} / ${Math.ceil(allKeys.length / batchSize)} (密钥 ${i + 1}-${Math.min(i + batchSize, allKeys.length)})`;
+    
+    updateProgress(i, allKeys.length, progressText);
+    addProgressLog(`处理批次: ${batch.length}个密钥...`);
+    
+    try {
+      const options = {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys: batch }),
+      };
+      const data = await fetchAPI(`/gemini/v1beta/verify-selected-keys`, options);
+      
+      if (data) {
+        if (data.successful_keys && data.successful_keys.length > 0) {
+          allSuccessfulKeys = allSuccessfulKeys.concat(data.successful_keys);
+          addProgressLog(`✅ 批次成功: ${data.successful_keys.length} 个`);
+        }
+        if (data.failed_keys && Object.keys(data.failed_keys).length > 0) {
+          Object.assign(allFailedKeys, data.failed_keys);
+          addProgressLog(`❌ 批次失败: ${Object.keys(data.failed_keys).length} 个`, true);
+        }
+      } else {
+        addProgressLog(`- 批次返回空数据`, true);
+      }
+    } catch (apiError) {
+      addProgressLog(`❌ 批次请求失败: ${apiError.message}`, true);
+      // 将此批次的所有密钥标记为失败
+      batch.forEach(key => {
+        allFailedKeys[key] = apiError.message;
+      });
+    }
+    processedCount += batch.length;
+    updateProgress(processedCount, allKeys.length, progressText);
+  }
+  
+  updateProgress(
+    allKeys.length,
+    allKeys.length,
+    `所有批次验证完成！`
+  );
+  
+  // 关闭进度模态框并显示最终结果
+  closeProgressModal(false);
+  showVerificationResultModal({
+    successful_keys: allSuccessfulKeys,
+    failed_keys: allFailedKeys,
+    valid_count: allSuccessfulKeys.length,
+    invalid_count: Object.keys(allFailedKeys).length
   });
-
-  // Reset to the first page after filtering/searching
-  validCurrentPage = 1;
-  displayPage("valid", validCurrentPage, filteredValidKeys);
 }

@@ -8,6 +8,7 @@ import json
 from app.database.connection import database
 from app.database.models import Settings, ErrorLog, RequestLog, FileRecord, FileState
 from app.log.logger import get_database_logger
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_database_logger()
 
@@ -143,7 +144,7 @@ async def add_error_log(
             )
         )
         await database.execute(query)
-        logger.info(f"Added error log for key: {gemini_key}")
+        logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}")
         return True
     except Exception as e:
         logger.error(f"Failed to add error log: {str(e)}")

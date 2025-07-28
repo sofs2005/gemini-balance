@@ -15,6 +15,7 @@ from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.handler.retry_handler import RetryHandler
 from app.handler.error_handler import handle_route_errors
 from app.core.constants import API_VERSION
+from app.utils.helpers import redact_key_for_logging
 
 router = APIRouter(prefix=f"/gemini/{API_VERSION}")
 router_v1beta = APIRouter(prefix=f"/{API_VERSION}")
@@ -58,10 +59,10 @@ async def list_models(
     logger.info("Handling Gemini models list request")
 
     try:
-        api_key = await key_manager.get_first_valid_key()
+        api_key = await key_manager.get_random_valid_key()
         if not api_key:
             raise HTTPException(status_code=503, detail="No valid API keys available to fetch models.")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         models_data = await model_service.get_gemini_models(api_key)
         if not models_data or "models" not in models_data:
@@ -134,7 +135,7 @@ async def generate_content(
                 logger.info(f"TTS responseModalities: {response_modalities}")
                 logger.info(f"TTS speechConfig: {speech_config}")
 
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
@@ -178,7 +179,7 @@ async def stream_generate_content(
     async with handle_route_errors(logger, operation_name, failure_message="Streaming request initiation failed"):
         logger.info(f"Handling Gemini streaming content generation for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
@@ -207,7 +208,7 @@ async def count_tokens(
     async with handle_route_errors(logger, operation_name, failure_message="Token counting failed"):
         logger.info(f"Handling Gemini token count request for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {api_key}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
@@ -283,9 +284,9 @@ async def reset_selected_key_fail_counts(
                 if result:
                     reset_count += 1
                 else:
-                    logger.warning(f"Key not found during selective reset: {key}")
+                    logger.warning(f"Key not found during selective reset: {redact_key_for_logging(key)}")
             except Exception as key_error:
-                logger.error(f"Error resetting key {key}: {str(key_error)}")
+                logger.error(f"Error resetting key {redact_key_for_logging(key)}: {str(key_error)}")
                 errors.append(f"Key {key}: {str(key_error)}")
 
         if errors:
@@ -312,7 +313,7 @@ async def reset_selected_key_fail_counts(
 async def reset_key_fail_count(api_key: str, key_manager: KeyManager = Depends(get_key_manager)):
     """重置指定Gemini API密钥的失败计数"""
     logger.info("-" * 50 + "reset_gemini_key_fail_count" + "-" * 50)
-    logger.info(f"Resetting failure count for API key: {api_key}")
+    logger.info(f"Resetting failure count for API key: {redact_key_for_logging(api_key)}")
     
     try:
         result = await key_manager.reset_key_failure_count(api_key)
@@ -396,7 +397,7 @@ async def verify_selected_keys(
             return api_key, "valid", None
         except Exception as e:
             error_message = str(e)
-            logger.warning(f"Key verification failed for {api_key}: {error_message}")
+            logger.warning(f"Key verification failed for {redact_key_for_logging(api_key)}: {error_message}")
             # Use the centralized error handler to update key status
             await handle_api_error_and_get_next_key(
                 key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES

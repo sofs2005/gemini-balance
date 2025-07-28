@@ -12,6 +12,7 @@ from app.config.config import settings
 from app.database import services as db_services
 from app.database.models import FileState
 from app.log.logger import get_files_logger
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_files_logger()
 
@@ -144,7 +145,7 @@ class FileUploadHandler:
                                     sha256_hash=file_data.get("sha256Hash"),
                                     user_token=session_info["user_token"]
                                 )
-                                logger.info(f"Created file record: name={real_file_name}, api_key={session_info['api_key'][:8]}...{session_info['api_key'][-4:]}")
+                                logger.info(f"Created file record: name={real_file_name}, api_key={redact_key_for_logging(session_info['api_key'])}")
                             else:
                                 logger.warning(f"No upload session found for URL: {upload_url}")
                         else:

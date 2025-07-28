@@ -184,11 +184,37 @@ document.addEventListener("DOMContentLoaded", function () {
   const closeProxyModalBtn = document.getElementById("closeProxyModalBtn");
   const cancelAddProxyBtn = document.getElementById("cancelAddProxyBtn");
   const confirmAddProxyBtn = document.getElementById("confirmAddProxyBtn");
+  
+  // Proxy Check Elements and Events
+  const checkAllProxiesBtn = document.getElementById("checkAllProxiesBtn");
+  const proxyCheckModal = document.getElementById("proxyCheckModal");
+  const closeProxyCheckModalBtn = document.getElementById("closeProxyCheckModalBtn");
+  const closeProxyCheckBtn = document.getElementById("closeProxyCheckBtn");
+  const retryFailedProxiesBtn = document.getElementById("retryFailedProxiesBtn");
 
   if (addProxyBtn) {
     addProxyBtn.addEventListener("click", () => {
       openModal(proxyModal);
       if (proxyBulkInput) proxyBulkInput.value = "";
+    });
+  }
+  
+  if (checkAllProxiesBtn) {
+    checkAllProxiesBtn.addEventListener("click", checkAllProxies);
+  }
+  
+  if (closeProxyCheckModalBtn) {
+    closeProxyCheckModalBtn.addEventListener("click", () => closeModal(proxyCheckModal));
+  }
+  
+  if (closeProxyCheckBtn) {
+    closeProxyCheckBtn.addEventListener("click", () => closeModal(proxyCheckModal));
+  }
+  
+  if (retryFailedProxiesBtn) {
+    retryFailedProxiesBtn.addEventListener("click", () => {
+      // 重试失败的代理检测
+      checkAllProxies();
     });
   }
   if (closeProxyModalBtn)
@@ -1456,6 +1482,45 @@ function createRemoveButton() {
 }
 
 /**
+ * Creates a proxy status icon for displaying proxy check status.
+ * @returns {HTMLSpanElement} The status icon element.
+ */
+function createProxyStatusIcon() {
+  const statusIcon = document.createElement("span");
+  statusIcon.className = "proxy-status-icon px-2 py-2 text-gray-400";
+  statusIcon.innerHTML = '<i class="fas fa-question-circle" title="未检测"></i>';
+  statusIcon.setAttribute("data-status", "unknown");
+  return statusIcon;
+}
+
+/**
+ * Creates a proxy check button for individual proxy checking.
+ * @returns {HTMLButtonElement} The check button element.
+ */
+function createProxyCheckButton() {
+  const checkBtn = document.createElement("button");
+  checkBtn.type = "button";
+  checkBtn.className =
+    "proxy-check-btn px-2 py-2 text-blue-500 hover:text-blue-700 focus:outline-none transition-colors duration-150 rounded-r-md";
+  checkBtn.innerHTML = '<i class="fas fa-globe"></i>';
+  checkBtn.title = "检测此代理";
+  
+  // 添加点击事件监听器
+  checkBtn.addEventListener("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const inputElement = this.closest('.flex').querySelector('.array-input');
+    if (inputElement && inputElement.value.trim()) {
+      checkSingleProxy(inputElement.value.trim(), this);
+    } else {
+      showNotification("请先输入代理地址", "warning");
+    }
+  });
+  
+  return checkBtn;
+}
+
+/**
  * Adds a new item to an array configuration section (e.g., API_KEYS, ALLOWED_TOKENS).
  * This function is typically called by a "+" button.
  * @param {string} key - The configuration key for the array (e.g., 'API_KEYS').
@@ -1486,6 +1551,7 @@ function addArrayItemWithValue(key, value) {
   const isThinkingModel = key === "THINKING_MODELS";
   const isAllowedToken = key === "ALLOWED_TOKENS";
   const isVertexApiKey = key === "VERTEX_API_KEYS"; // 新增判断
+  const isProxy = key === "PROXIES"; // 新增代理判断
   const isSensitive = key === "API_KEYS" || isAllowedToken || isVertexApiKey; // 更新敏感判断
   const modelId = isThinkingModel ? generateUUID() : null;
 
@@ -1513,6 +1579,13 @@ function addArrayItemWithValue(key, value) {
   if (isAllowedToken) {
     const generateBtn = createGenerateTokenButton();
     inputWrapper.appendChild(generateBtn);
+  } else if (isProxy) {
+    // 为代理添加状态显示和检测按钮
+    const proxyStatusIcon = createProxyStatusIcon();
+    inputWrapper.appendChild(proxyStatusIcon);
+    
+    const proxyCheckBtn = createProxyCheckButton();
+    inputWrapper.appendChild(proxyCheckBtn);
   } else {
     // Ensure right-side rounding if no button is present
     input.classList.add("rounded-r-md");
@@ -2299,3 +2372,241 @@ function handleModelSelection(selectedModelId) {
 }
 
 // -- End Model Helper Functions --
+
+// -- Proxy Check Functions --
+
+/**
+ * 检测单个代理是否可用
+ * @param {string} proxy - 代理地址
+ * @param {HTMLElement} buttonElement - 触发检测的按钮元素
+ */
+async function checkSingleProxy(proxy, buttonElement) {
+  const statusIcon = buttonElement.parentElement.querySelector('.proxy-status-icon');
+  const originalButtonContent = buttonElement.innerHTML;
+  
+  try {
+    // 更新UI状态为检测中
+    buttonElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    buttonElement.disabled = true;
+    if (statusIcon) {
+      statusIcon.className = "proxy-status-icon px-2 py-2 text-blue-500";
+      statusIcon.innerHTML = '<i class="fas fa-spinner fa-spin" title="检测中..."></i>';
+      statusIcon.setAttribute("data-status", "checking");
+    }
+    
+    const response = await fetch('/api/config/proxy/check', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        proxy: proxy,
+        use_cache: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`检测请求失败: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    updateProxyStatus(statusIcon, result);
+    
+    // 显示检测结果通知
+    if (result.is_available) {
+      showNotification(`代理可用 (${result.response_time}s)`, "success");
+    } else {
+      showNotification(`代理不可用: ${result.error_message}`, "error");
+    }
+    
+  } catch (error) {
+    console.error('代理检测失败:', error);
+    if (statusIcon) {
+      statusIcon.className = "proxy-status-icon px-2 py-2 text-red-500";
+      statusIcon.innerHTML = '<i class="fas fa-times-circle" title="检测失败"></i>';
+      statusIcon.setAttribute("data-status", "error");
+    }
+    showNotification(`检测失败: ${error.message}`, "error");
+  } finally {
+    // 恢复按钮状态
+    buttonElement.innerHTML = originalButtonContent;
+    buttonElement.disabled = false;
+  }
+}
+
+/**
+ * 更新代理状态图标
+ * @param {HTMLElement} statusIcon - 状态图标元素
+ * @param {Object} result - 检测结果
+ */
+function updateProxyStatus(statusIcon, result) {
+  if (!statusIcon) return;
+  
+  if (result.is_available) {
+    statusIcon.className = "proxy-status-icon px-2 py-2 text-green-500";
+    statusIcon.innerHTML = `<i class="fas fa-check-circle" title="可用 (${result.response_time}s)"></i>`;
+    statusIcon.setAttribute("data-status", "available");
+  } else {
+    statusIcon.className = "proxy-status-icon px-2 py-2 text-red-500";
+    statusIcon.innerHTML = `<i class="fas fa-times-circle" title="不可用: ${result.error_message}"></i>`;
+    statusIcon.setAttribute("data-status", "unavailable");
+  }
+}
+
+/**
+ * 检测所有代理
+ */
+async function checkAllProxies() {
+  const proxyContainer = document.getElementById("PROXIES_container");
+  if (!proxyContainer) return;
+  
+  const proxyInputs = proxyContainer.querySelectorAll('.array-input');
+  const proxies = Array.from(proxyInputs)
+    .map(input => input.value.trim())
+    .filter(proxy => proxy.length > 0);
+  
+  if (proxies.length === 0) {
+    showNotification("没有代理需要检测", "warning");
+    return;
+  }
+  
+  // 打开检测结果模态框
+  const proxyCheckModal = document.getElementById("proxyCheckModal");
+  if (proxyCheckModal) {
+    openModal(proxyCheckModal);
+    
+    // 显示进度
+    const progressContainer = document.getElementById("proxyCheckProgress");
+    const summaryContainer = document.getElementById("proxyCheckSummary");
+    const resultsContainer = document.getElementById("proxyCheckResults");
+    
+    if (progressContainer) progressContainer.classList.remove("hidden");
+    if (summaryContainer) summaryContainer.classList.add("hidden");
+    if (resultsContainer) resultsContainer.innerHTML = "";
+    
+    // 更新总数
+    const totalCountElement = document.getElementById("totalCount");
+    if (totalCountElement) totalCountElement.textContent = proxies.length;
+    
+    try {
+      const response = await fetch('/api/config/proxy/check-all', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          proxies: proxies,
+          use_cache: true,
+          max_concurrent: 5
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`批量检测请求失败: ${response.status}`);
+      }
+      
+      const results = await response.json();
+      displayProxyCheckResults(results);
+      updateProxyStatusInList(results);
+      
+    } catch (error) {
+      console.error('批量代理检测失败:', error);
+      showNotification(`批量检测失败: ${error.message}`, "error");
+      if (resultsContainer) {
+        resultsContainer.innerHTML = `<div class="text-red-500 text-center py-4">检测失败: ${error.message}</div>`;
+      }
+    } finally {
+      // 隐藏进度
+      if (progressContainer) progressContainer.classList.add("hidden");
+    }
+  }
+}
+
+/**
+ * 显示代理检测结果
+ * @param {Array} results - 检测结果数组
+ */
+function displayProxyCheckResults(results) {
+  const summaryContainer = document.getElementById("proxyCheckSummary");
+  const resultsContainer = document.getElementById("proxyCheckResults");
+  const availableCountElement = document.getElementById("availableCount");
+  const unavailableCountElement = document.getElementById("unavailableCount");
+  const retryButton = document.getElementById("retryFailedProxiesBtn");
+  
+  if (!resultsContainer) return;
+  
+  // 统计结果
+  const availableCount = results.filter(r => r.is_available).length;
+  const unavailableCount = results.length - availableCount;
+  
+  // 更新概览
+  if (availableCountElement) availableCountElement.textContent = availableCount;
+  if (unavailableCountElement) unavailableCountElement.textContent = unavailableCount;
+  if (summaryContainer) summaryContainer.classList.remove("hidden");
+  
+  // 显示重试按钮（如果有失败的代理）
+  if (retryButton) {
+    if (unavailableCount > 0) {
+      retryButton.classList.remove("hidden");
+    } else {
+      retryButton.classList.add("hidden");
+    }
+  }
+  
+  // 清空并填充结果
+  resultsContainer.innerHTML = "";
+  
+  results.forEach(result => {
+    const resultItem = document.createElement("div");
+    resultItem.className = `flex items-center justify-between p-3 border rounded-lg ${
+      result.is_available ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+    }`;
+    
+    const statusIcon = result.is_available ? 
+      '<i class="fas fa-check-circle text-green-500"></i>' : 
+      '<i class="fas fa-times-circle text-red-500"></i>';
+    
+    const responseTimeText = result.response_time ? 
+      ` (${result.response_time}s)` : '';
+    
+    const errorText = result.error_message ? 
+      `<span class="text-red-600 text-sm ml-2">${result.error_message}</span>` : '';
+    
+    resultItem.innerHTML = `
+      <div class="flex items-center gap-3">
+        ${statusIcon}
+        <span class="font-mono text-sm">${result.proxy}</span>
+        ${responseTimeText}
+      </div>
+      <div class="flex items-center">
+        <span class="text-sm ${result.is_available ? 'text-green-700' : 'text-red-700'}">
+          ${result.is_available ? '可用' : '不可用'}
+        </span>
+        ${errorText}
+      </div>
+    `;
+    
+    resultsContainer.appendChild(resultItem);
+  });
+}
+
+/**
+ * 根据检测结果更新代理列表中的状态图标
+ * @param {Array} results - 检测结果数组
+ */
+function updateProxyStatusInList(results) {
+  const proxyContainer = document.getElementById("PROXIES_container");
+  if (!proxyContainer) return;
+  
+  results.forEach(result => {
+    const proxyInputs = proxyContainer.querySelectorAll('.array-input');
+    proxyInputs.forEach(input => {
+      if (input.value.trim() === result.proxy) {
+        const statusIcon = input.parentElement.querySelector('.proxy-status-icon');
+        updateProxyStatus(statusIcon, result);
+      }
+    });
+  });
+}
+
+// -- End Proxy Check Functions --

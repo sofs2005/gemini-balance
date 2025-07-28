@@ -10,6 +10,7 @@ from app.service.error_log.error_log_service import delete_old_error_logs
 from app.service.key.key_manager import get_key_manager_instance
 from app.service.request_log.request_log_service import delete_old_request_logs_task
 from app.service.files.files_service import get_files_service
+from app.utils.helpers import redact_key_for_logging
 
 logger = Logger.setup_logger("scheduler")
 
@@ -52,7 +53,7 @@ async def check_failed_keys():
 
         for key in keys_to_check:
             # 隐藏部分 key 用于日志记录
-            log_key = f"{key[:4]}...{key[-4:]}" if len(key) > 8 else key
+            log_key = redact_key_for_logging(key)
             logger.info(f"Verifying key: {log_key}...")
             try:
                 # 构造测试请求

@@ -13,6 +13,7 @@ from app.database.models import FileState
 from app.domain.file_models import FileMetadata, ListFilesResponse
 from fastapi import HTTPException
 from app.log.logger import get_files_logger
+from app.utils.helpers import redact_key_for_logging
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import get_key_manager_instance
 
@@ -102,7 +103,7 @@ class FilesService:
                 
                 # 儲存上傳資訊到 headers 中，供後續使用
                 # 不在這裡創建數據庫記錄，等到上傳完成後再創建
-                logger.info(f"Upload initialized with API key: {api_key[:8]}...{api_key[-4:]}")
+                logger.info(f"Upload initialized with API key: {redact_key_for_logging(api_key)}")
                 
                 # 解析响应 - 初始化响应可能是空的
                 response_data = {}
@@ -133,7 +134,7 @@ class FilesService:
                             "created_at": datetime.now(timezone.utc),
                             "upload_url": upload_url
                         }
-                        logger.info(f"Stored upload session for upload_id={upload_id}: api_key={api_key[:8]}...{api_key[-4:]}")
+                        logger.info(f"Stored upload session for upload_id={upload_id}: api_key={redact_key_for_logging(api_key)}")
                         logger.debug(f"Total active sessions: {len(_upload_sessions)}")
                 else:
                     logger.warning(f"No upload_id found in upload URL: {upload_url}")
@@ -202,7 +203,7 @@ class FilesService:
             # 先嘗試直接查找
             session = _upload_sessions.get(key)
             if session:
-                logger.debug(f"Found session by direct key {key}")
+                logger.debug(f"Found session by direct key {redact_key_for_logging(key)}")
                 return session
             
             # 如果是 URL，嘗試提取 upload_id
@@ -217,7 +218,7 @@ class FilesService:
                         logger.debug(f"Found session by upload_id {upload_id} from URL")
                         return session
             
-            logger.debug(f"No session found for key: {key}")
+            logger.debug(f"No session found for key: {redact_key_for_logging(key)}")
             return None
     
     async def get_file(self, file_name: str, user_token: str) -> FileMetadata:

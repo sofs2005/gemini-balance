@@ -15,6 +15,7 @@ from app.log.logger import get_files_logger
 from app.core.security import SecurityService
 from app.service.files.files_service import get_files_service
 from app.service.files.file_upload_handler import get_upload_handler
+from app.utils.helpers import redact_key_for_logging
 
 logger = get_files_logger()
 
@@ -202,7 +203,7 @@ async def handle_upload(
 ):
     """处理文件上传请求"""
     try:
-        logger.info(f"Handling upload request: {request.method} {upload_path}, key={key}")
+        logger.info(f"Handling upload request: {request.method} {upload_path}, key={redact_key_for_logging(key)}")
         
         # 從查詢參數獲取 upload_id
         upload_id = request.query_params.get("upload_id")
@@ -222,7 +223,7 @@ async def handle_upload(
         # 使用真實的 API key 構建完整的 Google 上傳 URL
         # 保留原始 URL 的所有參數，但使用真實的 API key
         upload_url = original_upload_url
-        logger.info(f"Using real API key for upload: {real_api_key[:8]}...{real_api_key[-4:]}")
+        logger.info(f"Using real API key for upload: {redact_key_for_logging(real_api_key)}")
         
         # 代理上传请求
         upload_handler = get_upload_handler()
