@@ -294,30 +294,106 @@ class GeminiChatService:
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
         """生成内容"""
-        # 檢查並獲取文件專用的 API key（如果有文件）
-        file_names = _extract_file_references(request.model_dump().get("contents", []))
-        if file_names:
-            logger.info(f"Request contains file references: {file_names}")
-            file_api_key = await get_file_api_key(file_names[0])
-            if file_api_key:
-                logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
-                api_key = file_api_key  # 使用文件的 API key
+        import time
+        import datetime
+
+        # 记录开始时间和请求时间
+        start_time = time.perf_counter()
+        request_datetime = datetime.datetime.now()
+        is_success = False
+        status_code = None
+        final_api_key = api_key
+
+        try:
+            # 檢查並獲取文件專用的 API key（如果有文件）
+            file_names = _extract_file_references(request.model_dump().get("contents", []))
+            if file_names:
+                logger.info(f"Request contains file references: {file_names}")
+                file_api_key = await get_file_api_key(file_names[0])
+                if file_api_key:
+                    logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
+                    api_key = file_api_key  # 使用文件的 API key
+                    final_api_key = file_api_key
+                else:
+                    logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
+
+            payload = _build_payload(model, request)
+            response = await self.api_client.generate_content(payload, model, api_key)
+
+            # 如果到达这里，说明请求成功
+            is_success = True
+            status_code = 200
+
+            return self.response_handler.handle_response(response, model, stream=False)
+        except Exception as e:
+            # 记录失败状态
+            is_success = False
+            error_log_msg = str(e)
+            match = re.search(r"status code (\d+)", error_log_msg)
+            if match:
+                status_code = int(match.group(1))
             else:
-                logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-        
-        payload = _build_payload(model, request)
-        response = await self.api_client.generate_content(payload, model, api_key)
-        return self.response_handler.handle_response(response, model, stream=False)
+                status_code = 500
+            raise e
+        finally:
+            # 记录请求日志
+            end_time = time.perf_counter()
+            latency_ms = int((end_time - start_time) * 1000)
+            await add_request_log(
+                model_name=model,
+                api_key=final_api_key,
+                is_success=is_success,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                request_time=request_datetime
+            )
 
     @RetryHandler()
     async def count_tokens(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
         """计算token数量"""
-        # countTokens API只需要contents
-        payload = {"contents": _filter_empty_parts(request.model_dump().get("contents", []))}
-        response = await self.api_client.count_tokens(payload, model, api_key)
-        return response
+        import time
+        import datetime
+
+        # 记录开始时间和请求时间
+        start_time = time.perf_counter()
+        request_datetime = datetime.datetime.now()
+        is_success = False
+        status_code = None
+
+        try:
+            # countTokens API只需要contents
+            payload = {"contents": _filter_empty_parts(request.model_dump().get("contents", []))}
+            response = await self.api_client.count_tokens(payload, model, api_key)
+
+            # 如果到达这里，说明请求成功
+            is_success = True
+            status_code = 200
+
+            return response
+        except Exception as e:
+            # 记录失败状态
+            is_success = False
+            error_log_msg = str(e)
+            match = re.search(r"status code (\d+)", error_log_msg)
+            if match:
+                status_code = int(match.group(1))
+            else:
+                status_code = 500
+            raise e
+        finally:
+            # 记录请求日志
+            end_time = time.perf_counter()
+            latency_ms = int((end_time - start_time) * 1000)
+            await add_request_log(
+                model_name=f"{model}-count-tokens",  # 区分计数请求
+                api_key=api_key,
+                is_success=is_success,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                request_time=request_datetime
+            )
 
     async def stream_generate_content(
         self, model: str, request: GeminiRequest, api_key: str
