@@ -25,13 +25,6 @@ async def get_keys_paginated(
 
     all_keys_with_status = await key_manager.get_all_keys_with_fail_count()
 
-    # 调试信息
-    from app.log.logger import get_key_manager_logger
-    debug_logger = get_key_manager_logger()
-    debug_logger.info(f"KeyManager api_keys count: {len(key_manager.api_keys)}")
-    debug_logger.info(f"Settings API_KEYS count: {len(settings.API_KEYS)}")
-    debug_logger.info(f"All keys with status: {all_keys_with_status}")
-
     # Filter by status
     if status == "valid":
         keys_to_filter = all_keys_with_status["valid_keys"]
