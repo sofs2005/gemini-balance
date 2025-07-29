@@ -306,6 +306,49 @@ endblock %} {% block head_extra_styles %}
     box-shadow: 0 8px 20px rgba(107, 114, 128, 0.4) !important; /* 灰色阴影 */
   }
 
+  /* 悬浮保存按钮样式 */
+  .floating-save-btn {
+    position: fixed;
+    right: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1000;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 16px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .floating-save-btn:hover {
+    transform: translateY(-50%) scale(1.05);
+    box-shadow: 0 12px 35px rgba(59, 130, 246, 0.6);
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  }
+
+  .floating-save-btn:active {
+    transform: translateY(-50%) scale(0.95);
+  }
+
+  .floating-save-btn i {
+    margin-right: 8px;
+  }
+
+  /* 响应式设计 - 在小屏幕上隐藏悬浮按钮 */
+  @media (max-width: 768px) {
+    .floating-save-btn {
+      display: none;
+    }
+  }
+
   /* 刷新按钮样式 - 与监控面板页面保持一致 */
   .bg-white.bg-opacity-20 {
     background-color: rgba(255, 255, 255, 0.9) !important;
@@ -2755,8 +2798,44 @@ endblock %} {% block head_extra_styles %}
   </div>
 </div>
 
+<!-- 悬浮保存按钮 -->
+<button
+  type="button"
+  id="floatingSaveBtn"
+  class="floating-save-btn"
+  title="快速保存配置"
+>
+  <i class="fas fa-save"></i>
+  保存
+</button>
+
 {% endblock %} {% block body_scripts %}
 <script src="/static/js/config_editor.js"></script>
+<!-- 悬浮保存按钮功能 -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 悬浮保存按钮点击事件
+    const floatingSaveBtn = document.getElementById('floatingSaveBtn');
+    const originalSaveBtn = document.getElementById('saveBtn');
+
+    if (floatingSaveBtn && originalSaveBtn) {
+      floatingSaveBtn.addEventListener('click', function() {
+        // 触发原始保存按钮的点击事件
+        originalSaveBtn.click();
+
+        // 添加视觉反馈
+        const icon = this.querySelector('i');
+        const originalClass = icon.className;
+        icon.className = 'fas fa-spinner fa-spin';
+
+        // 2秒后恢复图标
+        setTimeout(() => {
+          icon.className = originalClass;
+        }, 2000);
+      });
+    }
+  });
+</script>
 <!-- 增强下拉框样式和交互性 -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
