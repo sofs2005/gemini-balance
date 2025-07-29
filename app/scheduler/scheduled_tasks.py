@@ -87,20 +87,23 @@ async def check_failed_keys():
 async def staggered_key_verification(keys_to_check: list, key_manager, chat_service):
     """
     错峰检测密钥，在检测间隔时间内均匀分布检测任务
+    动态读取当前配置的检测间隔
     """
     total_keys = len(keys_to_check)
     if total_keys == 0:
         return
 
-    # 计算检测间隔（转换为秒）
-    interval_seconds = settings.CHECK_INTERVAL_HOURS * 3600
+    # 动态读取当前配置的检测间隔（转换为秒）
+    from app.config.config import settings
+    current_interval_hours = settings.CHECK_INTERVAL_HOURS
+    interval_seconds = current_interval_hours * 3600
 
     # 计算每个密钥之间的延迟时间
     delay_per_key = interval_seconds // total_keys if total_keys > 1 else 0
 
     logger.info(
         f"Starting staggered key verification: {total_keys} keys, "
-        f"interval: {settings.CHECK_INTERVAL_HOURS}h, "
+        f"current interval: {current_interval_hours}h, "
         f"delay per key: {delay_per_key}s"
     )
 
