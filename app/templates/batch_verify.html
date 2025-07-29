@@ -205,16 +205,16 @@
         </div>
         <div class="p-6">
           <div id="validResults" class="results-content valid"></div>
-          <div class="flex gap-2 mt-4" style="display: none;" id="validButtons">
+          <div class="grid grid-cols-2 gap-2 mt-4" style="display: none;" id="validButtons">
             <button
               onclick="copyTokens('valid')"
-              class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1"
             >
               <i class="fas fa-copy"></i> 复制(换行)
             </button>
             <button
               onclick="copyTokensWithComma('valid')"
-              class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+              class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center justify-center gap-1"
             >
               <i class="fas fa-copy"></i> 复制(逗号)
             </button>
