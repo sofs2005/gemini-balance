@@ -1,4 +1,5 @@
 
+import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 import pytz
@@ -74,44 +75,74 @@ async def check_failed_keys():
             logger.info("No keys need verification. All keys are either failed or in cooldown.")
             return
 
-        for key in keys_to_check:
-            # 隐藏部分 key 用于日志记录
-            log_key = redact_key_for_logging(key)
-            logger.info(f"Verifying key: {log_key}...")
-            try:
-                # 构造测试请求
-                gemini_request = GeminiRequest(
-                    contents=[
-                        GeminiContent(
-                            role="user",
-                            parts=[{"text": "hi"}],
-                        )
-                    ]
-                )
-                await chat_service.generate_content(
-                    settings.TEST_MODEL, gemini_request, key
-                )
-                logger.info(
-                    f"Key {log_key} verification successful. Resetting failure count."
-                )
-                await key_manager.reset_key_failure_count(key)
-            except Exception as e:
-                logger.warning(f"Key {log_key} verification failed: {str(e)}.")
-               # 调用通用错误处理器
-                await handle_api_error_and_get_next_key(
-                    key_manager=key_manager,
-                    error=e,
-                    old_key=key,
-                    model_name=settings.TEST_MODEL,
-                    # 在定时任务中，我们不进行重试，所以retries可以设为一个较大的值
-                    # 或者在handle_api_error_and_get_next_key中增加一个参数来区分调用场景
-                    retries=key_manager.MAX_FAILURES
-                )
+        # 错峰检测密钥
+        await staggered_key_verification(keys_to_check, key_manager, chat_service)
 
     except Exception as e:
         logger.error(
             f"An error occurred during the scheduled key check: {str(e)}", exc_info=True
         )
+
+
+async def staggered_key_verification(keys_to_check: list, key_manager, chat_service):
+    """
+    错峰检测密钥，在检测间隔时间内均匀分布检测任务
+    """
+    total_keys = len(keys_to_check)
+    if total_keys == 0:
+        return
+
+    # 计算检测间隔（转换为秒）
+    interval_seconds = settings.CHECK_INTERVAL_HOURS * 3600
+
+    # 计算每个密钥之间的延迟时间
+    delay_per_key = interval_seconds // total_keys if total_keys > 1 else 0
+
+    logger.info(
+        f"Starting staggered key verification: {total_keys} keys, "
+        f"interval: {settings.CHECK_INTERVAL_HOURS}h, "
+        f"delay per key: {delay_per_key}s"
+    )
+
+    # 错峰检测
+    for i, key in enumerate(keys_to_check):
+        log_key = redact_key_for_logging(key)
+        logger.info(f"Verifying key: {log_key} ({i+1}/{total_keys})...")
+
+        try:
+            # 构造测试请求
+            gemini_request = GeminiRequest(
+                contents=[
+                    GeminiContent(
+                        role="user",
+                        parts=[{"text": "hi"}],
+                    )
+                ]
+            )
+            await chat_service.generate_content(
+                settings.TEST_MODEL, gemini_request, key
+            )
+            logger.info(
+                f"Key {log_key} verification successful ({i+1}/{total_keys}). Resetting failure count."
+            )
+            await key_manager.reset_key_failure_count(key)
+        except Exception as e:
+            logger.warning(f"Key {log_key} verification failed ({i+1}/{total_keys}): {str(e)}.")
+            # 调用通用错误处理器
+            await handle_api_error_and_get_next_key(
+                key_manager=key_manager,
+                error=e,
+                old_key=key,
+                model_name=settings.TEST_MODEL,
+                # 在定时任务中，我们不进行重试，所以retries可以设为一个较大的值
+                # 或者在handle_api_error_and_get_next_key中增加一个参数来区分调用场景
+                retries=key_manager.MAX_FAILURES
+            )
+
+        # 如果不是最后一个密钥，等待指定时间再检测下一个
+        if i < total_keys - 1 and delay_per_key > 0:
+            logger.debug(f"Waiting {delay_per_key}s before checking next key...")
+            await asyncio.sleep(delay_per_key)
 
 
 async def cleanup_expired_files():
