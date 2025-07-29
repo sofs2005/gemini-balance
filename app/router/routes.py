@@ -206,3 +206,17 @@ def setup_api_stats_routes(app: FastAPI) -> None:
         except Exception as e:
             logger.error(f"Error fetching API stats details for period {period}: {str(e)}")
             return {"error": "Internal server error"}, 500
+
+    @app.get("/batch-verify", response_class=HTMLResponse)
+    async def batch_verify_page(request: Request):
+        """批量密钥检测页面"""
+        try:
+            auth_token = request.cookies.get("auth_token")
+            if not auth_token or not verify_auth_token(auth_token):
+                logger.warning("Unauthorized access attempt to batch verify page")
+                return RedirectResponse(url="/", status_code=302)
+
+            return templates.TemplateResponse("batch_verify.html", {"request": request})
+        except Exception as e:
+            logger.error(f"Error loading batch verify page: {str(e)}")
+            return RedirectResponse(url="/", status_code=302)

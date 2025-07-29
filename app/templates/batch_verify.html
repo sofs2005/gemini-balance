@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block title %}批量密钥检测 - Gemini Balance{% endblock %}
+{% block head_extra_styles %}
+<style>
+  /* 批量检测页面样式 */
+  .glass-card {
+    background-color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .settings-group {
+    background-color: rgba(249, 250, 251, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 32px;
+    backdrop-filter: blur(4px);
+  }
+
+  .settings-group h5 {
+    margin-bottom: 20px;
+    color: #374151;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .results-content {
+    background-color: rgba(249, 250, 251, 0.95);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+    min-height: 120px;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    line-height: 1.5;
+  }
+
+  .results-content.valid {
+    border-left: 4px solid #10b981;
+    background-color: rgba(236, 253, 245, 0.95);
+  }
+
+  .results-content.invalid {
+    border-left: 4px solid #ef4444;
+    background-color: rgba(254, 242, 242, 0.95);
+  }
+
+  .results-content.duplicate {
+    border-left: 4px solid #8b5cf6;
+    background-color: rgba(245, 243, 255, 0.95);
+  }
+
+        .invalid-token {
+            background-color: #f8d7da;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 6px;
+            border: 1px solid #f5c6cb;
+        }
+
+        .invalid-token-token {
+            font-family: 'Courier New', monospace;
+            background-color: #fff;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            border: 1px solid #f5c6cb;
+            word-break: break-all;
+            font-size: 12px;
+        }
+
+        .invalid-token-message {
+            color: #721c24;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .spinner-border-sm {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        .btn-copy {
+            background-color: #28a745;
+            border-color: #28a745;
+        }
+
+        .btn-copy:hover {
+            background-color: #218838;
+            border-color: #1e7e34;
+        }
+
+        #tokensTextarea {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+</style>
+{% endblock %}
+
+{% block head_extra_scripts %}
+<script src="/static/js/batch_verify.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container max-w-6xl mx-auto px-4">
+  <div class="glass-card rounded-2xl shadow-xl p-6 md:p-8">
+    <!-- 页面标题 -->
+    <h1 class="text-3xl md:text-4xl font-bold text-center mb-8 text-gray-800 flex items-center justify-center gap-3">
+      <i class="fas fa-tasks text-primary-600"></i>
+      批量密钥检测
+    </h1>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-buttons-container flex justify-center mb-8 overflow-x-auto gap-2">
+      <a
+        href="/config"
+        class="nav-link whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg text-gray-700 hover:text-gray-900 transition-all duration-200"
+        style="background-color: rgba(229, 231, 235, 0.8)"
+      >
+        <i class="fas fa-cog"></i> 配置编辑
+      </a>
+      <a
+        href="/keys"
+        class="nav-link whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg text-gray-700 hover:text-gray-900 transition-all duration-200"
+        style="background-color: rgba(229, 231, 235, 0.8)"
+      >
+        <i class="fas fa-tachometer-alt"></i> 监控面板
+      </a>
+      <a
+        href="/batch-verify"
+        class="main-nav-btn whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
+        style="background-color: #3b82f6 !important; color: #ffffff !important;"
+      >
+        <i class="fas fa-tasks"></i> 批量检测
+      </a>
+      <a
+        href="/logs"
+        class="nav-link whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg text-gray-700 hover:text-gray-900 transition-all duration-200"
+        style="background-color: rgba(229, 231, 235, 0.8)"
+      >
+        <i class="fas fa-exclamation-triangle"></i> 错误日志
+      </a>
+    </div>
+
+    <!-- 设置区域 -->
+    <div class="settings-group animate-fade-in" style="animation-delay: 0.1s">
+      <h5><i class="fas fa-cog text-primary-600"></i> 检测设置</h5>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="apiBaseUrl" class="block text-sm font-medium text-gray-700 mb-2">API 地址:</label>
+          <input
+            type="text"
+            id="apiBaseUrl"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            value="https://generativelanguage.googleapis.com/v1beta/openai/"
+          >
+        </div>
+        <div>
+          <label for="testModel" class="block text-sm font-medium text-gray-700 mb-2">测试模型:</label>
+          <input
+            type="text"
+            id="testModel"
+            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+            value="gemini-2.5-flash"
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- 输入区域 -->
+    <div class="settings-group animate-fade-in" style="animation-delay: 0.2s">
+      <h5><i class="fas fa-edit text-primary-600"></i> 输入密钥</h5>
+      <div class="space-y-4">
+        <textarea
+          id="tokensTextarea"
+          rows="8"
+          class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors font-mono text-sm"
+          placeholder="请输入 API Key，支持每行一个或用逗号/空格分隔"
+        ></textarea>
+        <button
+          id="checkButton"
+          onclick="checkTokens()"
+          class="w-full px-6 py-4 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2"
+        >
+          <i class="fas fa-play"></i> 开始检测
+        </button>
+      </div>
+    </div>
+
+    <!-- 结果区域 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in" style="animation-delay: 0.3s">
+      <!-- 有效密钥 -->
+      <div class="glass-card rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-green-500 text-white px-6 py-4">
+          <h6 class="font-semibold flex items-center gap-2">
+            <i class="fas fa-check-circle"></i> 有效密钥
+          </h6>
+        </div>
+        <div class="p-6">
+          <div id="validResults" class="results-content valid"></div>
+          <div class="flex gap-2 mt-4" style="display: none;" id="validButtons">
+            <button
+              onclick="copyTokens('valid')"
+              class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <i class="fas fa-copy"></i> 复制(换行)
+            </button>
+            <button
+              onclick="copyTokensWithComma('valid')"
+              class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <i class="fas fa-copy"></i> 复制(逗号)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 失效密钥 -->
+      <div class="glass-card rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-red-500 text-white px-6 py-4">
+          <h6 class="font-semibold flex items-center gap-2">
+            <i class="fas fa-times-circle"></i> 失效密钥
+          </h6>
+        </div>
+        <div class="p-6">
+          <div id="invalidResults" class="results-content invalid"></div>
+        </div>
+      </div>
+
+      <!-- 重复密钥 -->
+      <div class="glass-card rounded-xl shadow-lg overflow-hidden">
+        <div class="bg-purple-500 text-white px-6 py-4">
+          <h6 class="font-semibold flex items-center gap-2">
+            <i class="fas fa-clone"></i> 重复密钥
+          </h6>
+        </div>
+        <div class="p-6">
+          <div id="duplicateResults" class="results-content duplicate"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
