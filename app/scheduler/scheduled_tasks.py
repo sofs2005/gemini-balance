@@ -86,7 +86,7 @@ async def check_failed_keys():
 
 async def staggered_key_verification(keys_to_check: list, key_manager, chat_service):
     """
-    错峰检测密钥，在检测间隔时间内均匀分布检测任务
+    批量错峰检测密钥，将密钥分批验证，批次间有间隔时间
     动态读取当前配置的检测间隔
     """
     total_keys = len(keys_to_check)
@@ -98,54 +98,81 @@ async def staggered_key_verification(keys_to_check: list, key_manager, chat_serv
     current_interval_hours = settings.CHECK_INTERVAL_HOURS
     interval_seconds = current_interval_hours * 3600
 
-    # 计算每个密钥之间的延迟时间
-    delay_per_key = interval_seconds // total_keys if total_keys > 1 else 0
+    # 批量验证配置
+    batch_size = getattr(settings, 'KEY_VERIFICATION_BATCH_SIZE', 3)  # 每批验证的密钥数量，默认3个
+    total_batches = (total_keys + batch_size - 1) // batch_size  # 向上取整
+
+    # 计算批次间的间隔时间
+    batch_interval = interval_seconds // total_batches if total_batches > 1 else 0
 
     logger.info(
-        f"Starting staggered key verification: {total_keys} keys, "
+        f"Starting batch key verification: {total_keys} keys, "
         f"current interval: {current_interval_hours}h, "
-        f"delay per key: {delay_per_key}s"
+        f"batch size: {batch_size}, total batches: {total_batches}, "
+        f"batch interval: {batch_interval}s"
     )
 
-    # 错峰检测
-    for i, key in enumerate(keys_to_check):
-        log_key = redact_key_for_logging(key)
-        logger.info(f"Verifying key: {log_key} ({i+1}/{total_keys})...")
+    # 分批验证密钥
+    for batch_num in range(total_batches):
+        start_idx = batch_num * batch_size
+        end_idx = min(start_idx + batch_size, total_keys)
+        current_batch = keys_to_check[start_idx:end_idx]
 
-        try:
-            # 构造测试请求
-            gemini_request = GeminiRequest(
-                contents=[
-                    GeminiContent(
-                        role="user",
-                        parts=[{"text": "hi"}],
-                    )
-                ]
-            )
-            await chat_service.generate_content(
-                settings.TEST_MODEL, gemini_request, key
-            )
-            logger.info(
-                f"Key {log_key} verification successful ({i+1}/{total_keys}). Resetting failure count."
-            )
-            await key_manager.reset_key_failure_count(key)
-        except Exception as e:
-            logger.warning(f"Key {log_key} verification failed ({i+1}/{total_keys}): {str(e)}.")
-            # 调用通用错误处理器
-            await handle_api_error_and_get_next_key(
-                key_manager=key_manager,
-                error=e,
-                old_key=key,
-                model_name=settings.TEST_MODEL,
-                # 在定时任务中，我们不进行重试，所以retries可以设为一个较大的值
-                # 或者在handle_api_error_and_get_next_key中增加一个参数来区分调用场景
-                retries=key_manager.MAX_FAILURES
-            )
+        logger.info(f"Processing batch {batch_num + 1}/{total_batches} ({len(current_batch)} keys)...")
 
-        # 如果不是最后一个密钥，等待指定时间再检测下一个
-        if i < total_keys - 1 and delay_per_key > 0:
-            logger.debug(f"Waiting {delay_per_key}s before checking next key...")
-            await asyncio.sleep(delay_per_key)
+        # 并发验证当前批次的所有密钥
+        batch_tasks = []
+        for key in current_batch:
+            task = verify_single_key(key, key_manager, chat_service, start_idx + current_batch.index(key) + 1, total_keys)
+            batch_tasks.append(task)
+
+        # 等待当前批次的所有验证完成
+        await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+        # 如果不是最后一批，等待批次间隔时间
+        if batch_num < total_batches - 1 and batch_interval > 0:
+            logger.info(f"Batch {batch_num + 1} completed. Waiting {batch_interval}s before next batch...")
+            await asyncio.sleep(batch_interval)
+        else:
+            logger.info(f"All {total_batches} batches completed.")
+
+
+async def verify_single_key(key: str, key_manager, chat_service, key_index: int, total_keys: int):
+    """
+    验证单个密钥
+    """
+    log_key = redact_key_for_logging(key)
+    logger.info(f"Verifying key: {log_key} ({key_index}/{total_keys})...")
+
+    try:
+        # 构造测试请求
+        gemini_request = GeminiRequest(
+            contents=[
+                GeminiContent(
+                    role="user",
+                    parts=[{"text": "hi"}],
+                )
+            ]
+        )
+        await chat_service.generate_content(
+            settings.TEST_MODEL, gemini_request, key
+        )
+        logger.info(
+            f"Key {log_key} verification successful ({key_index}/{total_keys}). Resetting failure count."
+        )
+        await key_manager.reset_key_failure_count(key)
+    except Exception as e:
+        logger.warning(f"Key {log_key} verification failed ({key_index}/{total_keys}): {str(e)}.")
+        # 调用通用错误处理器
+        await handle_api_error_and_get_next_key(
+            key_manager=key_manager,
+            error=e,
+            old_key=key,
+            model_name=settings.TEST_MODEL,
+            # 在定时任务中，我们不进行重试，所以retries可以设为一个较大的值
+            # 或者在handle_api_error_and_get_next_key中增加一个参数来区分调用场景
+            retries=key_manager.MAX_FAILURES
+        )
 
 
 async def cleanup_expired_files():

@@ -2138,6 +2138,26 @@ endblock %} {% block head_extra_styles %}
           >
         </div>
 
+        <!-- 批次大小 -->
+        <div class="mb-6">
+          <label
+            for="KEY_VERIFICATION_BATCH_SIZE"
+            class="block font-semibold mb-2 text-gray-700"
+            >密钥验证批次大小</label
+          >
+          <input
+            type="number"
+            id="KEY_VERIFICATION_BATCH_SIZE"
+            name="KEY_VERIFICATION_BATCH_SIZE"
+            min="1"
+            max="10"
+            class="w-full px-4 py-3 rounded-lg form-input-themed"
+          />
+          <small class="text-gray-500 mt-1 block"
+            >每批同时验证的密钥数量，建议2-5个（数量越大验证越快，但瞬时负载越高）</small
+          >
+        </div>
+
         <!-- 时区 -->
         <div class="mb-6">
           <label for="TIMEZONE" class="block font-semibold mb-2 text-gray-700"
