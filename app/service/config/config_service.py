@@ -167,40 +167,7 @@ class ConfigService:
 
         if deleted_count > 0:
             settings.API_KEYS = current_api_keys
-
-            # 直接更新数据库中的 API_KEYS，避免通过 update_config 方法
-            try:
-                import json
-                from app.database.connection import database
-                from app.database.models import Settings
-                from sqlalchemy import update
-                from datetime import datetime
-
-                api_keys_json = json.dumps(current_api_keys)
-
-                # 检查数据大小
-                data_size_mb = len(api_keys_json.encode('utf-8')) / (1024 * 1024)
-                logger.info(f"API_KEYS data size: {data_size_mb:.2f} MB")
-
-                if data_size_mb > 16:  # MySQL MEDIUMTEXT 限制约16MB
-                    raise ValueError(f"API_KEYS data too large: {data_size_mb:.2f} MB")
-
-                query_update = (
-                    update(Settings)
-                    .where(Settings.key == "API_KEYS")
-                    .values(
-                        value=api_keys_json,
-                        updated_at=datetime.now()
-                    )
-                )
-                await database.execute(query=query_update)
-                logger.info(f"Successfully updated API_KEYS in database with {len(current_api_keys)} keys")
-
-            except Exception as e:
-                logger.error(f"Failed to update API_KEYS directly: {str(e)}")
-                # 回滚内存中的更改
-                settings.API_KEYS = list(settings.API_KEYS) + keys_actually_removed
-                raise
+            await ConfigService.update_config({"API_KEYS": settings.API_KEYS})
             logger.info(
                 f"成功删除 {deleted_count} 个密钥。密钥: {keys_actually_removed}"
             )
