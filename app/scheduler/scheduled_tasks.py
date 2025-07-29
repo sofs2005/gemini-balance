@@ -99,7 +99,7 @@ async def staggered_key_verification(keys_to_check: list, key_manager, chat_serv
     interval_seconds = current_interval_hours * 3600
 
     # 批量验证配置
-    batch_size = getattr(settings, 'KEY_VERIFICATION_BATCH_SIZE', 3)  # 每批验证的密钥数量，默认3个
+    batch_size = getattr(settings, 'KEY_VERIFICATION_BATCH_SIZE', 20)  # 每批验证的密钥数量，默认20个
     total_batches = (total_keys + batch_size - 1) // batch_size  # 向上取整
 
     # 计算批次间的间隔时间
