@@ -82,3 +82,36 @@ async def get_all_keys(
         "invalid_keys": list(all_keys_with_status["invalid_keys"].keys()),
         "total_count": len(all_keys_with_status["valid_keys"]) + len(all_keys_with_status["invalid_keys"])
     }
+
+
+@router.get("/api/keys/status")
+async def get_keys_status(
+    request: Request,
+    key_manager: KeyManager = Depends(get_key_manager_instance),
+):
+    """
+    Get comprehensive keys status including pool status.
+    """
+    auth_token = request.cookies.get("auth_token")
+    if not auth_token or not verify_auth_token(auth_token):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    # 获取基本密钥状态
+    keys_status = await key_manager.get_keys_by_status()
+
+    # 获取密钥池状态
+    pool_status = None
+    if hasattr(key_manager, 'valid_key_pool') and key_manager.valid_key_pool:
+        pool_status = key_manager.valid_key_pool.get_pool_stats()
+
+    return {
+        "keys": {
+            "valid_keys": keys_status["valid_keys"],
+            "invalid_keys": keys_status["invalid_keys"],
+            "total_keys": len(keys_status["valid_keys"]) + len(keys_status["invalid_keys"]),
+            "valid_count": len(keys_status["valid_keys"]),
+            "invalid_count": len(keys_status["invalid_keys"])
+        },
+        "pool_status": pool_status,
+        "pool_enabled": getattr(settings, 'VALID_KEY_POOL_ENABLED', False)
+    }

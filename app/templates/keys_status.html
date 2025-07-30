@@ -38,6 +38,12 @@ endblock %} {% block head_extra_styles %}
     }
   }
 
+  @media (min-width: 1024px) {
+    .stats-dashboard {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+  }
+
   /* 统计卡片样式 */
   .stats-card {
     background-color: rgba(255, 255, 255, 0.95);
@@ -1267,6 +1273,56 @@ endblock %} {% block head_extra_styles %}
             <div class="stat-value">{{ api_stats.calls_24h.total }}</div>
             <div class="stat-label">24小时调用</div>
             <i class="stat-icon fas fa-calendar-day"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- 密钥池状态卡片 -->
+      <div class="stats-card" id="poolStatusCard" style="display: none;">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-swimming-pool"></i>
+            <span>密钥池状态</span>
+          </h3>
+          <span class="text-xs text-gray-500" id="poolUtilization">利用率: --</span>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-item stat-info" title="池大小">
+            <div class="stat-value" id="poolSize">--</div>
+            <div class="stat-label">池大小</div>
+            <i class="stat-icon fas fa-database"></i>
+          </div>
+          <div class="stat-item stat-success" title="命中率">
+            <div class="stat-value" id="poolHitRate">--</div>
+            <div class="stat-label">命中率</div>
+            <i class="stat-icon fas fa-bullseye"></i>
+          </div>
+          <div class="stat-item stat-warning" title="平均年龄">
+            <div class="stat-value" id="poolAvgAge">--</div>
+            <div class="stat-label">平均年龄</div>
+            <i class="stat-icon fas fa-clock"></i>
+          </div>
+        </div>
+
+        <!-- 详细统计信息 -->
+        <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-600">验证成功率:</span>
+              <span class="font-medium" id="poolVerificationRate">--</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">TTL过期率:</span>
+              <span class="font-medium" id="poolExpiryRate">--</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">紧急补充:</span>
+              <span class="font-medium" id="poolEmergencyRefills">--</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">维护次数:</span>
+              <span class="font-medium" id="poolMaintenanceCount">--</span>
+            </div>
           </div>
         </div>
       </div>

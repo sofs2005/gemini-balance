@@ -183,15 +183,50 @@ async def cleanup_expired_files():
     try:
         files_service = await get_files_service()
         deleted_count = await files_service.cleanup_expired_files()
-        
+
         if deleted_count > 0:
             logger.info(f"Successfully cleaned up {deleted_count} expired files.")
         else:
             logger.info("No expired files to clean up.")
-            
+
     except Exception as e:
         logger.error(
             f"An error occurred during the scheduled file cleanup: {str(e)}", exc_info=True
+        )
+
+
+async def maintain_valid_key_pool():
+    """
+    定期维护有效密钥池
+    清理过期密钥、检查池大小、主动补充密钥等
+    """
+    logger.info("Starting scheduled maintenance for valid key pool...")
+    try:
+        key_manager = await get_key_manager_instance()
+
+        if not key_manager:
+            logger.warning("KeyManager not available for pool maintenance")
+            return
+
+        if not key_manager.valid_key_pool:
+            logger.debug("ValidKeyPool not enabled, skipping maintenance")
+            return
+
+        # 执行池维护操作
+        await key_manager.valid_key_pool.maintenance()
+
+        # 获取维护后的统计信息
+        stats = key_manager.valid_key_pool.get_pool_stats()
+        logger.info(
+            f"Valid key pool maintenance completed. "
+            f"Pool size: {stats['current_size']}/{stats['pool_size']}, "
+            f"Hit rate: {stats['hit_rate']:.2%}, "
+            f"Avg key age: {stats['avg_key_age_seconds']}s"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"An error occurred during valid key pool maintenance: {str(e)}", exc_info=True
         )
 
 
@@ -246,6 +281,20 @@ def setup_scheduler():
         )
         logger.info(
             f"File cleanup job scheduled to run every {cleanup_interval} hour(s)."
+        )
+
+    # 新增：添加有效密钥池维护的定时任务
+    if getattr(settings, 'VALID_KEY_POOL_ENABLED', False):
+        maintenance_interval = getattr(settings, 'POOL_MAINTENANCE_INTERVAL_MINUTES', 30)
+        scheduler.add_job(
+            maintain_valid_key_pool,
+            "interval",
+            minutes=maintenance_interval,
+            id="maintain_valid_key_pool_job",
+            name="Maintain Valid Key Pool",
+        )
+        logger.info(
+            f"Valid key pool maintenance job scheduled to run every {maintenance_interval} minute(s)."
         )
 
     scheduler.start()

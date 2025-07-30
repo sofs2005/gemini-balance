@@ -745,6 +745,9 @@ function refreshPage(button) {
   const icon = button.querySelector("i");
   if (icon) icon.classList.add("fa-spin"); // Add spin animation
 
+  // 刷新密钥池状态
+  loadPoolStatus();
+
   setTimeout(() => {
     window.location.reload();
     // No need to remove loading/spin as page reloads
@@ -1489,6 +1492,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeKeyPaginationAndSearch(); // This will also handle initial display
   registerServiceWorker();
   initializeDropdownMenu(); // 初始化下拉菜单
+  loadPoolStatus(); // 加载密钥池状态
 
   // Initial batch actions update might be needed if not covered by displayPage
   // updateBatchActions('valid');
@@ -2242,4 +2246,94 @@ async function executeVerifyAllKeys(allKeys) {
     valid_count: allSuccessfulKeys.length,
     invalid_count: Object.keys(allFailedKeys).length
   });
+}
+
+// --- 密钥池状态相关功能 ---
+
+// 加载密钥池状态
+async function loadPoolStatus() {
+  try {
+    const data = await fetchAPI('/api/keys/status');
+
+    if (data && data.pool_enabled && data.pool_status) {
+      updatePoolStatusDisplay(data.pool_status);
+      showPoolStatusCard();
+    } else {
+      hidePoolStatusCard();
+    }
+  } catch (error) {
+    console.error("加载密钥池状态时出错:", error);
+    hidePoolStatusCard();
+  }
+}
+
+// 更新密钥池状态显示
+function updatePoolStatusDisplay(poolStatus) {
+  // 基本信息
+  document.getElementById('poolSize').textContent = `${poolStatus.current_size}/${poolStatus.pool_size}`;
+  document.getElementById('poolUtilization').textContent = `利用率: ${(poolStatus.utilization * 100).toFixed(1)}%`;
+
+  // 主要指标
+  document.getElementById('poolHitRate').textContent = `${(poolStatus.hit_rate * 100).toFixed(1)}%`;
+  document.getElementById('poolAvgAge').textContent = formatDuration(poolStatus.avg_key_age_seconds);
+
+  // 详细统计
+  document.getElementById('poolVerificationRate').textContent = `${(poolStatus.verification_success_rate * 100).toFixed(1)}%`;
+  document.getElementById('poolExpiryRate').textContent = `${(poolStatus.ttl_expiry_rate * 100).toFixed(1)}%`;
+  document.getElementById('poolEmergencyRefills').textContent = poolStatus.stats.emergency_refill_count || 0;
+  document.getElementById('poolMaintenanceCount').textContent = poolStatus.stats.maintenance_count || 0;
+
+  // 更新卡片样式
+  updatePoolStatusCardStyle(poolStatus);
+}
+
+// 更新密钥池状态卡片样式
+function updatePoolStatusCardStyle(poolStatus) {
+  const hitRateElement = document.querySelector('#poolStatusCard .stat-success .stat-value');
+  const utilizationElement = document.querySelector('#poolStatusCard .stat-info .stat-value');
+
+  // 根据命中率调整颜色
+  if (poolStatus.hit_rate >= 0.9) {
+    hitRateElement.className = 'stat-value text-green-600';
+  } else if (poolStatus.hit_rate >= 0.7) {
+    hitRateElement.className = 'stat-value text-yellow-600';
+  } else {
+    hitRateElement.className = 'stat-value text-red-600';
+  }
+
+  // 根据利用率调整颜色
+  if (poolStatus.utilization >= 0.8) {
+    utilizationElement.className = 'stat-value text-green-600';
+  } else if (poolStatus.utilization >= 0.5) {
+    utilizationElement.className = 'stat-value text-yellow-600';
+  } else {
+    utilizationElement.className = 'stat-value text-red-600';
+  }
+}
+
+// 显示密钥池状态卡片
+function showPoolStatusCard() {
+  const card = document.getElementById('poolStatusCard');
+  if (card) {
+    card.style.display = 'block';
+  }
+}
+
+// 隐藏密钥池状态卡片
+function hidePoolStatusCard() {
+  const card = document.getElementById('poolStatusCard');
+  if (card) {
+    card.style.display = 'none';
+  }
+}
+
+// 格式化时间长度
+function formatDuration(seconds) {
+  if (seconds < 60) {
+    return `${seconds}秒`;
+  } else if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}分钟`;
+  } else {
+    return `${Math.floor(seconds / 3600)}小时`;
+  }
 }

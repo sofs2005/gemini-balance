@@ -1,7 +1,7 @@
 import asyncio
 import random
 from itertools import cycle
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 from datetime import datetime, timedelta
 import pytz
 
@@ -30,8 +30,60 @@ class KeyManager:
         self.MAX_FAILURES = settings.MAX_FAILURES
         self.paid_key = settings.PAID_KEY
 
+        # 初始化有效密钥池
+        self.valid_key_pool = None
+        if settings.VALID_KEY_POOL_ENABLED and api_keys:
+            try:
+                # 延迟导入避免循环依赖
+                from app.service.key.valid_key_pool import ValidKeyPool
+                self.valid_key_pool = ValidKeyPool(
+                    pool_size=settings.VALID_KEY_POOL_SIZE,
+                    ttl_hours=settings.KEY_TTL_HOURS,
+                    key_manager=self
+                )
+                logger.info("ValidKeyPool initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize ValidKeyPool: {e}")
+                self.valid_key_pool = None
+
     async def get_paid_key(self) -> str:
         return self.paid_key
+
+    def set_chat_service(self, chat_service):
+        """
+        设置聊天服务实例，用于ValidKeyPool的密钥验证
+
+        Args:
+            chat_service: 聊天服务实例
+        """
+        if self.valid_key_pool:
+            self.valid_key_pool.set_chat_service(chat_service)
+            logger.debug("Chat service set for ValidKeyPool")
+
+    async def preload_valid_key_pool(self, target_size: Optional[int] = None) -> int:
+        """
+        预加载有效密钥池
+
+        Args:
+            target_size: 目标大小，默认为池大小的一半
+
+        Returns:
+            int: 成功加载的密钥数量
+        """
+        if self.valid_key_pool:
+            return await self.valid_key_pool.preload_pool(target_size)
+        return 0
+
+    def get_valid_key_pool_stats(self) -> Optional[Dict]:
+        """
+        获取有效密钥池统计信息
+
+        Returns:
+            Optional[Dict]: 池统计信息，如果池不可用则返回None
+        """
+        if self.valid_key_pool:
+            return self.valid_key_pool.get_pool_stats()
+        return None
 
     async def get_next_key(self) -> str:
         """获取下一个API key"""
@@ -92,6 +144,22 @@ class KeyManager:
     async def get_next_working_key(self, model_name: str = None) -> str:
         """
         获取下一个可用的API key。
+        优先使用有效密钥池，如果池不可用则使用原有逻辑。
+        如果提供了 model_name，会额外检查该 key 是否因特定模型的配额问题而处于冷却状态。
+        """
+        # 优先使用有效密钥池
+        if self.valid_key_pool:
+            try:
+                return await self.valid_key_pool.get_valid_key(model_name)
+            except Exception as e:
+                logger.warning(f"ValidKeyPool failed, falling back to original logic: {e}")
+
+        # Fallback到原有逻辑
+        return await self._original_get_next_working_key(model_name)
+
+    async def _original_get_next_working_key(self, model_name: str = None) -> str:
+        """
+        原有的获取下一个可用API key的逻辑。
         如果提供了 model_name，会额外检查该 key 是否因特定模型的配额问题而处于冷却状态。
         """
         initial_key = await self.get_next_key()

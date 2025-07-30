@@ -116,6 +116,14 @@ class Settings(BaseSettings):
     GEMINI_QUOTA_RESET_HOUR: int = 16  # Gemini配额重置时间（24小时制，UTC+8）
     TIMEZONE: str = "Asia/Shanghai"  # 默认时区
 
+    # 有效密钥池配置
+    VALID_KEY_POOL_ENABLED: bool = True  # 是否启用有效密钥池
+    VALID_KEY_POOL_SIZE: int = 50  # 有效密钥池大小
+    KEY_TTL_HOURS: int = 2  # 密钥在池中的生存时间（小时）
+    POOL_MIN_THRESHOLD: int = 10  # 池大小最小阈值，低于此值时主动补充
+    EMERGENCY_REFILL_COUNT: int = 5  # 紧急补充时并发验证的密钥数量
+    POOL_MAINTENANCE_INTERVAL_MINUTES: int = 30  # 密钥池维护间隔（分钟）
+
     # github
     GITHUB_REPO_OWNER: str = "snailyp"
     GITHUB_REPO_NAME: str = "gemini-balance"
