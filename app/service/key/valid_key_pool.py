@@ -263,9 +263,13 @@ class ValidKeyPool:
             logger.debug(f"Key verification successful for {redact_key_for_logging(key)}")
             return True
             
+        except asyncio.CancelledError:
+            # 任务被取消，不记录为验证失败
+            logger.debug(f"Key verification cancelled for {redact_key_for_logging(key)}")
+            raise  # 重新抛出CancelledError
         except Exception as e:
             logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-            
+
             # 调用通用错误处理器
             await handle_api_error_and_get_next_key(
                 key_manager=self.key_manager,
@@ -351,14 +355,21 @@ class ValidKeyPool:
 
             # 批量补充密钥
             refill_count = min(5, self.pool_size - current_size)
-            for _ in range(refill_count):
-                before_size = len(self.valid_keys)
-                await self.async_verify_and_add()
-                after_size = len(self.valid_keys)
-                if after_size > before_size:
-                    refilled_count += 1
-                # 短暂延迟避免过于频繁的验证
-                await asyncio.sleep(0.1)
+            for i in range(refill_count):
+                try:
+                    before_size = len(self.valid_keys)
+                    await self.async_verify_and_add()
+                    after_size = len(self.valid_keys)
+                    if after_size > before_size:
+                        refilled_count += 1
+                    # 短暂延迟避免过于频繁的验证
+                    await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    logger.info(f"Pool maintenance cancelled during refill {i+1}/{refill_count}")
+                    break  # 停止补充但继续完成维护
+                except Exception as e:
+                    logger.warning(f"Failed to refill key {i+1}/{refill_count} during maintenance: {e}")
+                    # 继续尝试下一个密钥
 
         maintenance_time = time.time() - maintenance_start
         final_size = len(self.valid_keys)
