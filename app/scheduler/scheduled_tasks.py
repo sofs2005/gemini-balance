@@ -285,7 +285,7 @@ def setup_scheduler():
 
     # 新增：添加有效密钥池维护的定时任务
     if getattr(settings, 'VALID_KEY_POOL_ENABLED', False):
-        maintenance_interval = getattr(settings, 'POOL_MAINTENANCE_INTERVAL_MINUTES', 30)
+        maintenance_interval = int(getattr(settings, 'POOL_MAINTENANCE_INTERVAL_MINUTES', 30))
         scheduler.add_job(
             maintain_valid_key_pool,
             "interval",

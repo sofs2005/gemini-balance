@@ -189,7 +189,7 @@ class ValidKeyPool:
             return await self.key_manager.get_next_working_key(model_name)
         
         # 并发验证多个密钥
-        refill_count = min(settings.EMERGENCY_REFILL_COUNT, len(self.key_manager.api_keys))
+        refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(self.key_manager.api_keys))
         selected_keys = random.sample(self.key_manager.api_keys, refill_count)
         
         # 创建验证任务
@@ -343,7 +343,7 @@ class ValidKeyPool:
 
         # 检查池大小，如果不足则主动补充
         current_size = len(self.valid_keys)
-        min_threshold = getattr(settings, 'POOL_MIN_THRESHOLD', 10)
+        min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
 
         refilled_count = 0
         if current_size < min_threshold:

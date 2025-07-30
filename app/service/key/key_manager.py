@@ -36,12 +36,17 @@ class KeyManager:
             try:
                 # 延迟导入避免循环依赖
                 from app.service.key.valid_key_pool import ValidKeyPool
+
+                # 确保配置值为整数类型
+                pool_size = int(settings.VALID_KEY_POOL_SIZE)
+                ttl_hours = int(settings.KEY_TTL_HOURS)
+
                 self.valid_key_pool = ValidKeyPool(
-                    pool_size=settings.VALID_KEY_POOL_SIZE,
-                    ttl_hours=settings.KEY_TTL_HOURS,
+                    pool_size=pool_size,
+                    ttl_hours=ttl_hours,
                     key_manager=self
                 )
-                logger.info("ValidKeyPool initialized successfully")
+                logger.info(f"ValidKeyPool initialized successfully with pool_size={pool_size}, ttl_hours={ttl_hours}")
             except Exception as e:
                 logger.error(f"Failed to initialize ValidKeyPool: {e}")
                 self.valid_key_pool = None
