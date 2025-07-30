@@ -60,6 +60,23 @@ class KeyManager:
             self.valid_key_pool.set_chat_service(chat_service)
             logger.debug("Chat service set for ValidKeyPool")
 
+    def _ensure_chat_service_set(self):
+        """
+        确保ValidKeyPool的聊天服务已设置
+        如果没有设置，则创建一个临时的聊天服务实例
+        """
+        if self.valid_key_pool and not self.valid_key_pool.chat_service:
+            try:
+                from app.config.config import settings
+                from app.service.chat.gemini_chat_service import GeminiChatService
+
+                # 创建临时聊天服务实例
+                chat_service = GeminiChatService(settings.BASE_URL, self)
+                self.valid_key_pool.set_chat_service(chat_service)
+                logger.info("Emergency chat service set for ValidKeyPool")
+            except Exception as e:
+                logger.error(f"Failed to set emergency chat service: {e}")
+
     async def preload_valid_key_pool(self, target_size: Optional[int] = None) -> int:
         """
         预加载有效密钥池
@@ -150,6 +167,10 @@ class KeyManager:
         # 优先使用有效密钥池
         if self.valid_key_pool:
             try:
+                # 确保聊天服务已设置
+                if not self.valid_key_pool.chat_service:
+                    self._ensure_chat_service_set()
+
                 return await self.valid_key_pool.get_valid_key(model_name)
             except Exception as e:
                 logger.warning(f"ValidKeyPool failed, falling back to original logic: {e}")
