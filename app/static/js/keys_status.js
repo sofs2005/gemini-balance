@@ -1494,6 +1494,13 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDropdownMenu(); // 初始化下拉菜单
   loadPoolStatus(); // 加载密钥池状态
 
+  // 添加定时检查密钥池状态（仅用于调试）
+  console.log("🔍 启动密钥池状态监控（每30秒检查一次）");
+  setInterval(() => {
+    console.log("⏰ 定时检查密钥池状态...");
+    loadPoolStatus();
+  }, 30000); // 每30秒检查一次
+
   // Initial batch actions update might be needed if not covered by displayPage
   // updateBatchActions('valid');
   // updateBatchActions('invalid');
@@ -2253,16 +2260,30 @@ async function executeVerifyAllKeys(allKeys) {
 // 加载密钥池状态
 async function loadPoolStatus() {
   try {
+    console.log("🔄 开始加载密钥池状态...");
     const data = await fetchAPI('/api/keys/status');
 
+    console.log("📊 API返回数据:", {
+      hasData: !!data,
+      poolEnabled: data?.pool_enabled,
+      hasPoolStatus: !!data?.pool_status,
+      poolStatusKeys: data?.pool_status ? Object.keys(data.pool_status) : null
+    });
+
     if (data && data.pool_enabled && data.pool_status) {
+      console.log("✅ 密钥池状态正常，显示卡片");
       updatePoolStatusDisplay(data.pool_status);
       showPoolStatusCard();
     } else {
+      console.warn("❌ 密钥池状态异常，隐藏卡片:", {
+        data: !!data,
+        pool_enabled: data?.pool_enabled,
+        pool_status: !!data?.pool_status
+      });
       hidePoolStatusCard();
     }
   } catch (error) {
-    console.error("加载密钥池状态时出错:", error);
+    console.error("❌ 加载密钥池状态时出错:", error);
     hidePoolStatusCard();
   }
 }
@@ -2358,7 +2379,10 @@ function updatePoolStatusCardStyle(poolStatus) {
 function showPoolStatusCard() {
   const card = document.getElementById('poolStatusCard');
   if (card) {
+    console.log("🟢 显示密钥池状态卡片");
     card.style.display = 'block';
+  } else {
+    console.error("❌ 找不到密钥池状态卡片元素");
   }
 }
 
@@ -2366,7 +2390,10 @@ function showPoolStatusCard() {
 function hidePoolStatusCard() {
   const card = document.getElementById('poolStatusCard');
   if (card) {
+    console.log("🔴 隐藏密钥池状态卡片");
     card.style.display = 'none';
+  } else {
+    console.error("❌ 找不到密钥池状态卡片元素");
   }
 }
 
