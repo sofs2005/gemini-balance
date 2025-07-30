@@ -1324,6 +1324,19 @@ endblock %} {% block head_extra_styles %}
               <span class="font-medium" id="poolMaintenanceCount">--</span>
             </div>
           </div>
+
+          <!-- 维护按钮 -->
+          <div class="mt-3 flex justify-center">
+            <button
+              id="poolMaintenanceBtn"
+              onclick="triggerPoolMaintenance()"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 flex items-center gap-2"
+              title="手动触发密钥池维护"
+            >
+              <i class="fas fa-tools"></i>
+              <span>立即维护</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

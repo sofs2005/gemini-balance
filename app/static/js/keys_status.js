@@ -2407,3 +2407,56 @@ function formatDuration(seconds) {
     return `${Math.floor(seconds / 3600)}小时`;
   }
 }
+
+// 手动触发密钥池维护
+async function triggerPoolMaintenance() {
+  const button = document.getElementById('poolMaintenanceBtn');
+  if (!button) return;
+
+  // 保存原始状态
+  const originalHtml = button.innerHTML;
+  const originalDisabled = button.disabled;
+
+  try {
+    // 设置加载状态
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>维护中...</span>';
+
+    console.log("🔧 手动触发密钥池维护...");
+
+    const response = await fetch('/api/keys/pool/maintenance', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log("✅ 密钥池维护成功:", data);
+      showNotification(
+        `维护成功！池大小: ${data.before.size} → ${data.after.size}`,
+        "success"
+      );
+
+      // 刷新密钥池状态
+      setTimeout(() => {
+        loadPoolStatus();
+      }, 1000);
+    } else {
+      console.error("❌ 密钥池维护失败:", data.message);
+      showNotification(`维护失败: ${data.message}`, "error");
+    }
+
+  } catch (error) {
+    console.error("❌ 维护请求失败:", error);
+    showNotification(`维护请求失败: ${error.message}`, "error");
+  } finally {
+    // 恢复按钮状态
+    setTimeout(() => {
+      button.innerHTML = originalHtml;
+      button.disabled = originalDisabled;
+    }, 1000);
+  }
+}

@@ -3,6 +3,9 @@ from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.core.security import verify_auth_token
 from app.config.config import settings
 from fastapi.responses import JSONResponse
+from app.log.logger import get_routes_logger
+
+logger = get_routes_logger()
 
 router = APIRouter()
 
@@ -115,3 +118,52 @@ async def get_keys_status(
         "pool_status": pool_status,
         "pool_enabled": getattr(settings, 'VALID_KEY_POOL_ENABLED', False)
     }
+
+
+@router.post("/api/keys/pool/maintenance")
+async def trigger_pool_maintenance(
+    request: Request,
+    key_manager: KeyManager = Depends(get_key_manager_instance),
+):
+    """
+    手动触发密钥池维护
+    """
+    auth_token = request.cookies.get("auth_token")
+    if not auth_token or not verify_auth_token(auth_token):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+
+    try:
+        if not key_manager.valid_key_pool:
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "ValidKeyPool not enabled"}
+            )
+
+        # 获取维护前状态
+        before_stats = key_manager.valid_key_pool.get_pool_stats()
+
+        # 执行维护
+        await key_manager.valid_key_pool.maintenance()
+
+        # 获取维护后状态
+        after_stats = key_manager.valid_key_pool.get_pool_stats()
+
+        return {
+            "success": True,
+            "message": "Pool maintenance completed successfully",
+            "before": {
+                "size": before_stats["current_size"],
+                "utilization": before_stats["utilization"]
+            },
+            "after": {
+                "size": after_stats["current_size"],
+                "utilization": after_stats["utilization"]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to trigger pool maintenance: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Maintenance failed: {str(e)}"}
+        )
