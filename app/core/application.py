@@ -43,7 +43,24 @@ async def _setup_database_and_config(app_settings):
     logger.info("Database initialized successfully")
     await connect_to_db()
     await sync_initial_settings()
-    await get_key_manager_instance(app_settings.API_KEYS, app_settings.VERTEX_API_KEYS)
+
+    # 初始化KeyManager
+    key_manager = await get_key_manager_instance(app_settings.API_KEYS, app_settings.VERTEX_API_KEYS)
+
+    # 为ValidKeyPool设置聊天服务
+    if key_manager and key_manager.valid_key_pool:
+        from app.service.chat.gemini_chat_service import GeminiChatService
+        chat_service = GeminiChatService(app_settings.BASE_URL, key_manager)
+        key_manager.set_chat_service(chat_service)
+        logger.info("Chat service set for ValidKeyPool")
+
+        # 预加载密钥池
+        try:
+            loaded_count = await key_manager.preload_valid_key_pool()
+            logger.info(f"ValidKeyPool preloaded with {loaded_count} keys")
+        except Exception as e:
+            logger.warning(f"Failed to preload ValidKeyPool: {e}")
+
     logger.info("Database, config sync, and KeyManager initialized successfully")
 
 
