@@ -2269,19 +2269,52 @@ async function loadPoolStatus() {
 
 // 更新密钥池状态显示
 function updatePoolStatusDisplay(poolStatus) {
+  // 安全检查
+  if (!poolStatus) {
+    console.error('Pool status is undefined');
+    return;
+  }
+
   // 基本信息
-  document.getElementById('poolSize').textContent = `${poolStatus.current_size}/${poolStatus.pool_size}`;
-  document.getElementById('poolUtilization').textContent = `利用率: ${(poolStatus.utilization * 100).toFixed(1)}%`;
+  const poolSizeElement = document.getElementById('poolSize');
+  const poolUtilizationElement = document.getElementById('poolUtilization');
+
+  if (poolSizeElement) {
+    poolSizeElement.textContent = `${poolStatus.current_size || 0}/${poolStatus.pool_size || 0}`;
+  }
+  if (poolUtilizationElement) {
+    poolUtilizationElement.textContent = `利用率: ${((poolStatus.utilization || 0) * 100).toFixed(1)}%`;
+  }
 
   // 主要指标
-  document.getElementById('poolHitRate').textContent = `${(poolStatus.hit_rate * 100).toFixed(1)}%`;
-  document.getElementById('poolAvgAge').textContent = formatDuration(poolStatus.avg_key_age_seconds);
+  const poolHitRateElement = document.getElementById('poolHitRate');
+  const poolAvgAgeElement = document.getElementById('poolAvgAge');
+
+  if (poolHitRateElement) {
+    poolHitRateElement.textContent = `${((poolStatus.hit_rate || 0) * 100).toFixed(1)}%`;
+  }
+  if (poolAvgAgeElement) {
+    poolAvgAgeElement.textContent = formatDuration(poolStatus.avg_key_age_seconds || 0);
+  }
 
   // 详细统计
-  document.getElementById('poolVerificationRate').textContent = `${(poolStatus.verification_success_rate * 100).toFixed(1)}%`;
-  document.getElementById('poolExpiryRate').textContent = `${(poolStatus.ttl_expiry_rate * 100).toFixed(1)}%`;
-  document.getElementById('poolEmergencyRefills').textContent = poolStatus.stats.emergency_refill_count || 0;
-  document.getElementById('poolMaintenanceCount').textContent = poolStatus.stats.maintenance_count || 0;
+  const poolVerificationRateElement = document.getElementById('poolVerificationRate');
+  const poolExpiryRateElement = document.getElementById('poolExpiryRate');
+  const poolEmergencyRefillsElement = document.getElementById('poolEmergencyRefills');
+  const poolMaintenanceCountElement = document.getElementById('poolMaintenanceCount');
+
+  if (poolVerificationRateElement) {
+    poolVerificationRateElement.textContent = `${((poolStatus.verification_success_rate || 0) * 100).toFixed(1)}%`;
+  }
+  if (poolExpiryRateElement) {
+    poolExpiryRateElement.textContent = `${((poolStatus.ttl_expiry_rate || 0) * 100).toFixed(1)}%`;
+  }
+  if (poolEmergencyRefillsElement) {
+    poolEmergencyRefillsElement.textContent = (poolStatus.stats && poolStatus.stats.emergency_refill_count) || 0;
+  }
+  if (poolMaintenanceCountElement) {
+    poolMaintenanceCountElement.textContent = (poolStatus.stats && poolStatus.stats.maintenance_count) || 0;
+  }
 
   // 更新卡片样式
   updatePoolStatusCardStyle(poolStatus);
@@ -2289,25 +2322,35 @@ function updatePoolStatusDisplay(poolStatus) {
 
 // 更新密钥池状态卡片样式
 function updatePoolStatusCardStyle(poolStatus) {
+  if (!poolStatus) {
+    return;
+  }
+
   const hitRateElement = document.querySelector('#poolStatusCard .stat-success .stat-value');
   const utilizationElement = document.querySelector('#poolStatusCard .stat-info .stat-value');
 
   // 根据命中率调整颜色
-  if (poolStatus.hit_rate >= 0.9) {
-    hitRateElement.className = 'stat-value text-green-600';
-  } else if (poolStatus.hit_rate >= 0.7) {
-    hitRateElement.className = 'stat-value text-yellow-600';
-  } else {
-    hitRateElement.className = 'stat-value text-red-600';
+  if (hitRateElement) {
+    const hitRate = poolStatus.hit_rate || 0;
+    if (hitRate >= 0.9) {
+      hitRateElement.className = 'stat-value text-green-600';
+    } else if (hitRate >= 0.7) {
+      hitRateElement.className = 'stat-value text-yellow-600';
+    } else {
+      hitRateElement.className = 'stat-value text-red-600';
+    }
   }
 
   // 根据利用率调整颜色
-  if (poolStatus.utilization >= 0.8) {
-    utilizationElement.className = 'stat-value text-green-600';
-  } else if (poolStatus.utilization >= 0.5) {
-    utilizationElement.className = 'stat-value text-yellow-600';
-  } else {
-    utilizationElement.className = 'stat-value text-red-600';
+  if (utilizationElement) {
+    const utilization = poolStatus.utilization || 0;
+    if (utilization >= 0.8) {
+      utilizationElement.className = 'stat-value text-green-600';
+    } else if (utilization >= 0.5) {
+      utilizationElement.className = 'stat-value text-yellow-600';
+    } else {
+      utilizationElement.className = 'stat-value text-red-600';
+    }
   }
 }
 
