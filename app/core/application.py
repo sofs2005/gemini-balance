@@ -54,12 +54,19 @@ async def _setup_database_and_config(app_settings):
         key_manager.set_chat_service(chat_service)
         logger.info("Chat service set for ValidKeyPool")
 
-        # 预加载密钥池
-        try:
-            loaded_count = await key_manager.preload_valid_key_pool()
-            logger.info(f"ValidKeyPool preloaded with {loaded_count} keys")
-        except Exception as e:
-            logger.warning(f"Failed to preload ValidKeyPool: {e}")
+        # 异步预加载密钥池（不阻塞启动）
+        import asyncio
+        async def background_preload():
+            try:
+                await asyncio.sleep(5)  # 等待应用完全启动
+                loaded_count = await key_manager.preload_valid_key_pool()
+                logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
+            except Exception as e:
+                logger.warning(f"Failed to background preload ValidKeyPool: {e}")
+
+        # 创建后台任务，不等待完成
+        asyncio.create_task(background_preload())
+        logger.info("ValidKeyPool background preload task started")
 
     logger.info("Database, config sync, and KeyManager initialized successfully")
 
