@@ -981,6 +981,19 @@ endblock %} {% block head_extra_styles %}
       >
         日志配置
       </button>
+      <button
+        class="tab-btn px-5 py-2 rounded-full font-medium text-sm transition-all duration-200"
+        data-tab="keypool"
+        style="
+          background-color: #f8fafc !important;
+          color: #64748b !important;
+          border: 2px solid #e2e8f0 !important;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+          font-weight: 500 !important;
+        "
+      >
+        智能密钥池
+      </button>
     </div>
 
     <!-- Save Status Banner (Removed - using notification component now) -->
@@ -2300,6 +2313,156 @@ endblock %} {% block head_extra_styles %}
           </select>
           <small class="text-gray-500 mt-1 block"
             >选择自动删除请求日志的天数。</small
+          >
+        </div>
+      </div>
+
+      <!-- 智能密钥池配置 -->
+      <div class="config-section" id="keypool-section">
+        <h2
+          class="text-xl font-bold mb-6 pb-3 border-b flex items-center gap-2 text-gray-800 border-violet-300 border-opacity-30"
+        >
+          <i class="fas fa-swimming-pool text-violet-400"></i> 智能密钥池配置
+        </h2>
+
+        <!-- 启用密钥池 -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between">
+            <label
+              for="VALID_KEY_POOL_ENABLED"
+              class="font-semibold text-gray-700"
+              >启用智能密钥池</label
+            >
+            <div
+              class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
+            >
+              <input
+                type="checkbox"
+                name="VALID_KEY_POOL_ENABLED"
+                id="VALID_KEY_POOL_ENABLED"
+                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+              />
+              <label
+                for="VALID_KEY_POOL_ENABLED"
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
+              ></label>
+            </div>
+          </div>
+          <small class="text-gray-500 mt-1 block"
+            >启用后，系统将维护一个预验证的密钥池，显著提升API响应速度</small
+          >
+        </div>
+
+        <!-- 密钥池大小 -->
+        <div class="mb-6">
+          <label
+            for="VALID_KEY_POOL_SIZE"
+            class="block font-semibold mb-2 text-gray-700"
+            >密钥池大小</label
+          >
+          <select
+            id="VALID_KEY_POOL_SIZE"
+            name="VALID_KEY_POOL_SIZE"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="20">20 个密钥</option>
+            <option value="30">30 个密钥</option>
+            <option value="50">50 个密钥</option>
+            <option value="80">80 个密钥</option>
+            <option value="100">100 个密钥</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >池中同时维护的已验证密钥数量，越大响应越快但占用更多资源</small
+          >
+        </div>
+
+        <!-- 密钥TTL时间 -->
+        <div class="mb-6">
+          <label
+            for="KEY_TTL_HOURS"
+            class="block font-semibold mb-2 text-gray-700"
+            >密钥生存时间 (小时)</label
+          >
+          <select
+            id="KEY_TTL_HOURS"
+            name="KEY_TTL_HOURS"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="1">1 小时</option>
+            <option value="2">2 小时</option>
+            <option value="4">4 小时</option>
+            <option value="6">6 小时</option>
+            <option value="12">12 小时</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >密钥在池中的有效时间，过期后会被自动清理并重新验证</small
+          >
+        </div>
+
+        <!-- 最小阈值 -->
+        <div class="mb-6">
+          <label
+            for="POOL_MIN_THRESHOLD"
+            class="block font-semibold mb-2 text-gray-700"
+            >池最小阈值</label
+          >
+          <select
+            id="POOL_MIN_THRESHOLD"
+            name="POOL_MIN_THRESHOLD"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="5">5 个密钥</option>
+            <option value="10">10 个密钥</option>
+            <option value="15">15 个密钥</option>
+            <option value="20">20 个密钥</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >当池中密钥数量低于此值时，系统会主动补充新密钥</small
+          >
+        </div>
+
+        <!-- 紧急补充数量 -->
+        <div class="mb-6">
+          <label
+            for="EMERGENCY_REFILL_COUNT"
+            class="block font-semibold mb-2 text-gray-700"
+            >紧急补充数量</label
+          >
+          <select
+            id="EMERGENCY_REFILL_COUNT"
+            name="EMERGENCY_REFILL_COUNT"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="2">2 个密钥</option>
+            <option value="3">3 个密钥</option>
+            <option value="5">5 个密钥</option>
+            <option value="8">8 个密钥</option>
+            <option value="10">10 个密钥</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >当池为空时，同时验证的密钥数量，越大恢复越快但负载越高</small
+          >
+        </div>
+
+        <!-- 维护间隔 -->
+        <div class="mb-6">
+          <label
+            for="POOL_MAINTENANCE_INTERVAL_MINUTES"
+            class="block font-semibold mb-2 text-gray-700"
+            >维护间隔 (分钟)</label
+          >
+          <select
+            id="POOL_MAINTENANCE_INTERVAL_MINUTES"
+            name="POOL_MAINTENANCE_INTERVAL_MINUTES"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="10">10 分钟</option>
+            <option value="20">20 分钟</option>
+            <option value="30">30 分钟</option>
+            <option value="60">60 分钟</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >定期维护密钥池的间隔时间，包括清理过期密钥和主动补充</small
           >
         </div>
       </div>
