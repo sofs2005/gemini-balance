@@ -404,7 +404,7 @@ async def sync_initial_settings():
         existing_db_keys = set(db_settings_map.keys())
 
         for key, value in final_memory_settings.items():
-            if key == "DATABASE_TYPE":
+            if key in ["DATABASE_TYPE", "ADMIN_SESSION_EXPIRE"]:
                 logger.debug(
                     f"Skipping synchronization of '{key}' to database. "
                     "This setting is controlled by environment/dotenv."
