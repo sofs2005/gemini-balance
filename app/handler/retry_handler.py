@@ -29,8 +29,16 @@ class RetryHandler:
                     return await func(*args, **kwargs)
                 except Exception as e:
                     last_exception = e
+                    error_str = str(e)
+
+                    # 检查是否是应该立即切换key的错误类型
+                    is_429_error = "429" in error_str
+                    is_fatal_error = "400" in error_str or "401" in error_str or "403" in error_str
+                    should_switch_key_immediately = is_429_error or is_fatal_error
+
                     logger.warning(
-                        f"API call failed with error: {str(e)}. Attempt {retries} of {settings.MAX_RETRIES}"
+                        f"API call failed with error: {error_str}. Attempt {retries} of {settings.MAX_RETRIES}"
+                        f"{' (will switch key immediately)' if should_switch_key_immediately else ''}"
                     )
 
                     # 从函数参数中获取 key_manager
@@ -45,7 +53,11 @@ class RetryHandler:
 
                         if new_key and new_key != old_key:
                             kwargs[self.key_arg] = new_key
-                            logger.info(f"Switched to new API key: {redact_key_for_logging(new_key)}")
+                            logger.info(f"Switched to new API key: {redact_key_for_logging(new_key)} (reason: {error_str[:50]}...)")
+                        elif should_switch_key_immediately:
+                            # 对于应该立即切换key的错误，如果没有新key可用，直接失败
+                            logger.error(f"No valid API key available for immediate switch after {error_str[:50]}... Breaking retry loop.")
+                            break
                         else:
                             logger.error(f"No valid API key available after {retries} retries.")
                             break

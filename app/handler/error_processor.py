@@ -64,9 +64,13 @@ async def handle_api_error_and_get_next_key(
         logger.error(f"Failed to record error log for key {old_key[:8]}...: {str(log_error)}", exc_info=True)
 
     new_key = None
-    if is_429_error and model_name:
-        logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown.")
-        await key_manager.mark_key_model_as_cooling(old_key, model_name)
+    if is_429_error:
+        if model_name:
+            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown.")
+            await key_manager.mark_key_model_as_cooling(old_key, model_name)
+        else:
+            logger.info(f"Detected 429 error with key '{old_key}'. Marking key as failed due to rate limit.")
+            await key_manager.mark_key_as_failed(old_key)
         new_key = await key_manager.get_next_working_key(model_name=model_name)
     elif is_fatal_error:
         logger.warning(f"Detected fatal error ({error_str.split(',')[0]}) for key '{old_key}'. Marking key as failed immediately.")
