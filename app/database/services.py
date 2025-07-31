@@ -423,7 +423,7 @@ async def add_request_log(
         log_time = request_time if request_time else datetime.now()
 
         # 调试日志
-        logger.info(f"Adding request log: model={model_name}, success={is_success}, status={status_code}, time={log_time}")
+        logger.debug(f"Adding request log: model={model_name}, success={is_success}, status={status_code}, time={log_time}")
 
         query = insert(RequestLog).values(
             request_time=log_time,
@@ -434,7 +434,7 @@ async def add_request_log(
             latency_ms=latency_ms
         )
         await database.execute(query)
-        logger.info("Request log added successfully")
+        logger.debug("Request log added successfully")
         return True
     except Exception as e:
         logger.error(f"Failed to add request log: {str(e)}")

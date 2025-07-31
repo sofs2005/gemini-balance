@@ -32,7 +32,7 @@ async def check_for_updates() -> Tuple[bool, Optional[str], Optional[str]]:
         logger.error(f"Error reading VERSION file ('{VERSION_FILE_PATH}'): {e}")
         return False, None, f"Error reading VERSION file ('{VERSION_FILE_PATH}')."
 
-    logger.info(f"当前应用程序版本 (from {VERSION_FILE_PATH}): {current_v}")
+    logger.debug(f"当前应用程序版本 (from {VERSION_FILE_PATH}): {current_v}")
 
     if not settings.GITHUB_REPO_OWNER or not settings.GITHUB_REPO_NAME or \
        settings.GITHUB_REPO_OWNER == "your_owner" or settings.GITHUB_REPO_NAME == "your_repo":
@@ -61,7 +61,7 @@ async def check_for_updates() -> Tuple[bool, Optional[str], Optional[str]]:
             if latest_v_str.startswith('v'):
                 latest_v_str = latest_v_str[1:]
 
-            logger.info(f"在 GitHub 上找到的最新版本: {latest_v_str}")
+            logger.debug(f"在 GitHub 上找到的最新版本: {latest_v_str}")
 
             # 比较版本
             current_version = version.parse(current_v)
@@ -71,7 +71,7 @@ async def check_for_updates() -> Tuple[bool, Optional[str], Optional[str]]:
                 logger.info(f"有可用更新: {current_v} -> {latest_v_str}")
                 return True, latest_v_str, None
             else:
-                logger.info("应用程序已是最新版本。")
+                logger.debug("应用程序已是最新版本。")
                 return False, None, None
 
     except httpx.HTTPStatusError as e:

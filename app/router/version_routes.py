@@ -24,7 +24,7 @@ async def get_version_info():
         current_version = get_current_version()
         update_available, latest_version, error_message = await check_for_updates()
 
-        logger.info(f"Version check API result: current={current_version}, latest={latest_version}, available={update_available}, error='{error_message}'")
+        logger.debug(f"Version check API result: current={current_version}, latest={latest_version}, available={update_available}, error='{error_message}'")
 
         return VersionInfo(
             current_version=current_version,

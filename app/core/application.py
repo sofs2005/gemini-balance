@@ -105,7 +105,7 @@ async def _perform_update_check(app: FastAPI):
 
         app.state = State()
     app.state.update_info = update_info
-    logger.info(f"Update check completed. Info: {update_info}")
+    logger.debug(f"Update check completed. Info: {update_info}")
 
 
 @asynccontextmanager
