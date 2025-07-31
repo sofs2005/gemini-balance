@@ -143,10 +143,10 @@ class Settings(BaseSettings):
 
     # Admin Session Configuration
     ADMIN_SESSION_EXPIRE: int = Field(
-        default=3600,
-        ge=300,
-        le=86400,
-        description="Admin session expiration time in seconds (5 minutes to 24 hours)"
+        default=86400,  # 默认24小时
+        ge=300,         # 最小5分钟
+        le=2592000,     # 最大30天
+        description="Admin session expiration time in seconds (5 minutes to 30 days)"
     )
 
     def __init__(self, **kwargs):
