@@ -50,9 +50,13 @@ class RetryHandler:
                         old_key = kwargs.get(self.key_arg)
                         model_name = kwargs.get("model_name")
 
+                        logger.info(f"Retry attempt {retries}: calling error handler for key {redact_key_for_logging(old_key)}")
+
                         new_key = await handle_api_error_and_get_next_key(
                             key_manager, e, old_key, model_name, retries
                         )
+
+                        logger.info(f"Error handler returned: old_key={redact_key_for_logging(old_key)}, new_key={redact_key_for_logging(new_key)}")
 
                         if new_key and new_key != old_key:
                             kwargs[self.key_arg] = new_key
@@ -64,6 +68,8 @@ class RetryHandler:
                         else:
                             logger.error(f"No valid API key available after {retries} retries.")
                             break
+                    else:
+                        logger.warning(f"No key_manager available for retry attempt {retries}, cannot switch keys")
 
             logger.error(
                 f"All retry attempts failed, raising final exception: {str(last_exception)}"
