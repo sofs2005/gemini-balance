@@ -349,9 +349,13 @@ class ValidKeyPool:
         current_size = len(self.valid_keys)
         min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
 
+        logger.info(f"Pool maintenance check: current_size={current_size}, min_threshold={min_threshold}, pool_size={self.pool_size}")
+
         refilled_count = 0
         if current_size < min_threshold:
             logger.info(f"Pool size ({current_size}) below threshold ({min_threshold}), starting batch refill")
+        else:
+            logger.info(f"Pool size ({current_size}) meets threshold ({min_threshold}), no refill needed")
 
             # 批量补充密钥
             refill_count = min(5, self.pool_size - current_size)
