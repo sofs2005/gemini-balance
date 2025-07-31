@@ -47,7 +47,8 @@ async def handle_api_error_and_get_next_key(
 
     # 记录错误日志
     try:
-        await add_error_log(
+        logger.info(f"Attempting to record error log for key {old_key[:8]}... with error type {error_type}")
+        result = await add_error_log(
             gemini_key=old_key,
             model_name=model_name,
             error_type=error_type,
@@ -55,9 +56,12 @@ async def handle_api_error_and_get_next_key(
             error_code=error_code,
             request_msg={"retries": retries, "source": "error_processor"}
         )
-        logger.info(f"Error log recorded for key {old_key[:8]}... with error type {error_type}")
+        if result:
+            logger.info(f"Error log recorded successfully for key {old_key[:8]}... with error type {error_type}")
+        else:
+            logger.warning(f"Error log recording returned False for key {old_key[:8]}... with error type {error_type}")
     except Exception as log_error:
-        logger.error(f"Failed to record error log: {str(log_error)}")
+        logger.error(f"Failed to record error log for key {old_key[:8]}...: {str(log_error)}", exc_info=True)
 
     new_key = None
     if is_429_error and model_name:

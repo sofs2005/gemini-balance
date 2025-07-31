@@ -108,17 +108,24 @@ async def add_error_log(
 ) -> bool:
     """
     添加错误日志
-    
+
     Args:
         gemini_key: Gemini API密钥
         error_log: 错误日志
         error_code: 错误代码 (例如 HTTP 状态码)
         request_msg: 请求消息
-    
+
     Returns:
         bool: 是否添加成功
     """
     try:
+        logger.debug(f"add_error_log called with: key={redact_key_for_logging(gemini_key)}, error_type={error_type}, error_code={error_code}")
+
+        # 检查数据库连接
+        if not database.is_connected:
+            logger.error("Database is not connected when trying to add error log")
+            return False
+
         # 如果request_msg是字典，则转换为JSON字符串
         if isinstance(request_msg, dict):
             request_msg_json = request_msg
@@ -129,7 +136,7 @@ async def add_error_log(
                 request_msg_json = {"message": request_msg}
         else:
             request_msg_json = None
-        
+
         # 插入错误日志
         query = (
             insert(ErrorLog)
@@ -143,11 +150,11 @@ async def add_error_log(
                 request_time=datetime.now()
             )
         )
-        await database.execute(query)
-        logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}")
+        result = await database.execute(query)
+        logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}, result: {result}")
         return True
     except Exception as e:
-        logger.error(f"Failed to add error log: {str(e)}")
+        logger.error(f"Failed to add error log for key {redact_key_for_logging(gemini_key)}: {str(e)}", exc_info=True)
         return False
 
 
