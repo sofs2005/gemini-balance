@@ -340,11 +340,12 @@ async def sync_initial_settings():
             s["key"]: s["value"] for s in db_settings_raw
         }
 
-        # 2. 将数据库设置合并到内存 settings (数据库优先)
+        # 2. 将数据库设置合并到内存 settings (数据库优先，但排除特定配置)
         updated_in_memory = False
+        excluded_from_db_override = ["DATABASE_TYPE", "ADMIN_SESSION_EXPIRE"]
 
         for key, db_value in db_settings_map.items():
-            if key == "DATABASE_TYPE":
+            if key in excluded_from_db_override:
                 logger.debug(
                     f"Skipping update of '{key}' in memory from database. "
                     "This setting is controlled by environment/dotenv."
