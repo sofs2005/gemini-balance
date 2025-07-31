@@ -289,7 +289,6 @@ class GeminiChatService:
             response_copy["candidates"][0]["content"]["parts"][0]["text"] = text
         return response_copy
 
-    @RetryHandler()
     async def generate_content(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
