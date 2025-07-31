@@ -155,6 +155,14 @@ class Settings(BaseSettings):
         if not self.AUTH_TOKEN and self.ALLOWED_TOKENS:
             self.AUTH_TOKEN = self.ALLOWED_TOKENS[0]
 
+        # 记录关键配置值
+        try:
+            from app.log.logger import get_config_logger
+            logger = get_config_logger()
+            logger.info(f"ADMIN_SESSION_EXPIRE loaded: {self.ADMIN_SESSION_EXPIRE} seconds ({self.ADMIN_SESSION_EXPIRE/86400:.1f} days)")
+        except ImportError:
+            print(f"ADMIN_SESSION_EXPIRE loaded: {self.ADMIN_SESSION_EXPIRE} seconds ({self.ADMIN_SESSION_EXPIRE/86400:.1f} days)")
+
 
 # 创建全局配置实例
 settings = Settings()

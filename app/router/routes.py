@@ -68,7 +68,7 @@ def setup_page_routes(app: FastAPI) -> None:
                 return RedirectResponse(url="/", status_code=302)
 
             if verify_auth_token(auth_token):
-                logger.info("Successful authentication")
+                logger.info(f"Successful authentication, setting cookie with max_age={settings.ADMIN_SESSION_EXPIRE} seconds")
                 response = RedirectResponse(url="/config", status_code=302)
                 response.set_cookie(
                     key="auth_token", value=auth_token, httponly=True, max_age=settings.ADMIN_SESSION_EXPIRE
