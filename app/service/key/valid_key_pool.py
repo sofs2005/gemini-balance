@@ -138,12 +138,20 @@ class ValidKeyPool:
                 logger.debug("Pool is full, skipping verification")
                 return
             
-            # 随机选择一个密钥进行验证
-            if not self.key_manager.api_keys:
-                logger.warning("No API keys available for verification")
+            # 获取可能有效的密钥列表（排除已知失效的密钥）
+            available_keys = []
+            for key in self.key_manager.api_keys:
+                # 检查密钥是否被标记为失效
+                if await self.key_manager.is_key_valid(key):
+                    available_keys.append(key)
+
+            if not available_keys:
+                logger.warning("No valid API keys available for verification")
                 return
-            
-            random_key = random.choice(self.key_manager.api_keys)
+
+            # 从有效密钥中随机选择
+            random_key = random.choice(available_keys)
+            logger.debug(f"Selected key {redact_key_for_logging(random_key)} from {len(available_keys)} available keys")
             
             # 检查密钥是否已在池中
             if self._is_key_in_pool(random_key):
@@ -183,14 +191,21 @@ class ValidKeyPool:
         self.stats["emergency_refill_count"] += 1
         logger.warning("Starting emergency refill process")
         
-        if not self.key_manager.api_keys:
-            logger.error("No API keys available for emergency refill")
+        # 获取可能有效的密钥列表
+        available_keys = []
+        for key in self.key_manager.api_keys:
+            if await self.key_manager.is_key_valid(key):
+                available_keys.append(key)
+
+        if not available_keys:
+            logger.error("No valid API keys available for emergency refill")
             # Fallback到原有逻辑
             return await self.key_manager.get_next_working_key(model_name)
-        
-        # 并发验证多个密钥
-        refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(self.key_manager.api_keys))
-        selected_keys = random.sample(self.key_manager.api_keys, refill_count)
+
+        # 并发验证多个密钥（从有效密钥中选择）
+        refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(available_keys))
+        selected_keys = random.sample(available_keys, refill_count)
+        logger.info(f"Emergency refill: selected {refill_count} keys from {len(available_keys)} available keys")
         
         # 创建验证任务
         verification_tasks = [
