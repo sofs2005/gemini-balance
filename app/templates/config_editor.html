@@ -2171,6 +2171,48 @@ endblock %} {% block head_extra_styles %}
           >
         </div>
 
+        <!-- Gemini配额重置时间 -->
+        <div class="mb-6">
+          <label
+            for="GEMINI_QUOTA_RESET_HOUR"
+            class="block font-semibold mb-2 text-gray-700"
+            >Gemini配额重置时间</label
+          >
+          <select
+            id="GEMINI_QUOTA_RESET_HOUR"
+            name="GEMINI_QUOTA_RESET_HOUR"
+            class="w-full px-4 py-3 rounded-lg form-select-themed"
+          >
+            <option value="0">0点 (午夜)</option>
+            <option value="1">1点</option>
+            <option value="2">2点</option>
+            <option value="3">3点</option>
+            <option value="4">4点</option>
+            <option value="5">5点</option>
+            <option value="6">6点</option>
+            <option value="7">7点</option>
+            <option value="8">8点</option>
+            <option value="9">9点</option>
+            <option value="10">10点</option>
+            <option value="11">11点</option>
+            <option value="12">12点 (中午)</option>
+            <option value="13">13点</option>
+            <option value="14">14点</option>
+            <option value="15">15点</option>
+            <option value="16">16点 (默认)</option>
+            <option value="17">17点</option>
+            <option value="18">18点</option>
+            <option value="19">19点</option>
+            <option value="20">20点</option>
+            <option value="21">21点</option>
+            <option value="22">22点</option>
+            <option value="23">23点</option>
+          </select>
+          <small class="text-gray-500 mt-1 block"
+            >Gemini API配额每日重置的时间点（24小时制），429错误的密钥将冷却到此时间点</small
+          >
+        </div>
+
         <!-- 时区 -->
         <div class="mb-6">
           <label for="TIMEZONE" class="block font-semibold mb-2 text-gray-700"

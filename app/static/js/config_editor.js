@@ -814,6 +814,8 @@ async function initConfig() {
       FAKE_STREAM_ENABLED: false,
       FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS: 5,
       // --- 结束：处理假流式配置的默认值 ---
+      // --- 定时任务配置默认值 ---
+      GEMINI_QUOTA_RESET_HOUR: 16,
     };
 
     populateForm(defaultConfig);
