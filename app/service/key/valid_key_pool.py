@@ -585,22 +585,46 @@ class ValidKeyPool:
 
         logger.info(f"Starting pool preload, target size: {target_size}")
 
-        loaded_count = 0
-        max_attempts = min(target_size * 2, len(self.key_manager.api_keys))
+        # 使用并发验证提高预加载效率
+        batch_size = min(10, target_size)  # 每批验证10个
+        total_loaded = 0
 
-        for _ in range(max_attempts):
-            if len(self.valid_keys) >= target_size:
+        while len(self.valid_keys) < target_size and total_loaded < target_size * 2:
+            # 获取可用密钥
+            available_keys = []
+            for key in self.key_manager.api_keys:
+                if await self.key_manager.is_key_valid(key) and not self._is_key_in_pool(key):
+                    available_keys.append(key)
+
+            if not available_keys:
+                logger.warning("No more valid keys available for preload")
                 break
 
-            await self.async_verify_and_add()
-            if len(self.valid_keys) > loaded_count:
-                loaded_count = len(self.valid_keys)
+            # 选择一批密钥进行并发验证
+            batch_keys = random.sample(available_keys, min(batch_size, len(available_keys), target_size - len(self.valid_keys)))
+            logger.info(f"Preload batch: verifying {len(batch_keys)} keys")
 
-            # 短暂延迟
-            await asyncio.sleep(0.1)
+            # 并发验证
+            tasks = [self._verify_key_for_emergency(key) for key in batch_keys]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        logger.info(f"Pool preload completed. Loaded {loaded_count} keys")
-        return loaded_count
+            # 处理结果
+            batch_loaded = 0
+            for result in results:
+                if isinstance(result, str):  # 验证成功
+                    key_obj = ValidKeyWithTTL(result, self.ttl_hours)
+                    self.valid_keys.append(key_obj)
+                    batch_loaded += 1
+                    total_loaded += 1
+
+            logger.info(f"Preload batch completed: loaded {batch_loaded}/{len(batch_keys)} keys, pool size: {len(self.valid_keys)}")
+
+            if batch_loaded == 0:  # 如果这批全部失败，停止预加载
+                logger.warning("Preload batch failed completely, stopping preload")
+                break
+
+        logger.info(f"Pool preload completed. Loaded {len(self.valid_keys)} keys")
+        return len(self.valid_keys)
 
     def log_performance_summary(self) -> None:
         """
