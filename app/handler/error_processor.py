@@ -23,10 +23,10 @@ async def handle_api_error_and_get_next_key(
     is_service_unavailable = "503" in error_str  # 服务不可用（可重试）
     is_timeout_error = "408" in error_str  # 请求超时（可重试）
 
-    # 需要立即切换key的错误（不应该重试同一个key）
-    is_fatal_error = is_auth_error or is_client_error or is_server_error
-    # 可以重试的错误（服务端临时问题）
-    is_retryable_error = is_service_unavailable or is_timeout_error
+    # 致命错误：立即标记密钥无效（不记录失败次数）
+    is_fatal_error = is_auth_error or is_client_error
+    # 可重试错误：记录失败次数，下轮重试（包括服务器错误）
+    is_retryable_error = is_server_error or is_service_unavailable or is_timeout_error
 
     # 提取错误代码
     error_code = None
