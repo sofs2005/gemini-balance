@@ -163,18 +163,8 @@ function copyTokens(type) {
         return;
     }
 
-    // 尝试使用现代 Clipboard API
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            showAlert('有效密钥已复制到剪贴板 (换行分隔)', 'success');
-        }).catch(err => {
-            console.error('Clipboard API failed:', err);
-            fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (换行分隔)');
-        });
-    } else {
-        // 降级到传统方法
-        fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (换行分隔)');
-    }
+    // HTTP环境下直接使用传统复制方法
+    fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (换行分隔)');
 }
 
 function copyTokensWithComma(type) {
@@ -187,18 +177,8 @@ function copyTokensWithComma(type) {
         return;
     }
 
-    // 尝试使用现代 Clipboard API
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            showAlert('有效密钥已复制到剪贴板 (逗号分隔)', 'success');
-        }).catch(err => {
-            console.error('Clipboard API failed:', err);
-            fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (逗号分隔)');
-        });
-    } else {
-        // 降级到传统方法
-        fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (逗号分隔)');
-    }
+    // HTTP环境下直接使用传统复制方法
+    fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (逗号分隔)');
 }
 
 function showAlert(message, type) {
