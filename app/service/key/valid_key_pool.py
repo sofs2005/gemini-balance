@@ -107,12 +107,26 @@ class ValidKeyPool:
 
                 # 检查是否需要紧急补充
                 min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
-                if len(self.valid_keys) < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
-                    logger.warning(f"Pool size {len(self.valid_keys)} critically low (< {min_threshold//2}), triggering emergency refill")
+                current_size = len(self.valid_keys)
+
+                if current_size < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
+                    logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
                     asyncio.create_task(self.emergency_refill_async())
-                else:
-                    # 异步触发补充（不等待）
-                    asyncio.create_task(self.async_verify_and_add())
+                elif current_size < self.pool_size:  # 未达到最大容量时继续补充
+                    # 根据当前池大小决定补充策略
+                    if current_size < min_threshold:
+                        # 低于阈值时，每次补充2个以加速增长
+                        asyncio.create_task(self.async_verify_and_add())
+                        asyncio.create_task(self.async_verify_and_add())
+                    elif current_size < self.pool_size * 0.8:  # 低于80%容量时，偶尔补充
+                        import random
+                        if random.random() < 0.3:  # 30%概率补充
+                            asyncio.create_task(self.async_verify_and_add())
+                    else:
+                        # 接近满容量时，低概率补充
+                        import random
+                        if random.random() < 0.1:  # 10%概率补充
+                            asyncio.create_task(self.async_verify_and_add())
 
                 return key_obj.key
             else:
