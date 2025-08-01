@@ -121,17 +121,24 @@ class ValidKeyPool:
                         asyncio.create_task(self.async_verify_and_add())
                     elif current_size < self.pool_size * 0.8:  # 低于80%容量时，偶尔补充
                         import random
-                        # 根据池大小动态调整补充概率
-                        if current_size < min_threshold * 1.5:  # 低于15个时，80%概率补充
+                        # 根据池大小动态调整补充概率和数量
+                        if current_size < min_threshold * 1.5:  # 低于15个时，100%概率补充2个
+                            refill_chance = 1.0
+                            refill_count = 2
+                        elif current_size < min_threshold * 2:  # 低于20个时，100%概率补充1个
+                            refill_chance = 1.0
+                            refill_count = 1
+                        elif current_size < min_threshold * 2.5:  # 低于25个时，80%概率补充1个
                             refill_chance = 0.8
-                        elif current_size < min_threshold * 2:  # 低于20个时，60%概率补充
-                            refill_chance = 0.6
-                        else:  # 20-40个时，30%概率补充
+                            refill_count = 1
+                        else:  # 25-40个时，30%概率补充1个
                             refill_chance = 0.3
+                            refill_count = 1
 
                         if random.random() < refill_chance:
-                            logger.info(f"Pool size {current_size} below 80% capacity, triggering async refill ({refill_chance*100:.0f}% chance)")
-                            asyncio.create_task(self.async_verify_and_add())
+                            logger.info(f"Pool size {current_size} below 80% capacity, triggering {refill_count}x async refill ({refill_chance*100:.0f}% chance)")
+                            for _ in range(refill_count):
+                                asyncio.create_task(self.async_verify_and_add())
                         else:
                             logger.debug(f"Pool size {current_size}, skipping refill ({(1-refill_chance)*100:.0f}% chance)")
                     else:
@@ -459,11 +466,14 @@ class ValidKeyPool:
         if current_size < min_threshold:
             logger.info(f"Pool size ({current_size}) below threshold ({min_threshold}), starting batch refill")
 
-            # 循环补充直到达到阈值
-            max_attempts = min_threshold - current_size + 2  # 允许一些失败重试
+            # 循环补充直到达到目标大小（高于最小阈值）
+            target_size = max(min_threshold, int(self.pool_size * 0.5))  # 至少25个或阈值
+            max_attempts = target_size - current_size + 5  # 允许一些失败重试
             attempt = 0
 
-            while len(self.valid_keys) < min_threshold and attempt < max_attempts:
+            logger.info(f"Maintenance target: {target_size} keys (min_threshold: {min_threshold}, current: {current_size})")
+
+            while len(self.valid_keys) < target_size and attempt < max_attempts:
                 try:
                     before_size = len(self.valid_keys)
                     await self.async_verify_and_add()
