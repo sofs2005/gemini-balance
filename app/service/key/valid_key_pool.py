@@ -140,10 +140,13 @@ class ValidKeyPool:
             
             # 获取可能有效的密钥列表（排除已知失效的密钥）
             available_keys = []
+            total_keys = len(self.key_manager.api_keys)
             for key in self.key_manager.api_keys:
                 # 检查密钥是否被标记为失效
                 if await self.key_manager.is_key_valid(key):
                     available_keys.append(key)
+
+            logger.info(f"Key availability check: {len(available_keys)}/{total_keys} keys are valid")
 
             if not available_keys:
                 logger.warning("No valid API keys available for verification")
@@ -151,11 +154,11 @@ class ValidKeyPool:
 
             # 从有效密钥中随机选择
             random_key = random.choice(available_keys)
-            logger.debug(f"Selected key {redact_key_for_logging(random_key)} from {len(available_keys)} available keys")
+            logger.info(f"Selected key {redact_key_for_logging(random_key)} from {len(available_keys)} available keys")
             
             # 检查密钥是否已在池中
             if self._is_key_in_pool(random_key):
-                logger.debug(f"Key {redact_key_for_logging(random_key)} already in pool, skipping")
+                logger.info(f"Key {redact_key_for_logging(random_key)} already in pool, skipping")
                 return
             
             # 验证密钥
