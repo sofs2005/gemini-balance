@@ -37,9 +37,16 @@ class KeyManager:
                 # 延迟导入避免循环依赖
                 from app.service.key.valid_key_pool import ValidKeyPool
 
-                # 确保配置值为整数类型
+                # 确保配置值为整数类型（修复Pydantic警告）
                 pool_size = int(settings.VALID_KEY_POOL_SIZE)
                 ttl_hours = int(settings.KEY_TTL_HOURS)
+
+                # 同时更新settings对象确保类型一致
+                settings.VALID_KEY_POOL_SIZE = pool_size
+                settings.KEY_TTL_HOURS = ttl_hours
+                settings.POOL_MIN_THRESHOLD = int(settings.POOL_MIN_THRESHOLD)
+                settings.EMERGENCY_REFILL_COUNT = int(settings.EMERGENCY_REFILL_COUNT)
+                settings.POOL_MAINTENANCE_INTERVAL_MINUTES = int(settings.POOL_MAINTENANCE_INTERVAL_MINUTES)
 
                 self.valid_key_pool = ValidKeyPool(
                     pool_size=pool_size,
