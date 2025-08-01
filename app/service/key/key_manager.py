@@ -380,6 +380,7 @@ _preserved_old_api_keys_for_reset: Union[list, None] = None
 _preserved_vertex_old_api_keys_for_reset: Union[list, None] = None
 _preserved_next_key_in_cycle: Union[str, None] = None
 _preserved_vertex_next_key_in_cycle: Union[str, None] = None
+_preserved_valid_key_pool_keys: Union[list, None] = None  # 保存池子中的密钥
 
 
 async def get_key_manager_instance(
@@ -392,7 +393,7 @@ async def get_key_manager_instance(
     如果已创建实例，则忽略 api_keys 参数，返回现有单例。
     如果在重置后调用，会尝试恢复之前的状态（失败计数、循环位置）。
     """
-    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle
+    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle, _preserved_valid_key_pool_keys
 
     async with _singleton_lock:
         if _singleton_instance is None:
@@ -580,6 +581,21 @@ async def get_key_manager_instance(
                         "New Vertex key cycle not applicable as the new Vertex Express API key list is empty."
                     )
 
+            # 4. 恢复有效密钥池状态
+            if _preserved_valid_key_pool_keys and _singleton_instance.valid_key_pool:
+                try:
+                    # 恢复池子中的密钥
+                    for key_obj in _preserved_valid_key_pool_keys:
+                        # 检查密钥是否仍然有效且在新的密钥列表中
+                        if key_obj.key in _singleton_instance.api_keys and not key_obj.is_expired():
+                            _singleton_instance.valid_key_pool.valid_keys.append(key_obj)
+
+                    restored_count = len(_singleton_instance.valid_key_pool.valid_keys)
+                    logger.info(f"Restored {restored_count} keys to ValidKeyPool after config update")
+                except Exception as e:
+                    logger.error(f"Error restoring ValidKeyPool state: {e}")
+            _preserved_valid_key_pool_keys = None
+
             # 清理所有保存的状态
             _preserved_vertex_old_api_keys_for_reset = None
             _preserved_vertex_next_key_in_cycle = None
@@ -593,7 +609,7 @@ async def reset_key_manager_instance():
     将保存当前实例的状态（失败计数、旧 API keys、下一个 key 提示）
     以供下一次 get_key_manager_instance 调用时恢复。
     """
-    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle
+    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle, _preserved_valid_key_pool_keys
     async with _singleton_lock:
         if _singleton_instance:
             # 1. 保存失败计数
@@ -641,6 +657,17 @@ async def reset_key_manager_instance():
             except Exception as e:
                 logger.error(f"Error preserving next key hint during reset: {e}")
                 _preserved_vertex_next_key_in_cycle = None
+
+            # 5. 保存有效密钥池状态
+            try:
+                if _singleton_instance.valid_key_pool and _singleton_instance.valid_key_pool.valid_keys:
+                    _preserved_valid_key_pool_keys = list(_singleton_instance.valid_key_pool.valid_keys)
+                    logger.info(f"Preserved {len(_preserved_valid_key_pool_keys)} keys from ValidKeyPool")
+                else:
+                    _preserved_valid_key_pool_keys = None
+            except Exception as e:
+                logger.error(f"Error preserving ValidKeyPool state during reset: {e}")
+                _preserved_valid_key_pool_keys = None
 
             _singleton_instance = None
             logger.info(
