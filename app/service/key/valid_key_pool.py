@@ -337,6 +337,47 @@ class ValidKeyPool:
         except Exception as e:
             logger.error(f"Emergency async refill failed: {e}")
 
+    async def _validate_pool_keys(self) -> None:
+        """
+        验证池内现有密钥，移除失效的密钥
+        """
+        if not self.valid_keys:
+            logger.debug("Pool is empty, skipping validation")
+            return
+
+        logger.info(f"Starting pool validation for {len(self.valid_keys)} keys")
+
+        # 随机选择最多5个密钥进行验证（避免验证过多影响性能）
+        keys_to_validate = list(self.valid_keys)
+        if len(keys_to_validate) > 5:
+            import random
+            keys_to_validate = random.sample(keys_to_validate, 5)
+
+        removed_count = 0
+        for key_obj in keys_to_validate:
+            try:
+                # 检查密钥是否过期
+                if key_obj.is_expired():
+                    self.valid_keys.remove(key_obj)
+                    removed_count += 1
+                    logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
+                    continue
+
+                # 验证密钥是否仍然有效
+                is_valid = await self._verify_key(key_obj.key)
+                if not is_valid:
+                    self.valid_keys.remove(key_obj)
+                    removed_count += 1
+                    logger.info(f"Removed invalid key {redact_key_for_logging(key_obj.key)} from pool")
+
+            except Exception as e:
+                logger.warning(f"Error validating key {redact_key_for_logging(key_obj.key)}: {e}")
+
+        if removed_count > 0:
+            logger.info(f"Pool validation completed: removed {removed_count} invalid keys, pool size: {len(self.valid_keys)}")
+        else:
+            logger.debug(f"Pool validation completed: all validated keys are valid, pool size: {len(self.valid_keys)}")
+
     async def _verify_key(self, key: str) -> bool:
         """
         验证单个密钥
@@ -463,17 +504,16 @@ class ValidKeyPool:
         logger.info(f"Pool maintenance check: current_size={current_size}, min_threshold={min_threshold}, pool_size={self.pool_size}")
 
         refilled_count = 0
-        if current_size < min_threshold:
-            logger.info(f"Pool size ({current_size}) below threshold ({min_threshold}), starting batch refill")
+        # 检查是否需要补充（未达到最大容量）
+        if current_size < self.pool_size:
+            # 固定每次补充10个密钥
+            refill_target = min(10, self.pool_size - current_size)
+            logger.info(f"Pool maintenance: current {current_size}/{self.pool_size}, will add {refill_target} keys")
 
-            # 循环补充直到达到目标大小（高于最小阈值）
-            target_size = max(min_threshold, int(self.pool_size * 0.5))  # 至少25个或阈值
-            max_attempts = target_size - current_size + 5  # 允许一些失败重试
-            attempt = 0
+            refill_attempt = 0
+            max_refill_attempts = refill_target * 2  # 允许一些失败重试
 
-            logger.info(f"Maintenance target: {target_size} keys (min_threshold: {min_threshold}, current: {current_size})")
-
-            while len(self.valid_keys) < target_size and attempt < max_attempts:
+            while refilled_count < refill_target and refill_attempt < max_refill_attempts:
                 try:
                     before_size = len(self.valid_keys)
                     await self.async_verify_and_add()
@@ -481,20 +521,23 @@ class ValidKeyPool:
 
                     if after_size > before_size:
                         refilled_count += 1
-                        logger.info(f"Refilled {refilled_count} keys, current pool size: {after_size}/{min_threshold}")
+                        logger.info(f"Maintenance refilled {refilled_count}/{refill_target} keys, pool size: {after_size}/{self.pool_size}")
 
-                    attempt += 1
+                    refill_attempt += 1
                     # 短暂延迟避免过于频繁的验证
                     await asyncio.sleep(0.1)
 
                 except asyncio.CancelledError:
-                    logger.info(f"Pool maintenance cancelled during refill attempt {attempt}")
+                    logger.info(f"Pool maintenance cancelled during refill attempt {refill_attempt}")
                     break  # 停止补充但继续完成维护
                 except Exception as e:
-                    logger.warning(f"Failed to refill key attempt {attempt}: {e}")
-                    attempt += 1
+                    logger.warning(f"Failed to refill key attempt {refill_attempt}: {e}")
+                    refill_attempt += 1
         else:
-            logger.info(f"Pool size ({current_size}) meets threshold ({min_threshold}), no refill needed")
+            logger.info(f"Pool size ({current_size}) at capacity ({self.pool_size}), no refill needed")
+
+        # 定期验证池内密钥，清理失效的密钥
+        await self._validate_pool_keys()
                     # 继续尝试下一个密钥
 
         maintenance_time = time.time() - maintenance_start
