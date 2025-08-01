@@ -116,17 +116,26 @@ class ValidKeyPool:
                     # 根据当前池大小决定补充策略
                     if current_size < min_threshold:
                         # 低于阈值时，每次补充2个以加速增长
+                        logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering 2x async refill")
                         asyncio.create_task(self.async_verify_and_add())
                         asyncio.create_task(self.async_verify_and_add())
                     elif current_size < self.pool_size * 0.8:  # 低于80%容量时，偶尔补充
                         import random
                         if random.random() < 0.3:  # 30%概率补充
+                            logger.info(f"Pool size {current_size} below 80% capacity, triggering async refill (30% chance)")
                             asyncio.create_task(self.async_verify_and_add())
+                        else:
+                            logger.debug(f"Pool size {current_size}, skipping refill (70% chance)")
                     else:
                         # 接近满容量时，低概率补充
                         import random
                         if random.random() < 0.1:  # 10%概率补充
+                            logger.info(f"Pool size {current_size} near capacity, triggering async refill (10% chance)")
                             asyncio.create_task(self.async_verify_and_add())
+                        else:
+                            logger.debug(f"Pool size {current_size}, skipping refill (90% chance)")
+                else:
+                    logger.debug(f"Pool size {current_size} at capacity {self.pool_size}, no refill needed")
 
                 return key_obj.key
             else:
@@ -147,9 +156,11 @@ class ValidKeyPool:
         """
         异步验证随机密钥并添加到池中
         """
+        logger.info("Starting async_verify_and_add")
+
         # 使用锁防止重复验证
         if self.verification_lock.locked():
-            logger.debug("Verification already in progress, skipping")
+            logger.info("Verification already in progress, skipping async_verify_and_add")
             return
         
         async with self.verification_lock:
