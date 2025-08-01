@@ -370,22 +370,30 @@ class ValidKeyPool:
         if current_size < min_threshold:
             logger.info(f"Pool size ({current_size}) below threshold ({min_threshold}), starting batch refill")
 
-            # 批量补充密钥
-            refill_count = min(5, self.pool_size - current_size)
-            for i in range(refill_count):
+            # 循环补充直到达到阈值
+            max_attempts = min_threshold - current_size + 2  # 允许一些失败重试
+            attempt = 0
+
+            while len(self.valid_keys) < min_threshold and attempt < max_attempts:
                 try:
                     before_size = len(self.valid_keys)
                     await self.async_verify_and_add()
                     after_size = len(self.valid_keys)
+
                     if after_size > before_size:
                         refilled_count += 1
+                        logger.info(f"Refilled {refilled_count} keys, current pool size: {after_size}/{min_threshold}")
+
+                    attempt += 1
                     # 短暂延迟避免过于频繁的验证
                     await asyncio.sleep(0.1)
+
                 except asyncio.CancelledError:
-                    logger.info(f"Pool maintenance cancelled during refill {i+1}/{refill_count}")
+                    logger.info(f"Pool maintenance cancelled during refill attempt {attempt}")
                     break  # 停止补充但继续完成维护
                 except Exception as e:
-                    logger.warning(f"Failed to refill key {i+1}/{refill_count} during maintenance: {e}")
+                    logger.warning(f"Failed to refill key attempt {attempt}: {e}")
+                    attempt += 1
         else:
             logger.info(f"Pool size ({current_size}) meets threshold ({min_threshold}), no refill needed")
                     # 继续尝试下一个密钥
