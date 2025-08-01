@@ -121,11 +121,19 @@ class ValidKeyPool:
                         asyncio.create_task(self.async_verify_and_add())
                     elif current_size < self.pool_size * 0.8:  # 低于80%容量时，偶尔补充
                         import random
-                        if random.random() < 0.3:  # 30%概率补充
-                            logger.info(f"Pool size {current_size} below 80% capacity, triggering async refill (30% chance)")
+                        # 根据池大小动态调整补充概率
+                        if current_size < min_threshold * 1.5:  # 低于15个时，80%概率补充
+                            refill_chance = 0.8
+                        elif current_size < min_threshold * 2:  # 低于20个时，60%概率补充
+                            refill_chance = 0.6
+                        else:  # 20-40个时，30%概率补充
+                            refill_chance = 0.3
+
+                        if random.random() < refill_chance:
+                            logger.info(f"Pool size {current_size} below 80% capacity, triggering async refill ({refill_chance*100:.0f}% chance)")
                             asyncio.create_task(self.async_verify_and_add())
                         else:
-                            logger.debug(f"Pool size {current_size}, skipping refill (70% chance)")
+                            logger.debug(f"Pool size {current_size}, skipping refill ({(1-refill_chance)*100:.0f}% chance)")
                     else:
                         # 接近满容量时，低概率补充
                         import random
