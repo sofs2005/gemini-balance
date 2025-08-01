@@ -103,6 +103,9 @@ async function checkTokens() {
         // 显示复制按钮
         if (validTokens.length > 0) {
             validButtons.style.display = 'block';
+            console.log('Showing copy buttons for', validTokens.length, 'valid tokens');
+        } else {
+            validButtons.style.display = 'none';
         }
 
         // 显示结果统计
@@ -154,34 +157,48 @@ async function checkToken(token, apiBaseUrl, testModel) {
 function copyTokens(type) {
     const resultsDiv = document.getElementById('validResults');
     const textToCopy = resultsDiv.textContent.trim();
-    
+
     if (!textToCopy) {
         showAlert('没有可复制的有效密钥', 'warning');
         return;
     }
 
-    navigator.clipboard.writeText(textToCopy).then(() => {
-        showAlert('有效密钥已复制到剪贴板 (换行分隔)', 'success');
-    }).catch(err => {
-        showAlert('复制失败: ' + err.message, 'danger');
-    });
+    // 尝试使用现代 Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showAlert('有效密钥已复制到剪贴板 (换行分隔)', 'success');
+        }).catch(err => {
+            console.error('Clipboard API failed:', err);
+            fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (换行分隔)');
+        });
+    } else {
+        // 降级到传统方法
+        fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (换行分隔)');
+    }
 }
 
 function copyTokensWithComma(type) {
     const resultsDiv = document.getElementById('validResults');
     const tokens = resultsDiv.textContent.trim().split('\n').filter(t => t.trim());
     const textToCopy = tokens.join(',');
-    
+
     if (!textToCopy) {
         showAlert('没有可复制的有效密钥', 'warning');
         return;
     }
-    
-    navigator.clipboard.writeText(textToCopy).then(() => {
-        showAlert('有效密钥已复制到剪贴板 (逗号分隔)', 'success');
-    }).catch(err => {
-        showAlert('复制失败: ' + err.message, 'danger');
-    });
+
+    // 尝试使用现代 Clipboard API
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showAlert('有效密钥已复制到剪贴板 (逗号分隔)', 'success');
+        }).catch(err => {
+            console.error('Clipboard API failed:', err);
+            fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (逗号分隔)');
+        });
+    } else {
+        // 降级到传统方法
+        fallbackCopyTextToClipboard(textToCopy, '有效密钥已复制到剪贴板 (逗号分隔)');
+    }
 }
 
 function showAlert(message, type) {
@@ -210,6 +227,36 @@ function showAlert(message, type) {
             alertDiv.remove();
         }
     }, 3000);
+}
+
+function fallbackCopyTextToClipboard(text, successMessage) {
+    // 创建临时文本区域
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+
+    // 避免滚动到底部
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+    textArea.style.opacity = "0";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showAlert(successMessage, 'success');
+        } else {
+            showAlert('复制失败，请手动复制', 'danger');
+        }
+    } catch (err) {
+        console.error('Fallback copy failed:', err);
+        showAlert('复制失败，请手动复制', 'danger');
+    }
+
+    document.body.removeChild(textArea);
 }
 
 function escapeHtml(text) {
