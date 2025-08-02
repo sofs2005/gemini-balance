@@ -320,38 +320,38 @@ class ValidKeyPool:
 
                 logger.info(f"Starting emergency async refill: need {needed} keys to reach threshold {min_threshold}")
 
-            # 并发验证多个密钥
-            refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), needed)
+                # 并发验证多个密钥
+                refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), needed)
 
-            # 获取可能有效的密钥列表
-            available_keys = []
-            for key in self.key_manager.api_keys:
-                if await self.key_manager.is_key_valid(key):
-                    available_keys.append(key)
+                # 获取可能有效的密钥列表
+                available_keys = []
+                for key in self.key_manager.api_keys:
+                    if await self.key_manager.is_key_valid(key):
+                        available_keys.append(key)
 
-            if not available_keys:
-                logger.warning("No valid API keys available for emergency async refill")
-                return
+                if not available_keys:
+                    logger.warning("No valid API keys available for emergency async refill")
+                    return
 
-            selected_keys = random.sample(available_keys, min(refill_count, len(available_keys)))
-            logger.info(f"Emergency async refill: selected {len(selected_keys)} keys for verification")
+                selected_keys = random.sample(available_keys, min(refill_count, len(available_keys)))
+                logger.info(f"Emergency async refill: selected {len(selected_keys)} keys for verification")
 
-            # 并发验证
-            tasks = [self._verify_key_for_emergency(key) for key in selected_keys]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+                # 并发验证
+                tasks = [self._verify_key_for_emergency(key) for key in selected_keys]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # 处理结果
-            success_count = 0
-            for result in results:
-                if isinstance(result, str):  # 验证成功返回密钥
-                    # 检查池大小限制
-                    if len(self.valid_keys) >= self.pool_size:
-                        logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency async refill")
-                        break
+                # 处理结果
+                success_count = 0
+                for result in results:
+                    if isinstance(result, str):  # 验证成功返回密钥
+                        # 检查池大小限制
+                        if len(self.valid_keys) >= self.pool_size:
+                            logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency async refill")
+                            break
 
-                    key_obj = ValidKeyWithTTL(result, self.ttl_hours)
-                    self.valid_keys.append(key_obj)
-                    success_count += 1
+                        key_obj = ValidKeyWithTTL(result, self.ttl_hours)
+                        self.valid_keys.append(key_obj)
+                        success_count += 1
 
                 logger.info(f"Emergency async refill completed: added {success_count} keys, pool size now: {len(self.valid_keys)}")
 
