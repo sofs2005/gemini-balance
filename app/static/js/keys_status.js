@@ -367,9 +367,30 @@ function resetAllKeysFailCount(type, event) {
 
 // 关闭模态框并根据参数决定是否刷新页面
 function closeResultModal(reload = true) {
+  console.log("🔄 closeResultModal called, reload =", reload);
   document.getElementById("resultModal").classList.add("hidden");
   if (reload) {
-    location.reload(); // 操作完成后刷新页面
+    console.log("🔄 Reloading page...");
+    try {
+      // 现代浏览器的强制刷新方法
+      if ('serviceWorker' in navigator) {
+        // 如果有Service Worker，先清除缓存
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+          }
+        });
+      }
+
+      // 添加时间戳强制绕过缓存
+      const url = new URL(window.location);
+      url.searchParams.set('_t', Date.now());
+      window.location.href = url.toString();
+    } catch (error) {
+      console.error("❌ Advanced reload failed:", error);
+      // 最简单的备用方案
+      window.location.reload();
+    }
   }
 }
 
