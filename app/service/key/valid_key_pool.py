@@ -210,7 +210,12 @@ class ValidKeyPool:
             # 验证密钥
             verification_start = time.time()
             if await self._verify_key(random_key):
-                # 验证成功，添加到池中
+                # 验证成功后，再次检查池大小（防止竞态条件）
+                if len(self.valid_keys) >= self.pool_size:
+                    logger.warning(f"Pool size limit reached ({self.pool_size}) after verification, skipping add for key {redact_key_for_logging(random_key)}")
+                    return
+
+                # 添加到池中
                 verification_time = time.time() - verification_start
                 self._update_avg_verification_time(verification_time)
 
