@@ -456,7 +456,7 @@ class ValidKeyPool:
     
     async def _verify_key_for_emergency(self, key: str) -> Optional[str]:
         """
-        紧急恢复模式的密钥验证
+        紧急恢复模式的密钥验证（简化版，避免递归调用）
 
         Args:
             key: 要验证的密钥
@@ -464,9 +464,39 @@ class ValidKeyPool:
         Returns:
             Optional[str]: 验证成功返回密钥，失败返回None
         """
-        if await self._verify_key(key):
+        try:
+            if not self.chat_service:
+                logger.warning("Chat service not available for emergency key verification")
+                return None
+
+            # 构造测试请求
+            gemini_request = GeminiRequest(
+                contents=[
+                    GeminiContent(
+                        role="user",
+                        parts=[{"text": "hi"}],
+                    )
+                ]
+            )
+
+            # 发送验证请求（不调用错误处理器，避免递归）
+            await self.chat_service.generate_content(
+                settings.TEST_MODEL, gemini_request, key
+            )
+
+            # 验证成功，重置失败计数
+            await self.key_manager.reset_key_failure_count(key)
+            logger.debug(f"Emergency key verification successful for {redact_key_for_logging(key)}")
             return key
-        return None
+
+        except asyncio.CancelledError:
+            # 任务被取消
+            logger.debug(f"Emergency key verification cancelled for {redact_key_for_logging(key)}")
+            raise
+        except Exception as e:
+            # 简化错误处理，不调用错误处理器，避免递归
+            logger.debug(f"Emergency key verification failed for {redact_key_for_logging(key)}: {str(e)}")
+            return None
 
     def _remove_expired_keys(self) -> int:
         """
