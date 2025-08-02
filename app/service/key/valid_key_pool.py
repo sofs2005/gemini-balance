@@ -245,64 +245,63 @@ class ValidKeyPool:
         self.stats["emergency_refill_count"] += 1
         logger.warning("Starting emergency refill process")
 
-        # 使用验证锁防止与其他验证任务冲突
-        async with self.verification_lock:
-            # 获取可能有效的密钥列表
-            available_keys = []
-            for key in self.key_manager.api_keys:
-                if await self.key_manager.is_key_valid(key):
-                    available_keys.append(key)
+        # 紧急补充不使用锁，确保最高优先级
+        # 获取可能有效的密钥列表
+        available_keys = []
+        for key in self.key_manager.api_keys:
+            if await self.key_manager.is_key_valid(key):
+                available_keys.append(key)
 
-            if not available_keys:
-                logger.error("No valid API keys available for emergency refill")
-                # Fallback到原有逻辑
-                return await self.key_manager.get_next_working_key(model_name)
+        if not available_keys:
+            logger.error("No valid API keys available for emergency refill")
+            # Fallback到原有逻辑
+            return await self.key_manager.get_next_working_key(model_name)
 
-            # 并发验证多个密钥（从有效密钥中选择）
-            refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(available_keys))
-            selected_keys = random.sample(available_keys, refill_count)
-            logger.info(f"Emergency refill: selected {refill_count} keys from {len(available_keys)} available keys")
+        # 并发验证多个密钥（从有效密钥中选择）
+        refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(available_keys))
+        selected_keys = random.sample(available_keys, refill_count)
+        logger.info(f"Emergency refill: selected {refill_count} keys from {len(available_keys)} available keys")
 
-            # 创建验证任务
-            verification_tasks = [
-                self._verify_key_for_emergency(key) for key in selected_keys
-            ]
+        # 创建验证任务
+        verification_tasks = [
+            self._verify_key_for_emergency(key) for key in selected_keys
+        ]
 
-            # 等待验证结果
-            results = await asyncio.gather(*verification_tasks, return_exceptions=True)
+        # 等待验证结果
+        results = await asyncio.gather(*verification_tasks, return_exceptions=True)
 
-            # 处理验证结果
-            first_valid_key = None
-            for i, result in enumerate(results):
-                if isinstance(result, str):  # 验证成功返回密钥
-                    # 检查池大小限制
-                    if len(self.valid_keys) >= self.pool_size:
-                        logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency refill")
-                        if first_valid_key is None:
-                            first_valid_key = result  # 至少记录一个有效密钥用于返回
-                        break
-
-                    key_obj = ValidKeyWithTTL(result, self.ttl_hours)
-                    self.valid_keys.append(key_obj)
-
+        # 处理验证结果
+        first_valid_key = None
+        for i, result in enumerate(results):
+            if isinstance(result, str):  # 验证成功返回密钥
+                # 检查池大小限制
+                if len(self.valid_keys) >= self.pool_size:
+                    logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency refill")
                     if first_valid_key is None:
-                        first_valid_key = result
+                        first_valid_key = result  # 至少记录一个有效密钥用于返回
+                    break
 
-                    logger.info(f"Emergency refill: added key {redact_key_for_logging(result)} to pool")
+                key_obj = ValidKeyWithTTL(result, self.ttl_hours)
+                self.valid_keys.append(key_obj)
 
-            if first_valid_key:
-                refill_time = time.time() - refill_start
-                success_count = sum(1 for result in results if isinstance(result, str))
-                logger.info(f"Emergency refill successful in {refill_time:.3f}s, "
-                           f"verified {success_count}/{len(results)} keys, "
-                           f"returning {redact_key_for_logging(first_valid_key)}")
-                return first_valid_key
-            else:
-                self.stats["fallback_count"] += 1
-                logger.error(f"Emergency refill failed, no valid keys found from {len(selected_keys)} attempts, "
-                            f"falling back to original key manager")
-                # Fallback到原有逻辑
-                return await self.key_manager.get_next_working_key(model_name)
+                if first_valid_key is None:
+                    first_valid_key = result
+
+                logger.info(f"Emergency refill: added key {redact_key_for_logging(result)} to pool")
+
+        if first_valid_key:
+            refill_time = time.time() - refill_start
+            success_count = sum(1 for result in results if isinstance(result, str))
+            logger.info(f"Emergency refill successful in {refill_time:.3f}s, "
+                       f"verified {success_count}/{len(results)} keys, "
+                       f"returning {redact_key_for_logging(first_valid_key)}")
+            return first_valid_key
+        else:
+            self.stats["fallback_count"] += 1
+            logger.error(f"Emergency refill failed, no valid keys found from {len(selected_keys)} attempts, "
+                        f"falling back to original key manager")
+            # Fallback到原有逻辑
+            return await self.key_manager.get_next_working_key(model_name)
 
     async def emergency_refill_async(self) -> None:
         """
