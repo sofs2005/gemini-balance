@@ -112,11 +112,52 @@ class ConfigService:
                 logger.error(f"Failed to bulk update/insert settings: {str(e)}")
                 raise
 
-        # 重置并重新初始化 KeyManager
+        # 检查是否需要重置KeyManager
         try:
-            await reset_key_manager_instance()
-            await get_key_manager_instance(settings.API_KEYS, settings.VERTEX_API_KEYS)
-            logger.info("KeyManager instance re-initialized with updated settings.")
+            # 获取当前KeyManager实例
+            current_key_manager = await get_key_manager_instance(settings.API_KEYS, settings.VERTEX_API_KEYS)
+
+            # 检查ValidKeyPool相关配置是否变化
+            need_reset_pool = False
+            if current_key_manager and current_key_manager.valid_key_pool:
+                current_pool_size = current_key_manager.valid_key_pool.pool_size
+                current_ttl_hours = current_key_manager.valid_key_pool.ttl_hours
+                new_pool_size = int(settings.VALID_KEY_POOL_SIZE)
+                new_ttl_hours = int(settings.KEY_TTL_HOURS)
+
+                if current_pool_size != new_pool_size or current_ttl_hours != new_ttl_hours:
+                    need_reset_pool = True
+                    logger.info(f"ValidKeyPool config changed: pool_size {current_pool_size}→{new_pool_size}, ttl_hours {current_ttl_hours}→{new_ttl_hours}")
+
+            # 只在必要时重置KeyManager
+            if need_reset_pool:
+                await reset_key_manager_instance()
+                key_manager = await get_key_manager_instance(settings.API_KEYS, settings.VERTEX_API_KEYS)
+                logger.info("KeyManager instance re-initialized due to ValidKeyPool config changes.")
+            else:
+                key_manager = current_key_manager
+                logger.info("KeyManager instance preserved - no ValidKeyPool config changes detected.")
+
+            # 重新设置聊天服务并启动预加载
+            if key_manager and key_manager.valid_key_pool:
+                from app.service.chat.gemini_chat_service import GeminiChatService
+                chat_service = GeminiChatService(settings.BASE_URL, key_manager)
+                key_manager.set_chat_service(chat_service)
+                logger.info("Chat service re-set for ValidKeyPool after config update")
+
+                # 启动后台预加载任务
+                import asyncio
+                async def background_preload():
+                    try:
+                        await asyncio.sleep(2)  # 短暂延迟确保初始化完成
+                        loaded_count = await key_manager.preload_valid_key_pool()
+                        logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys after config update")
+                    except Exception as e:
+                        logger.warning(f"Failed to background preload ValidKeyPool after config update: {e}")
+
+                asyncio.create_task(background_preload())
+                logger.info("ValidKeyPool background preload task restarted after config update")
+
         except Exception as e:
             logger.error(f"Failed to re-initialize KeyManager: {str(e)}")
 
