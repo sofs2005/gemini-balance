@@ -16,14 +16,6 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // 对于API请求和页面请求，不使用缓存，直接从网络获取
-  if (event.request.url.includes('/api/') ||
-      event.request.url.includes('/keys') ||
-      event.request.method !== 'GET') {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
   event.respondWith(
     caches.open(CACHE_NAME).then(cache => {
       // 1. 尝试从缓存获取
