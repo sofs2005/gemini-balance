@@ -268,12 +268,19 @@ class ValidKeyPool:
         first_valid_key = None
         for i, result in enumerate(results):
             if isinstance(result, str):  # 验证成功返回密钥
+                # 检查池大小限制
+                if len(self.valid_keys) >= self.pool_size:
+                    logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency refill")
+                    if first_valid_key is None:
+                        first_valid_key = result  # 至少记录一个有效密钥用于返回
+                    break
+
                 key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                 self.valid_keys.append(key_obj)
-                
+
                 if first_valid_key is None:
                     first_valid_key = result
-                
+
                 logger.info(f"Emergency refill: added key {redact_key_for_logging(result)} to pool")
         
         if first_valid_key:
@@ -328,6 +335,11 @@ class ValidKeyPool:
             success_count = 0
             for result in results:
                 if isinstance(result, str):  # 验证成功返回密钥
+                    # 检查池大小限制
+                    if len(self.valid_keys) >= self.pool_size:
+                        logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency async refill")
+                        break
+
                     key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                     self.valid_keys.append(key_obj)
                     success_count += 1
@@ -684,6 +696,11 @@ class ValidKeyPool:
             batch_loaded = 0
             for result in results:
                 if isinstance(result, str):  # 验证成功
+                    # 检查池大小限制
+                    if len(self.valid_keys) >= self.pool_size:
+                        logger.warning(f"Pool size limit reached ({self.pool_size}), stopping preload")
+                        break
+
                     key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                     self.valid_keys.append(key_obj)
                     batch_loaded += 1
