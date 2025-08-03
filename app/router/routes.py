@@ -2,6 +2,7 @@
 路由配置模块，负责设置和配置应用程序的路由
 """
 
+import time
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -110,6 +111,7 @@ def setup_page_routes(app: FastAPI) -> None:
                     "valid_key_count": valid_key_count,
                     "invalid_key_count": invalid_key_count,
                     "api_stats": api_stats,
+                    "timestamp": int(time.time()),
                 },
             )
         except Exception as e:
@@ -131,6 +133,7 @@ def setup_page_routes(app: FastAPI) -> None:
                         "calls_24h": {"total": 0, "success": 0, "failure": 0},
                         "calls_month": {"total": 0, "success": 0, "failure": 0},
                     },
+                    "timestamp": int(time.time()),
                 },
             )
             

@@ -1103,7 +1103,7 @@ endblock %} {% block head_extra_styles %}
 </style>
 {% endblock %} {% block head_extra_scripts %}
 <!-- keys_status.js needs to be loaded in head because it might be used by inline scripts -->
-<script src="/static/js/keys_status.js?v={{ now() }}"></script>
+<script src="/static/js/keys_status.js?v={{ timestamp }}"></script>
 {% endblock %} {% block content %}
 <div class="container max-w-6xl mx-auto px-4">
   <!-- Increased max-width -->
