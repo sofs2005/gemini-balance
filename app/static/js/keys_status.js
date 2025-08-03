@@ -224,55 +224,33 @@ function copyKey(key) {
 // showCopyStatus 函数已废弃。
 
 async function verifyKey(key, button) {
+  button.disabled = true;
+  const originalHtml = button.innerHTML;
+  button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
+
   try {
-    // 禁用按钮并显示加载状态
-    button.disabled = true;
-    const originalHtml = button.innerHTML;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
+    const data = await fetchAPI(`/gemini/v1beta/verify-key/${key}`, {
+      method: "POST",
+    });
 
-    try {
-      const data = await fetchAPI(`/gemini/v1beta/verify-key/${key}`, {
-        method: "POST",
-      });
-
-      // 根据验证结果更新UI并显示模态提示框
-      if (data && (data.success || data.status === "valid")) {
-        // 验证成功，显示成功结果
-        button.style.backgroundColor = "#27ae60";
-        // 使用结果模态框显示成功消息
-        showResultModal(true, "密钥验证成功");
-        // 模态框关闭时会自动刷新页面
-      } else {
-        // 验证失败，显示失败结果
-        const errorMsg = data.error || "密钥无效";
-        button.style.backgroundColor = "#e74c3c";
-        // 使用结果模态框显示失败消息，改为true以在关闭时刷新
-        showResultModal(false, "密钥验证失败: " + errorMsg, true);
-      }
-    } catch (apiError) {
-      console.error("密钥验证 API 请求失败:", apiError);
-      showResultModal(false, `验证请求失败: ${apiError.message}`, true);
-    } finally {
-      // 1秒后恢复按钮原始状态 (如果页面不刷新)
-      // 由于现在成功和失败都会刷新，这部分逻辑可以简化或移除
-      // 但为了防止未来修改刷新逻辑，暂时保留，但可能不会执行
-      setTimeout(() => {
-        if (
-          !document.getElementById("resultModal") ||
-          document.getElementById("resultModal").classList.contains("hidden")
-        ) {
-          button.innerHTML = originalHtml;
-          button.disabled = false;
-          button.style.backgroundColor = "";
-        }
-      }, 1000);
+    if (data && (data.success || data.status === "valid")) {
+      showNotification("密钥验证成功", "success");
+    } else {
+      const errorMsg = data.error || "密钥无效";
+      showNotification(`密钥验证失败: ${errorMsg}`, "error");
     }
-  } catch (error) {
-    console.error("验证失败:", error);
-    // 确保在捕获到错误时恢复按钮状态 (如果页面不刷新)
-    // button.disabled = false; // 由 finally 处理或因刷新而无需处理
-    // button.innerHTML = '<i class="fas fa-check-circle"></i> 验证';
-    showResultModal(false, "验证处理失败: " + error.message, true); // 改为true以在关闭时刷新
+  } catch (apiError) {
+    console.error("密钥验证 API 请求失败:", apiError);
+    showNotification(`验证请求失败: ${apiError.message}`, "error");
+  } finally {
+    // 恢复按钮
+    button.innerHTML = originalHtml;
+    button.disabled = false;
+    
+    // 刷新两个密钥列表以反映潜在的状态变化（例如，从无效到有效）
+    showNotification("正在刷新列表...", "info", 2000);
+    fetchAndDisplayKeys('valid');
+    fetchAndDisplayKeys('invalid');
   }
 }
 
@@ -289,11 +267,25 @@ async function resetKeyFailCount(key, button) {
 
     // 根据重置结果更新UI
     if (data.success) {
-      showNotification("失败计数重置成功");
-      // 成功时保留绿色背景一会儿
+      showNotification("失败计数重置成功", "success");
       button.style.backgroundColor = "#27ae60";
-      // 稍后刷新页面
-      setTimeout(() => location.reload(), 1000);
+
+      // 更新UI中的失败计数
+      const listItem = button.closest('li[data-key]');
+      if (listItem) {
+        const failCountSpan = listItem.querySelector('.bg-amber-50');
+        if (failCountSpan) {
+          failCountSpan.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> 失败: 0';
+        }
+        listItem.dataset.failCount = "0";
+      }
+
+      // 1秒后恢复按钮
+      setTimeout(() => {
+        button.innerHTML = originalHtml;
+        button.disabled = false;
+        button.style.backgroundColor = "";
+      }, 1000);
     } else {
       const errorMsg = data.message || "重置失败";
       showNotification("重置失败: " + errorMsg, "error");
@@ -672,7 +664,13 @@ function showVerificationResultModal(data) {
   }
 
   // 设置确认按钮点击事件 - 总是自动刷新
-  confirmButton.onclick = () => closeResultModal(true); // Always reload
+  confirmButton.onclick = () => {
+    closeResultModal(false); // 关闭模态框，不刷新页面
+    // 软刷新两个列表以显示最新状态
+    showNotification("正在刷新列表...", "info", 2000);
+    fetchAndDisplayKeys('valid');
+    fetchAndDisplayKeys('invalid');
+  };
 
   // 显示模态框
   modalElement.classList.remove("hidden");
@@ -690,6 +688,7 @@ async function executeResetAll(type) {
 
   let successCount = 0;
   let failCount = 0;
+  const successfulKeys = [];
 
   for (let i = 0; i < keysToReset.length; i++) {
     const key = keysToReset[i];
@@ -704,6 +703,7 @@ async function executeResetAll(type) {
       });
       if (data.success) {
         successCount++;
+        successfulKeys.push(key); // 记录成功重置的密钥
         addProgressLog(`✅ ${keyDisplay}: 重置成功`);
       } else {
         failCount++;
@@ -718,11 +718,25 @@ async function executeResetAll(type) {
     }
   }
 
+  // 循环结束后，批量更新UI
+  successfulKeys.forEach(key => {
+    const listItem = document.querySelector(`#${type}Keys li[data-key="${key}"]`);
+    if (listItem) {
+      const failCountSpan = listItem.querySelector('.bg-amber-50');
+      if (failCountSpan) {
+        failCountSpan.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> 失败: 0';
+      }
+      listItem.dataset.failCount = "0";
+    }
+  });
+
   updateProgress(
     keysToReset.length,
     keysToReset.length,
     `重置完成！成功: ${successCount}, 失败: ${failCount}`
   );
+  
+  // 进度模态框的关闭按钮默认不会刷新页面，所以这里的UI更新会保留
 }
 
 function scrollToTop() {
