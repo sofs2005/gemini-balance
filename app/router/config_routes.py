@@ -64,8 +64,8 @@ class DeleteKeysRequest(BaseModel):
 
 @router.delete("/keys/{key_to_delete}", response_model=Dict[str, Any])
 async def delete_single_key(
-    key_to_delete: str,
     request: Request,
+    key_to_delete: str,
     key_manager: KeyManager = Depends(get_key_manager_instance),
 ):
     auth_token = request.cookies.get("auth_token")
@@ -95,8 +95,8 @@ async def delete_single_key(
 
 @router.post("/keys/delete-selected", response_model=Dict[str, Any])
 async def delete_selected_keys_route(
-    delete_request: DeleteKeysRequest,
     request: Request,
+    delete_request: DeleteKeysRequest,
     key_manager: KeyManager = Depends(get_key_manager_instance),
 ):
     auth_token = request.cookies.get("auth_token")
