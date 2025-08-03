@@ -1353,7 +1353,7 @@ endblock %} {% block head_extra_styles %}
           <i class="fas fa-chevron-down toggle-icon text-primary-600"></i>
           <i class="fas fa-check-circle text-success-500"></i>
           <h2 class="text-lg font-semibold whitespace-nowrap">
-            有效密钥列表 ({{ valid_key_count }})
+            有效密钥列表 (<span id="validKeyCount">{{ valid_key_count }}</span>)
           </h2>
         </div>
         <!-- Middle: Filters and Search (Allow wrapping) -->
@@ -1512,7 +1512,7 @@ endblock %} {% block head_extra_styles %}
           <i class="fas fa-chevron-down toggle-icon text-primary-600"></i>
           <i class="fas fa-times-circle text-danger-500"></i>
           <h2 class="text-lg font-semibold whitespace-nowrap">
-            无效密钥列表 ({{ invalid_key_count }})
+            无效密钥列表 (<span id="invalidKeyCount">{{ invalid_key_count }}</span>)
           </h2>
         </div>
         <!-- Middle: Filters and Search (Allow wrapping) -->

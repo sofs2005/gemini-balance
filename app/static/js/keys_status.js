@@ -153,22 +153,15 @@ function updateBatchActions(type) {
 
 // 更新卡片头部的密钥计数
 function updateCardHeaderCount(type, delta) {
-  const listElement = document.getElementById(`${type}Keys`);
-  if (!listElement) return;
+  // 直接通过ID定位到计数的<span>元素，例如 'validKeyCount' 或 'invalidKeyCount'
+  const countElementId = `${type}KeyCount`;
+  const countElement = document.getElementById(countElementId);
 
-  const card = listElement.closest('.stats-card');
-  if (!card) return;
-  
-  const headerElement = card.querySelector('.stats-card-header h3'); // Assuming h3
-  if (headerElement) {
-    const currentText = headerElement.textContent;
-    const match = currentText.match(/\((\d+)\)/);
-    if (match && match[1]) {
-      const currentCount = parseInt(match[1], 10);
-      if (!isNaN(currentCount)) {
-        const newCount = Math.max(0, currentCount + delta); // 确保计数不为负
-        headerElement.textContent = currentText.replace(`(${currentCount})`, `(${newCount})`);
-      }
+  if (countElement) {
+    const currentCount = parseInt(countElement.textContent, 10);
+    if (!isNaN(currentCount)) {
+      const newCount = Math.max(0, currentCount + delta); // 确保计数不为负
+      countElement.textContent = newCount;
     }
   }
 }
