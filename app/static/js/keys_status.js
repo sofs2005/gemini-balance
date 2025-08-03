@@ -271,7 +271,6 @@ async function verifyKey(key, button) {
 
     const scrollY = window.scrollY;
     // 刷新两个密钥列表以反映潜在的状态变化
-    showNotification("正在刷新列表状态...", "info", 1500);
     await Promise.all([
         fetchAndDisplayKeys('valid'),
         fetchAndDisplayKeys('invalid')
