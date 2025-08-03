@@ -1555,8 +1555,21 @@ async function executeSingleKeyDelete(key, button) {
     });
 
     if (response.success) {
-      // 使用 resultModal 并确保刷新
-      showResultModal(true, response.message || "密钥删除成功", true);
+      // 删除成功后，直接从DOM中移除该行，并显示一个短暂的通知
+      const listItem = button.closest("li[data-key]");
+      if (listItem) {
+        listItem.style.transition = "opacity 0.5s, transform 0.5s";
+        listItem.style.opacity = "0";
+        listItem.style.transform = "translateX(-100%)";
+        setTimeout(() => {
+          listItem.remove();
+          // 因为我们不再刷新页面，需要手动更新批量操作的状态
+          const keyType = listItem.querySelector('.key-checkbox').dataset.keyType;
+          updateBatchActions(keyType);
+        }, 500); // 等待动画完成
+      }
+      showNotification(response.message || "密钥删除成功", "success");
+      // 不再调用会刷新的 showResultModal
     } else {
       // 使用 resultModal，失败时不刷新，以便用户看到错误信息
       showResultModal(false, response.message || "密钥删除失败", false);
@@ -1638,11 +1651,29 @@ async function executeDeleteSelectedKeys(type) {
     });
 
     if (response.success) {
-      // 使用 resultModal 显示更详细的结果
-      const message =
-        response.message ||
-        `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
-      showResultModal(true, message, true); // true 表示成功，message，true 表示关闭后刷新
+      // 批量删除成功后，从DOM中移除对应的行
+      const keyType = document.getElementById(`${type}BatchActions`).closest('.stats-card').querySelector('.key-content ul').id.includes('valid') ? 'valid' : 'invalid';
+      selectedKeys.forEach(key => {
+        const listItem = document.querySelector(`#${type}Keys li[data-key="${key}"]`);
+        if (listItem) {
+          listItem.style.transition = "opacity 0.3s, transform 0.3s";
+          listItem.style.opacity = "0";
+          listItem.style.transform = "scale(0.9)";
+           setTimeout(() => {
+              listItem.remove();
+           }, 300);
+        }
+      });
+      
+      const message = response.message || `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
+      showNotification(message, "success");
+      
+      // 短暂延迟后更新批量操作UI，确保移除动画有机会开始
+      setTimeout(() => {
+          updateBatchActions(type);
+      }, 350);
+      
+      // 不再调用会刷新的 showResultModal
     } else {
       showResultModal(false, response.message || "批量删除密钥失败", false); // false 表示失败，message，false 表示关闭后不刷新
     }
