@@ -378,6 +378,52 @@ class KeyManager:
         logger.warning("API key list is empty, cannot get random valid key.")
         return ""
 
+    async def remove_key(self, key_to_remove: str):
+        """
+        从 KeyManager 中安全地移除一个密钥。
+        """
+        # 使用 key_cycle_lock 来确保对密钥列表和循环的修改是线程安全的
+        async with self.key_cycle_lock:
+            if key_to_remove not in self.api_keys:
+                logger.warning(f"Attempted to remove a non-existent key: {redact_key_for_logging(key_to_remove)}")
+                return False
+
+            # 1. 从主列表中移除
+            self.api_keys.remove(key_to_remove)
+            logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from api_keys list.")
+
+            # 2. 从失败计数中移除
+            async with self.failure_count_lock:
+                if key_to_remove in self.key_failure_counts:
+                    del self.key_failure_counts[key_to_remove]
+                    logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from failure counts.")
+
+            # 3. 从模型状态中移除
+            if key_to_remove in self.key_model_status:
+                del self.key_model_status[key_to_remove]
+                logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from model status.")
+
+            # 4. 从有效密钥池中移除
+            if self.valid_key_pool and self.valid_key_pool.valid_keys:
+                initial_pool_size = len(self.valid_key_pool.valid_keys)
+                self.valid_key_pool.valid_keys = [
+                    key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
+                ]
+                removed_count = initial_pool_size - len(self.valid_key_pool.valid_keys)
+                if removed_count > 0:
+                    logger.debug(f"Removed {removed_count} instance(s) of '{redact_key_for_logging(key_to_remove)}' from ValidKeyPool.")
+
+            # 5. 重建密钥循环
+            if not self.api_keys:
+                self.key_cycle = cycle([])
+                logger.warning("All API keys have been removed from KeyManager, key cycle is now empty.")
+            else:
+                self.key_cycle = cycle(self.api_keys)
+                logger.debug("Rebuilt key cycle after key removal.")
+
+            logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' has been successfully removed from KeyManager.")
+            return True
+
 
 _singleton_instance = None
 _singleton_lock = asyncio.Lock()
