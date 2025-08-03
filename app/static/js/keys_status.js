@@ -252,11 +252,11 @@ async function verifyKey(key, button) {
       showNotification("密钥验证成功", "success");
     } else {
       const errorMsg = data.error || "密钥无效";
-      showNotification(`密钥验证失败: ${errorMsg}`, "error");
+      showNotification(`密钥验证失败: ${errorMsg}`, "error", 7000);
     }
   } catch (apiError) {
     console.error("密钥验证 API 请求失败:", apiError);
-    showNotification(`验证请求失败: ${apiError.message}`, "error");
+    showNotification(`验证请求失败: ${apiError.message}`, "error", 7000);
   } finally {
     // 恢复按钮
     button.innerHTML = originalHtml;
