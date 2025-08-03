@@ -248,7 +248,7 @@ async function verifyKey(key, button) {
     button.disabled = false;
     
     // 刷新两个密钥列表以反映潜在的状态变化（例如，从无效到有效）
-    showNotification("正在刷新列表...", "info", 2000);
+    // 刷新列表前不再显示通用提示，因为具体的成功/失败提示已经给出
     fetchAndDisplayKeys('valid');
     fetchAndDisplayKeys('invalid');
   }
