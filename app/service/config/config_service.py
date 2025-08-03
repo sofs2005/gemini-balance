@@ -116,8 +116,11 @@ class ConfigService:
         try:
             # 获取当前KeyManager实例
             current_key_manager = await get_key_manager_instance(settings.API_KEYS, settings.VERTEX_API_KEYS)
+            
+            # 检查密钥列表或ValidKeyPool相关配置是否变化
+            keys_changed = set(current_key_manager.api_keys) != set(settings.API_KEYS) or \
+                           set(current_key_manager.vertex_api_keys) != set(settings.VERTEX_API_KEYS)
 
-            # 检查ValidKeyPool相关配置是否变化
             need_reset_pool = False
             if current_key_manager and current_key_manager.valid_key_pool:
                 current_pool_size = current_key_manager.valid_key_pool.pool_size
@@ -129,8 +132,10 @@ class ConfigService:
                     need_reset_pool = True
                     logger.info(f"ValidKeyPool config changed: pool_size {current_pool_size}→{new_pool_size}, ttl_hours {current_ttl_hours}→{new_ttl_hours}")
 
-            # 只在必要时重置KeyManager
-            if need_reset_pool:
+            # 如果密钥列表或池配置发生变化，则重置KeyManager
+            if keys_changed or need_reset_pool:
+                if keys_changed:
+                    logger.info("API keys have changed, re-initializing KeyManager instance.")
                 await reset_key_manager_instance()
                 key_manager = await get_key_manager_instance(settings.API_KEYS, settings.VERTEX_API_KEYS)
                 logger.info("KeyManager instance re-initialized due to ValidKeyPool config changes.")
