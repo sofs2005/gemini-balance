@@ -151,6 +151,28 @@ function updateBatchActions(type) {
   }
 }
 
+// 更新卡片头部的密钥计数
+function updateCardHeaderCount(type, delta) {
+  const listElement = document.getElementById(`${type}Keys`);
+  if (!listElement) return;
+
+  const card = listElement.closest('.stats-card');
+  if (!card) return;
+  
+  const headerElement = card.querySelector('.stats-card-header h3'); // Assuming h3
+  if (headerElement) {
+    const currentText = headerElement.textContent;
+    const match = currentText.match(/\((\d+)\)/);
+    if (match && match[1]) {
+      const currentCount = parseInt(match[1], 10);
+      if (!isNaN(currentCount)) {
+        const newCount = Math.max(0, currentCount + delta); // 确保计数不为负
+        headerElement.textContent = currentText.replace(`(${currentCount})`, `(${newCount})`);
+      }
+    }
+  }
+}
+
 // 全选/取消全选指定类型的密钥
 function toggleSelectAll(type, isChecked) {
   const listElement = document.getElementById(`${type}Keys`);
@@ -246,11 +268,15 @@ async function verifyKey(key, button) {
     // 恢复按钮
     button.innerHTML = originalHtml;
     button.disabled = false;
-    
-    // 刷新两个密钥列表以反映潜在的状态变化（例如，从无效到有效）
-    // 刷新列表前不再显示通用提示，因为具体的成功/失败提示已经给出
-    fetchAndDisplayKeys('valid');
-    fetchAndDisplayKeys('invalid');
+
+    const scrollY = window.scrollY;
+    // 刷新两个密钥列表以反映潜在的状态变化
+    showNotification("正在刷新列表状态...", "info", 1500);
+    await Promise.all([
+        fetchAndDisplayKeys('valid'),
+        fetchAndDisplayKeys('invalid')
+    ]);
+    window.scrollTo({ top: scrollY, behavior: 'auto' }); // 使用 auto 避免与现有动画冲突
   }
 }
 
@@ -1578,9 +1604,10 @@ async function executeSingleKeyDelete(key, button) {
         listItem.style.transform = "translateX(-100%)";
         setTimeout(() => {
           listItem.remove();
-          // 因为我们不再刷新页面，需要手动更新批量操作的状态
+          // 因为我们不再刷新页面，需要手动更新各种状态
           const keyType = listItem.querySelector('.key-checkbox').dataset.keyType;
           updateBatchActions(keyType);
+          updateCardHeaderCount(keyType, -1);
         }, 500); // 等待动画完成
       }
       showNotification(response.message || "密钥删除成功", "success");
@@ -1682,6 +1709,9 @@ async function executeDeleteSelectedKeys(type) {
       
       const message = response.message || `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
       showNotification(message, "success");
+
+      // 更新卡片头部的计数
+      updateCardHeaderCount(type, -selectedKeys.length);
       
       // 短暂延迟后更新批量操作UI，确保移除动画有机会开始
       setTimeout(() => {
