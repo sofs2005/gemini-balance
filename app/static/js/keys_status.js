@@ -1644,7 +1644,7 @@ async function executeDeleteSelectedKeys(type) {
         `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
       showResultModal(true, message, true); // true 表示成功，message，true 表示关闭后刷新
     } else {
-      showResultModal(false, response.message || "批量删除密钥失败", true); // false 表示失败，message，true 表示关闭后刷新
+      showResultModal(false, response.message || "批量删除密钥失败", false); // false 表示失败，message，false 表示关闭后不刷新
     }
   } catch (error) {
     console.error("批量删除 API 请求失败:", error);

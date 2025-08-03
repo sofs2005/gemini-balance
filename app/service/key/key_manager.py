@@ -388,6 +388,7 @@ _preserved_vertex_old_api_keys_for_reset: Union[list, None] = None
 _preserved_next_key_in_cycle: Union[str, None] = None
 _preserved_vertex_next_key_in_cycle: Union[str, None] = None
 _preserved_valid_key_pool_keys: Union[list, None] = None  # 保存池子中的密钥
+_preserved_valid_key_pool_stats: Union[dict, None] = None  # 保存池子的统计信息
 
 
 async def get_key_manager_instance(
@@ -400,7 +401,7 @@ async def get_key_manager_instance(
     如果已创建实例，则忽略 api_keys 参数，返回现有单例。
     如果在重置后调用，会尝试恢复之前的状态（失败计数、循环位置）。
     """
-    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle, _preserved_valid_key_pool_keys
+    global _singleton_instance, _preserved_failure_counts, _preserved_vertex_failure_counts, _preserved_old_api_keys_for_reset, _preserved_vertex_old_api_keys_for_reset, _preserved_next_key_in_cycle, _preserved_vertex_next_key_in_cycle, _preserved_valid_key_pool_keys, _preserved_valid_key_pool_stats
 
     async with _singleton_lock:
         if _singleton_instance is None:

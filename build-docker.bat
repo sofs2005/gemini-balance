@@ -5,5 +5,7 @@ if exist "VERSION" (
 ) else (
     set VERSION=latest
 )
-docker build -t gemini-balance:%VERSION% .
-echo 构建完成: gemini-balance:%VERSION%
+docker build -t gemini-balance:%VERSION% -t gemini-balance:latest .
+echo 构建完成:
+echo   - gemini-balance:%VERSION%
+echo   - gemini-balance:latest

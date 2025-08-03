@@ -4,13 +4,14 @@
 
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.core.security import verify_auth_token
 from app.log.logger import Logger, get_config_routes_logger
 from app.service.config.config_service import ConfigService
+from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.service.proxy.proxy_check_service import get_proxy_check_service, ProxyCheckResult
 from app.utils.helpers import redact_key_for_logging
 
@@ -62,7 +63,11 @@ class DeleteKeysRequest(BaseModel):
 
 
 @router.delete("/keys/{key_to_delete}", response_model=Dict[str, Any])
-async def delete_single_key(key_to_delete: str, request: Request):
+async def delete_single_key(
+    key_to_delete: str,
+    request: Request,
+    key_manager: KeyManager = Depends(get_key_manager_instance),
+):
     auth_token = request.cookies.get("auth_token")
     if not auth_token or not verify_auth_token(auth_token):
         logger.warning(f"Unauthorized attempt to delete key: {redact_key_for_logging(key_to_delete)}")
@@ -77,6 +82,9 @@ async def delete_single_key(key_to_delete: str, request: Request):
                 ),
                 detail=result.get("message"),
             )
+        # 从 KeyManager 中移除密钥
+        await key_manager.remove_key(key_to_delete)
+        logger.info(f"Key '{redact_key_for_logging(key_to_delete)}' removed from KeyManager.")
         return result
     except HTTPException as e:
         raise e
@@ -87,7 +95,9 @@ async def delete_single_key(key_to_delete: str, request: Request):
 
 @router.post("/keys/delete-selected", response_model=Dict[str, Any])
 async def delete_selected_keys_route(
-    delete_request: DeleteKeysRequest, request: Request
+    delete_request: DeleteKeysRequest,
+    request: Request,
+    key_manager: KeyManager = Depends(get_key_manager_instance),
 ):
     auth_token = request.cookies.get("auth_token")
     if not auth_token or not verify_auth_token(auth_token):
@@ -105,6 +115,11 @@ async def delete_selected_keys_route(
             raise HTTPException(
                 status_code=400, detail=result.get("message", "Failed to delete keys.")
             )
+        # 从 KeyManager 中移除已删除的密钥
+        if result.get("deleted_keys"):
+            for key in result["deleted_keys"]:
+                await key_manager.remove_key(key)
+            logger.info(f"Successfully removed {len(result['deleted_keys'])} keys from KeyManager.")
         return result
     except HTTPException as e:
         raise e
