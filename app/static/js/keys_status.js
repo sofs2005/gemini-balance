@@ -358,15 +358,16 @@ function resetAllKeysFailCount(type, event) {
 }
 
 // 关闭模态框并根据参数决定是否刷新页面
-function closeResultModal(reload = true) {
+function closeResultModal(reload = false) {
   document.getElementById("resultModal").classList.add("hidden");
   if (reload) {
-    location.reload(); // 操作完成后刷新页面
+    // 在少数需要显式刷新的地方调用
+    location.reload();
   }
 }
 
 // 显示操作结果模态框 (通用版本)
-function showResultModal(success, message, autoReload = true) {
+function showResultModal(success, message, autoReload = false) {
   const modalElement = document.getElementById("resultModal");
   const titleElement = document.getElementById("resultModalTitle");
   const messageElement = document.getElementById("resultModalMessage");
