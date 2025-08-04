@@ -263,12 +263,19 @@ async function verifyKey(key, button) {
     button.disabled = false;
 
     const scrollY = window.scrollY;
-    // 刷新两个密钥列表以反映潜在的状态变化
-    await Promise.all([
-        fetchAndDisplayKeys('valid'),
-        fetchAndDisplayKeys('invalid')
-    ]);
-    window.scrollTo({ top: scrollY, behavior: 'auto' }); // 使用 auto 避免与现有动画冲突
+    try {
+        // 刷新两个密钥列表以反映潜在的状态变化
+        await Promise.all([
+            fetchAndDisplayKeys('valid'),
+            fetchAndDisplayKeys('invalid')
+        ]);
+    } catch (refreshError) {
+        console.error("刷新密钥列表失败:", refreshError);
+        showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
+    } finally {
+        // 确保无论刷新是否成功，滚动位置都能恢复
+        window.scrollTo({ top: scrollY, behavior: 'auto' });
+    }
   }
 }
 
