@@ -1391,6 +1391,12 @@ function createKeyListItem(key, fail_count, type) {
             </div>
         </div>
     `;
+    // 强制确保所有按钮在创建时都是启用的，以防止状态残留问题
+    const buttons = li.querySelectorAll('button');
+    buttons.forEach(btn => {
+        btn.disabled = false;
+    });
+
     return li;
 }
 
