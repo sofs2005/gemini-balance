@@ -349,6 +349,24 @@
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* hover:shadow-lg */
       }
 
+      /* Donation Modal */
+      .donation-modal-content {
+          background: rgba(255, 255, 255, 0.98);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      .donation-modal .close-button {
+           position: absolute;
+           top: 0.75rem;
+           right: 0.75rem;
+           color: #9ca3af; /* gray-400 */
+           transition: color 0.2s ease-in-out;
+      }
+      .donation-modal .close-button:hover {
+           color: #374151; /* gray-700 */
+      }
+
       /* Global overrides for light theme consistency */
       .text-gray-200, .text-gray-300, .text-gray-400 {
           color: #6b7280 !important; /* gray-500 for better contrast */
@@ -484,7 +502,15 @@
         </a>
         <span class="text-gray-400">|</span>
         <a
-          href="https://github.com/snailyp/gemini-balance"
+          href="https://github.com/sofs2005"
+          target="_blank"
+          class="text-primary-600 hover:text-primary-800 transition duration-300 flex items-center"
+        >
+          Modified by sofs2005
+        </a>
+        <span class="text-gray-400">|</span>
+        <a
+          href="https://github.com/sofs2005/gemini-balance"
           target="_blank"
           class="text-primary-600 hover:text-primary-800 transition duration-300 flex items-center"
         >
@@ -493,13 +519,12 @@
       </div>
       <!-- 第二行 -->
       <div class="flex items-center justify-center space-x-2 text-xs">
-        <a
-          href="https://gb-docs.snaily.top/guide/supportme.html"
-          target="_blank"
+        <button
+          id="donation-button"
           class="text-primary-600 hover:text-primary-800 transition duration-300 flex items-center"
         >
           <i class="fas fa-drumstick-bite text-yellow-600 mr-1"></i> 给作者加鸡腿
-        </a>
+        </button>
         <span class="text-gray-400">|</span>
         <a
           href="https://gb-docs.snaily.top"
@@ -524,6 +549,27 @@
           <!-- Version info will be loaded here by JavaScript -->
         </span>
       </div>
+    </div>
+
+    <!-- Donation Modal -->
+    <div id="donation-modal" class="modal donation-modal">
+        <div class="donation-modal-content w-full max-w-md m-4 p-6 rounded-xl shadow-lg relative text-center animate-slide-up">
+            <button id="close-donation-modal" class="close-button">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">支持项目</h3>
+            <p class="text-gray-600 mb-6">如果觉得这个项目对您有帮助，可以请作者喝杯咖啡~</p>
+            <div class="flex justify-center items-center space-x-8">
+                <div class="flex flex-col items-center">
+                    <img src="https://raw.githubusercontent.com/sofs2005/difytask/refs/heads/main/img/wx.png" alt="微信赞赏码" class="w-40 h-40 object-contain rounded-md border border-gray-200 p-1">
+                    <span class="mt-2 text-sm font-medium text-green-600">微信支付</span>
+                </div>
+                <div class="flex flex-col items-center">
+                    <img src="https://raw.githubusercontent.com/sofs2005/difytask/refs/heads/main/img/zfb.jpg" alt="支付宝赞赏码" class="w-40 h-40 object-contain rounded-md border border-gray-200 p-1">
+                    <span class="mt-2 text-sm font-medium text-blue-600">支付宝</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 通用JS -->
@@ -578,6 +624,34 @@
           document.body.appendChild(notification);
         }
         return notification;
+      }
+
+      // --- Donation Modal Logic ---
+      const donationModal = document.getElementById('donation-modal');
+      const donationButton = document.getElementById('donation-button');
+      const closeDonationButton = document.getElementById('close-donation-modal');
+
+      function showDonationModal() {
+        if(donationModal) donationModal.classList.add('show');
+      }
+
+      function hideDonationModal() {
+        if(donationModal) donationModal.classList.remove('show');
+      }
+
+      if (donationButton) {
+        donationButton.addEventListener('click', showDonationModal);
+      }
+      if (closeDonationButton) {
+        closeDonationButton.addEventListener('click', hideDonationModal);
+      }
+      // Close modal if clicking outside of the content
+      if (donationModal) {
+        donationModal.addEventListener('click', function(event) {
+            if (event.target === donationModal) {
+                hideDonationModal();
+            }
+        });
       }
 
       // 页面刷新带加载状态
