@@ -3,6 +3,7 @@
 定义带TTL的有效密钥数据类
 """
 from datetime import datetime, timedelta
+import random
 from dataclasses import dataclass
 from typing import Optional
 
@@ -35,7 +36,11 @@ class ValidKeyWithTTL:
         self.key = key
         self.ttl_hours = ttl_hours
         self.created_at = datetime.now()
-        self.expires_at = self.created_at + timedelta(hours=ttl_hours)
+        # 添加TTL抖动，防止所有密钥同时过期
+        jitter_percentage = 0.10  # ±10%
+        ttl_seconds = ttl_hours * 3600
+        jitter_seconds = random.uniform(-ttl_seconds * jitter_percentage, ttl_seconds * jitter_percentage)
+        self.expires_at = self.created_at + timedelta(hours=ttl_hours, seconds=jitter_seconds)
         
         logger.debug(f"Created ValidKeyWithTTL for key {key[:8]}..., expires at {self.expires_at}")
     
