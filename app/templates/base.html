@@ -312,11 +312,13 @@
           font-weight: 500; /* font-medium */
           z-index: 1000; /* Increased z-index */
           opacity: 0;
+          pointer-events: none; /* 隐藏时不阻挡点击事件 */
           transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
           box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
       }
       .notification.show {
           opacity: 1;
+          pointer-events: auto; /* 显示时恢复点击事件 */
           transform: translate(-50%, 0);
       }
       .notification.error {
