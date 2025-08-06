@@ -63,7 +63,7 @@ async def _setup_database_and_config(app_settings):
                 loaded_count = await key_manager.preload_valid_key_pool()
                 logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
             except Exception as e:
-                logger.warning(f"Failed to background preload ValidKeyPool: {e}")
+                logger.error(f"Failed to background preload ValidKeyPool: {e}", exc_info=True)
 
         # 创建后台任务，不等待完成
         asyncio.create_task(background_preload())

@@ -262,7 +262,7 @@ class GeminiChatService:
     """聊天服务"""
 
     def __init__(self, base_url: str, key_manager: KeyManager):
-        self.api_client = GeminiApiClient(base_url, settings.TIME_OUT)
+        self.api_client = GeminiApiClient(base_url, settings.TIMEOUT)
         self.key_manager = key_manager
         self.response_handler = GeminiResponseHandler()
 

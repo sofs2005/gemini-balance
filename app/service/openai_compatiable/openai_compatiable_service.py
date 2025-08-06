@@ -23,7 +23,7 @@ class OpenAICompatiableService:
     def __init__(self, base_url: str, key_manager: KeyManager = None):
         self.key_manager = key_manager
         self.base_url = base_url
-        self.api_client = OpenaiApiClient(base_url, settings.TIME_OUT)
+        self.api_client = OpenaiApiClient(base_url, settings.TIMEOUT)
         
     async def get_models(self, api_key: str) -> Dict[str, Any]:
         return await self.api_client.get_models(api_key)
