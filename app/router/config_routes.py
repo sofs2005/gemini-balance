@@ -82,7 +82,7 @@ async def delete_single_key(
                 detail=result.get("message"),
             )
         # 从 KeyManager 中移除密钥
-        key_manager = get_key_manager_instance()
+        key_manager = await get_key_manager_instance()
         await key_manager.remove_key(key_to_delete)
         logger.info(f"Key '{redact_key_for_logging(key_to_delete)}' removed from KeyManager.")
         return result
@@ -118,7 +118,7 @@ async def delete_selected_keys_route(
 
         # 从 KeyManager 中移除已删除的密钥
         if result.get("deleted_keys"):
-            key_manager = get_key_manager_instance()
+            key_manager = await get_key_manager_instance()
             for key in result["deleted_keys"]:
                 await key_manager.remove_key(key)
             logger.info(f"Successfully removed {len(result['deleted_keys'])} keys from KeyManager.")
