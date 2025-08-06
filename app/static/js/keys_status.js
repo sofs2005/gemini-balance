@@ -58,11 +58,18 @@ async function fetchAPI(url, options = {}) {
 
     if (!response.ok) {
       // Prefer error message from API response body (already parsed as JSON)
-      const message =
-        responseData?.detail ||
-        responseData?.message ||
-        responseData?.error ||
-        `HTTP error! status: ${response.status}`;
+      let message = responseData?.detail || responseData?.message || responseData?.error;
+
+      // 如果 message 是对象，尝试转换为字符串
+      if (typeof message === 'object' && message !== null) {
+        message = JSON.stringify(message);
+      }
+
+      // 如果还是没有有效消息，使用默认错误信息
+      if (!message || typeof message !== 'string') {
+        message = `HTTP error! status: ${response.status}`;
+      }
+
       throw new Error(message);
     }
 
@@ -249,7 +256,7 @@ async function verifyKey(key, button) {
     });
 
     if (data && (data.success || data.status === "valid")) {
-      showNotification("密钥验证成功", "success");
+      showNotification("密钥验证成功", "success", 3000);
     } else {
       const errorMsg = data.error || "密钥无效";
       showNotification(`密钥验证失败: ${errorMsg}`, "error", 7000);
@@ -270,20 +277,22 @@ async function verifyKey(key, button) {
     }
 
     const scrollY = window.scrollY;
-    try {
-        // 刷新两个密钥列表以反映潜在的状态变化
-        showNotification("正在刷新列表以反映密钥状态变化...", "info", 2000);
-        await Promise.all([
-            fetchAndDisplayKeys('valid'),
-            fetchAndDisplayKeys('invalid')
-        ]);
-    } catch (refreshError) {
-        console.error("刷新密钥列表失败:", refreshError);
-        showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
-    } finally {
-        // 确保无论刷新是否成功，滚动位置都能恢复
-        window.scrollTo({ top: scrollY, behavior: 'auto' });
-    }
+    // 延迟刷新，让验证结果消息先显示
+    setTimeout(async () => {
+        try {
+            // 静默刷新两个密钥列表以反映潜在的状态变化
+            await Promise.all([
+                fetchAndDisplayKeys('valid'),
+                fetchAndDisplayKeys('invalid')
+            ]);
+        } catch (refreshError) {
+            console.error("刷新密钥列表失败:", refreshError);
+            showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
+        } finally {
+            // 确保无论刷新是否成功，滚动位置都能恢复
+            window.scrollTo({ top: scrollY, behavior: 'auto' });
+        }
+    }, 1500); // 延迟1.5秒，让验证成功消息先显示
   }
 }
 
@@ -438,8 +447,10 @@ function showResultModal(success, message, autoReload = false) {
     messageElement.appendChild(messageDiv);
   }
 
-  // 设置确认按钮点击事件
-  confirmButton.onclick = () => closeResultModal(autoReload);
+  // 清除之前的事件监听器并设置新的确认按钮点击事件
+  const newConfirmButton = confirmButton.cloneNode(true);
+  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+  newConfirmButton.onclick = () => closeResultModal(autoReload);
 
   // 显示模态框
   modalElement.classList.remove("hidden");
