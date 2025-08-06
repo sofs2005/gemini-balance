@@ -236,7 +236,6 @@ class ValidKeyPool:
         """
         紧急恢复模式：立即返回一个候选密钥，并在后台异步验证和补充池。
         """
-        self.stats["emergency_refill_count"] += 1
         logger.warning("Starting non-blocking emergency refill process")
 
         # 尝试立即获取一个候选密钥返回，避免阻塞请求
@@ -295,6 +294,9 @@ class ValidKeyPool:
                         else:
                             logger.warning("Pool size limit reached during background refill, stopping.")
                             break
+                
+                if success_count > 0:
+                    self.stats["emergency_refill_count"] += 1
                 
                 refill_time = time.time() - refill_start
                 logger.info(f"Background emergency refill finished in {refill_time:.3f}s. "
