@@ -95,8 +95,8 @@ async def delete_single_key(
 
 @router.post("/keys/delete-selected", response_model=Dict[str, Any])
 async def delete_selected_keys_route(
-    request: Request,
     delete_request: DeleteKeysRequest,
+    request: Request,
     key_manager: KeyManager = Depends(get_key_manager_instance),
 ):
     auth_token = request.cookies.get("auth_token")
