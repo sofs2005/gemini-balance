@@ -250,6 +250,13 @@ async function verifyKey(key, button) {
   const originalHtml = button.innerHTML;
   button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
 
+  // 确定当前密钥在哪个列表中
+  const listItem = button.closest('li[data-key]');
+  const isInValidList = listItem && listItem.closest('#validKeys');
+  const isInInvalidList = listItem && listItem.closest('#invalidKeys');
+
+  let needsRefresh = false;
+
   try {
     const data = await fetchAPI(`/gemini/v1beta/verify-key/${key}`, {
       method: "POST",
@@ -257,23 +264,52 @@ async function verifyKey(key, button) {
 
     if (data && (data.success || data.status === "valid")) {
       showNotification("密钥验证成功", "success", 3000);
+      // 如果无效密钥验证成功，可能需要移到有效池
+      if (isInInvalidList) {
+        needsRefresh = true;
+      }
     } else {
       const errorMsg = data.error || "密钥无效";
       showNotification(`密钥验证失败: ${errorMsg}`, "error", 7000);
+      // 如果有效密钥验证失败，可能需要移到无效池
+      if (isInValidList) {
+        needsRefresh = true;
+      }
     }
   } catch (apiError) {
     console.error("密钥验证 API 请求失败:", apiError);
     showNotification(`验证请求失败: ${apiError.message}`, "error", 7000);
+    // 请求失败时不刷新，因为无法确定状态变化
+    needsRefresh = false;
   } finally {
     // 恢复按钮
     button.innerHTML = originalHtml;
     button.disabled = false;
 
     // 确保卡片上的所有按钮都已启用
-    const listItem = button.closest('li[data-key]');
     if (listItem) {
         const allButtons = listItem.querySelectorAll('button');
         allButtons.forEach(btn => btn.disabled = false);
+    }
+
+    // 只在可能发生状态变化时才刷新
+    if (needsRefresh) {
+      const scrollY = window.scrollY;
+      setTimeout(async () => {
+          try {
+              // 刷新两个密钥列表以反映状态变化
+              await Promise.all([
+                  fetchAndDisplayKeys('valid'),
+                  fetchAndDisplayKeys('invalid')
+              ]);
+          } catch (refreshError) {
+              console.error("刷新密钥列表失败:", refreshError);
+              showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
+          } finally {
+              // 恢复滚动位置
+              window.scrollTo({ top: scrollY, behavior: 'auto' });
+          }
+      }, 2000); // 延迟2秒，让验证结果消息先显示
     }
   }
 }
