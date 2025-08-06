@@ -1646,19 +1646,17 @@ function showDeleteConfirmationModal(type, event) {
 
   titleElement.textContent = "确认批量删除";
   if (count > 0) {
-    messageElement.textContent = `确定要批量删除选中的 ${count} 个${
-      type === "valid" ? "有效" : "无效"
-    }密钥吗？此操作无法撤销。`;
+    messageElement.textContent = `确定要批量删除选中的 ${count} 个密钥吗？此操作无法撤销。`;
     confirmButton.disabled = false;
   } else {
-    // 此情况理论上不应发生，因为批量删除按钮在未选中时是禁用的
-    messageElement.textContent = `请先选择要删除的${
-      type === "valid" ? "有效" : "无效"
-    }密钥。`;
+    messageElement.textContent = "没有选中任何密钥。请先选择要删除的密钥。";
     confirmButton.disabled = true;
   }
 
-  confirmButton.onclick = () => executeDeleteSelectedKeys(type);
+  // Re-assign onclick to ensure it captures the correct 'type' and avoids stale closures.
+  const newConfirmButton = confirmButton.cloneNode(true);
+  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+  newConfirmButton.onclick = () => executeDeleteSelectedKeys(type);
   modalElement.classList.remove("hidden");
 }
 
@@ -1699,18 +1697,20 @@ async function executeDeleteSelectedKeys(type) {
 
     if (response.success) {
       // 批量删除成功后，从DOM中移除对应的行
-      const keyType = document.getElementById(`${type}BatchActions`).closest('.stats-card').querySelector('.key-content ul').id.includes('valid') ? 'valid' : 'invalid';
-      selectedKeys.forEach(key => {
-        const listItem = document.querySelector(`#${type}Keys li[data-key="${key}"]`);
-        if (listItem) {
-          listItem.style.transition = "opacity 0.3s, transform 0.3s";
-          listItem.style.opacity = "0";
-          listItem.style.transform = "scale(0.9)";
-           setTimeout(() => {
-              listItem.remove();
-           }, 300);
-        }
-      });
+      const listElement = document.getElementById(`${type}Keys`);
+      if (listElement) {
+          selectedKeys.forEach(key => {
+            const listItem = listElement.querySelector(`li[data-key="${key}"]`);
+            if (listItem) {
+              listItem.style.transition = "opacity 0.3s, transform 0.3s";
+              listItem.style.opacity = "0";
+              listItem.style.transform = "scale(0.9)";
+               setTimeout(() => {
+                  listItem.remove();
+               }, 300);
+            }
+          });
+      }
       
       const message = response.message || `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
       showNotification(message, "success");
