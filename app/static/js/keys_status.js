@@ -275,24 +275,6 @@ async function verifyKey(key, button) {
         const allButtons = listItem.querySelectorAll('button');
         allButtons.forEach(btn => btn.disabled = false);
     }
-
-    const scrollY = window.scrollY;
-    // 延迟刷新，让验证结果消息先显示
-    setTimeout(async () => {
-        try {
-            // 静默刷新两个密钥列表以反映潜在的状态变化
-            await Promise.all([
-                fetchAndDisplayKeys('valid'),
-                fetchAndDisplayKeys('invalid')
-            ]);
-        } catch (refreshError) {
-            console.error("刷新密钥列表失败:", refreshError);
-            showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
-        } finally {
-            // 确保无论刷新是否成功，滚动位置都能恢复
-            window.scrollTo({ top: scrollY, behavior: 'auto' });
-        }
-    }, 1500); // 延迟1.5秒，让验证成功消息先显示
   }
 }
 
