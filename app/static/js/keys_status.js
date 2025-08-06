@@ -262,9 +262,17 @@ async function verifyKey(key, button) {
     button.innerHTML = originalHtml;
     button.disabled = false;
 
+    // 确保卡片上的所有按钮都已启用
+    const listItem = button.closest('li[data-key]');
+    if (listItem) {
+        const allButtons = listItem.querySelectorAll('button');
+        allButtons.forEach(btn => btn.disabled = false);
+    }
+
     const scrollY = window.scrollY;
     try {
         // 刷新两个密钥列表以反映潜在的状态变化
+        showNotification("正在刷新列表以反映密钥状态变化...", "info", 2000);
         await Promise.all([
             fetchAndDisplayKeys('valid'),
             fetchAndDisplayKeys('invalid')
