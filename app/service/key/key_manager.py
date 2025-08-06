@@ -450,6 +450,26 @@ class KeyManager:
             logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' has been successfully removed from KeyManager.")
             return True
 
+    async def remove_all_invalid_keys(self) -> int:
+        """
+        Remove all keys that are marked as invalid (failure count >= MAX_FAILURES).
+        """
+        invalid_keys_to_remove = []
+        async with self.failure_count_lock:
+            # Create a copy to iterate over, as we will be modifying the original dict
+            key_failure_counts_copy = self.key_failure_counts.copy()
+            for key, fail_count in key_failure_counts_copy.items():
+                if fail_count >= self.MAX_FAILURES:
+                    invalid_keys_to_remove.append(key)
+        
+        removed_count = 0
+        for key in invalid_keys_to_remove:
+            if await self.remove_key(key):
+                removed_count += 1
+        
+        logger.info(f"Attempted to remove {len(invalid_keys_to_remove)} invalid keys, successfully removed {removed_count}.")
+        return removed_count
+
 
 _singleton_instance = None
 _singleton_lock = asyncio.Lock()
