@@ -15,6 +15,7 @@ from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
+import asyncio
 from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.utils.helpers import redact_key_for_logging
 
@@ -338,14 +339,14 @@ class GeminiChatService:
             # 记录请求日志
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
-            await add_request_log(
+            asyncio.create_task(add_request_log(
                 model_name=model,
                 api_key=final_api_key,
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
                 request_time=request_datetime
-            )
+            ))
 
     @RetryHandler()
     async def count_tokens(
@@ -385,14 +386,14 @@ class GeminiChatService:
             # 记录请求日志
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
-            await add_request_log(
+            asyncio.create_task(add_request_log(
                 model_name=f"{model}-count-tokens",  # 区分计数请求
                 api_key=api_key,
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
                 request_time=request_datetime
-            )
+            ))
 
     async def stream_generate_content(
         self, model: str, request: GeminiRequest, api_key: str
@@ -463,14 +464,14 @@ class GeminiChatService:
                 else:
                     status_code = 500
 
-                await add_error_log(
+                asyncio.create_task(add_error_log(
                     gemini_key=current_attempt_key,
                     model_name=model,
                     error_type="gemini-chat-stream",
                     error_log=error_log_msg,
                     error_code=status_code,
                     request_msg=payload
-                )
+                ))
 
                 new_key = await handle_api_error_and_get_next_key(
                     self.key_manager, e, current_attempt_key, model, retries
@@ -491,11 +492,11 @@ class GeminiChatService:
             finally:
                 end_time = time.perf_counter()
                 latency_ms = int((end_time - start_time) * 1000)
-                await add_request_log(
+                asyncio.create_task(add_request_log(
                     model_name=model,
                     api_key=final_api_key,
                     is_success=is_success,
                     status_code=status_code,
                     latency_ms=latency_ms,
                     request_time=request_datetime
-                )
+                ))

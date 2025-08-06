@@ -20,7 +20,7 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
         method = request.method
         
         # 尝试修复URL
-        fixed_path, fix_info = self.fix_request_url(original_path, method, request)
+        fixed_path, fix_info = await self.fix_request_url(original_path, method, request)
 
         if fixed_path != original_path:
             logger.info(f"URL fixed: {method} {original_path} → {fixed_path}")
@@ -33,7 +33,7 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
         
         return await call_next(request)
 
-    def fix_request_url(self, path: str, method: str, request: Request) -> tuple:
+    async def fix_request_url(self, path: str, method: str, request: Request) -> tuple:
         """简化的URL修复逻辑"""
 
         # 首先检查是否已经是正确的格式，如果是则不处理
@@ -42,7 +42,7 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
 
         # 1. 最高优先级：包含generateContent → Gemini格式
         if "generatecontent" in path.lower() or "v1beta/models" in path.lower():
-            return self.fix_gemini_by_operation(path, method, request)
+            return await self.fix_gemini_by_operation(path, method, request)
 
         # 2. 第二优先级：包含/openai/ → OpenAI格式
         if "/openai/" in path.lower():
@@ -81,7 +81,7 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
 
         return False
 
-    def fix_gemini_by_operation(
+    async def fix_gemini_by_operation(
         self, path: str, method: str, request: Request
     ) -> tuple:
         """根据Gemini操作修复，考虑端点偏好"""
@@ -92,7 +92,7 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
 
         # 提取模型名称
         try:
-            model_name = self.extract_model_name(path, request)
+            model_name = await self.extract_model_name(path, request)
         except ValueError:
             # 无法提取模型名称，返回原路径不做处理
             return path, None
@@ -183,17 +183,15 @@ class SmartRoutingMiddleware(BaseHTTPMiddleware):
 
         return False
 
-    def extract_model_name(self, path: str, request: Request) -> str:
+    async def extract_model_name(self, path: str, request: Request) -> str:
         """从请求中提取模型名称，用于构建Gemini API URL"""
-        # 1. 从请求体中提取
+        # 1. 从请求体中异步提取
         try:
-            if hasattr(request, "_body") and request._body:
-                import json
-
-                body = json.loads(request._body.decode())
-                if "model" in body and body["model"]:
-                    return body["model"]
+            body = await request.json()
+            if isinstance(body, dict) and "model" in body and body["model"]:
+                return body["model"]
         except Exception:
+            # 忽略JSON解析错误或空body
             pass
 
         # 2. 从查询参数中提取

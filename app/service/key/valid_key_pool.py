@@ -43,7 +43,10 @@ class ValidKeyPool:
         self.ttl_hours = ttl_hours
         self.key_manager = key_manager
         self.valid_keys: deque[ValidKeyWithTTL] = deque(maxlen=pool_size)
-        self.verification_lock = asyncio.Lock()  # 常规验证锁
+        self._pool_keys_set: set[str] = set()
+        concurrent_verifications = getattr(settings, 'CONCURRENT_VERIFICATIONS', 1)
+        self.verification_semaphore = asyncio.Semaphore(concurrent_verifications)
+        logger.info(f"Verification semaphore initialized with {concurrent_verifications} concurrent tasks.")
         self.emergency_lock = asyncio.Lock()     # 紧急补充锁
         self.chat_service = None
         
@@ -96,6 +99,7 @@ class ValidKeyPool:
         # 尝试从池中获取有效密钥
         while self.valid_keys:
             key_obj = self.valid_keys.popleft()
+            self._pool_keys_set.discard(key_obj.key)
 
             if not key_obj.is_expired():
                 self.stats["hit_count"] += 1
@@ -174,13 +178,9 @@ class ValidKeyPool:
         """
         logger.info("Starting async_verify_and_add")
 
-        # 使用锁防止重复验证
-        if self.verification_lock.locked():
-            logger.info("Verification already in progress, skipping async_verify_and_add")
-            return
-        
-        async with self.verification_lock:
-            # 检查池是否已满
+        # 使用信号量控制并发验证
+        async with self.verification_semaphore:
+            # 在获取信号量后，再次检查池是否已满
             if len(self.valid_keys) >= self.pool_size:
                 logger.debug("Pool is full, skipping verification")
                 return
@@ -222,6 +222,7 @@ class ValidKeyPool:
 
                 key_obj = ValidKeyWithTTL(random_key, self.ttl_hours)
                 self.valid_keys.append(key_obj)
+                self._pool_keys_set.add(key_obj.key)
                 self.stats["successful_verifications"] += 1
 
                 # 记录详细的验证成功日志
@@ -289,6 +290,7 @@ class ValidKeyPool:
                         if len(self.valid_keys) < self.pool_size:
                             key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                             self.valid_keys.append(key_obj)
+                            self._pool_keys_set.add(key_obj.key)
                             success_count += 1
                             logger.info(f"Background refill: added key {redact_key_for_logging(result)} to pool.")
                         else:
@@ -310,8 +312,8 @@ class ValidKeyPool:
         """
         异步紧急补充，不返回密钥，只补充池子
         """
-        # 使用验证锁防止与其他验证任务冲突
-        async with self.verification_lock:
+        # 使用信号量控制并发验证
+        async with self.verification_semaphore:
             try:
                 min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
                 current_size = len(self.valid_keys)
@@ -353,6 +355,7 @@ class ValidKeyPool:
 
                         key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                         self.valid_keys.append(key_obj)
+                        self._pool_keys_set.add(key_obj.key)
                         success_count += 1
 
                 logger.info(f"Emergency async refill completed: added {success_count} keys, pool size now: {len(self.valid_keys)}")
@@ -381,7 +384,9 @@ class ValidKeyPool:
             try:
                 # 检查密钥是否过期
                 if key_obj.is_expired():
+                    # This is slow, but keys_to_validate is small.
                     self.valid_keys.remove(key_obj)
+                    self._pool_keys_set.discard(key_obj.key)
                     removed_count += 1
                     logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
                     continue
@@ -389,7 +394,9 @@ class ValidKeyPool:
                 # 验证密钥是否仍然有效
                 is_valid = await self._verify_key(key_obj.key)
                 if not is_valid:
+                    # This is slow, but keys_to_validate is small.
                     self.valid_keys.remove(key_obj)
+                    self._pool_keys_set.discard(key_obj.key)
                     removed_count += 1
                     logger.info(f"Removed invalid key {redact_key_for_logging(key_obj.key)} from pool")
 
@@ -511,6 +518,9 @@ class ValidKeyPool:
         # 遍历当前池，分离出未过期的和已过期的
         while self.valid_keys:
             key_obj = self.valid_keys.popleft()
+            # The key is always removed from the set here.
+            # If it's not expired, it will be added back to both deque and set.
+            self._pool_keys_set.discard(key_obj.key)
             if not key_obj.is_expired():
                 keys_to_keep.append(key_obj)
             else:
@@ -519,6 +529,9 @@ class ValidKeyPool:
         
         # 将未过期的密钥放回池中
         self.valid_keys = keys_to_keep
+        # Re-add the keys that were kept to the set
+        for key_obj in self.valid_keys:
+            self._pool_keys_set.add(key_obj.key)
 
         # 为所有过期的密钥创建后台重新验证任务
         if keys_to_revalidate:
@@ -536,8 +549,8 @@ class ValidKeyPool:
         """
         在后台异步地重新验证一个密钥，如果成功，则刷新其TTL并将其重新添加到池中。
         """
-        # 使用常规验证锁来避免与其他验证任务（如常规补充）发生冲突
-        async with self.verification_lock:
+        # 使用信号量控制并发验证
+        async with self.verification_semaphore:
             # 在开始验证前，再次检查池是否已满或密钥是否已通过其他方式被加回
             if len(self.valid_keys) >= self.pool_size:
                 logger.debug(f"Pool is full, skipping re-validation for expired key: {redact_key_for_logging(key)}")
@@ -553,6 +566,7 @@ class ValidKeyPool:
                 # 再次检查池是否已满（以防在验证过程中池被填满）
                 if len(self.valid_keys) < self.pool_size:
                     self.valid_keys.append(new_key_obj)
+                    self._pool_keys_set.add(new_key_obj.key)
                     logger.info(f"Successfully re-validated and re-added key {redact_key_for_logging(key)} to the pool. New pool size: {len(self.valid_keys)}")
                 else:
                     logger.warning(f"Pool became full during re-validation. Discarding re-validated key: {redact_key_for_logging(key)}")
@@ -570,7 +584,7 @@ class ValidKeyPool:
         Returns:
             bool: 密钥是否在池中
         """
-        return any(key_obj.key == key for key_obj in self.valid_keys)
+        return key in self._pool_keys_set
 
     async def maintenance(self) -> None:
         """
@@ -727,6 +741,7 @@ class ValidKeyPool:
         """
         cleared_count = len(self.valid_keys)
         self.valid_keys.clear()
+        self._pool_keys_set.clear()
         logger.info(f"Cleared {cleared_count} keys from pool")
         return cleared_count
 
@@ -745,8 +760,8 @@ class ValidKeyPool:
 
         logger.info(f"Starting pool preload, target size: {target_size}")
 
-        # 使用验证锁防止与其他验证任务冲突
-        async with self.verification_lock:
+        # 使用信号量控制并发验证
+        async with self.verification_semaphore:
             # 使用并发验证提高预加载效率
             batch_size = min(10, target_size)  # 每批验证10个
             total_loaded = 0
@@ -781,6 +796,7 @@ class ValidKeyPool:
 
                         key_obj = ValidKeyWithTTL(result, self.ttl_hours)
                         self.valid_keys.append(key_obj)
+                        self._pool_keys_set.add(key_obj.key)
                         batch_loaded += 1
                         total_loaded += 1
 

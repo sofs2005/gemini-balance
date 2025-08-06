@@ -16,6 +16,7 @@ from app.scheduler.scheduled_tasks import start_scheduler, stop_scheduler
 from app.service.key.key_manager import get_key_manager_instance
 from app.service.update.update_service import check_for_updates
 from app.utils.helpers import get_current_version
+from app.service.client.api_client import initialize_api_client, close_api_client
 
 logger = get_application_logger()
 
@@ -118,6 +119,7 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Application starting up...")
     try:
+        initialize_api_client()
         await _setup_database_and_config(settings)
         await _perform_update_check(app)
         _start_scheduler()
@@ -132,6 +134,7 @@ async def lifespan(app: FastAPI):
     logger.info("Application shutting down...")
     _stop_scheduler()
     await _shutdown_database()
+    await close_api_client()
 
 
 def create_app() -> FastAPI:

@@ -16,9 +16,9 @@ class KeyManager:
     def __init__(self, api_keys: list, vertex_api_keys: list):
         self.api_keys = api_keys
         self.vertex_api_keys = vertex_api_keys
-        self.key_cycle = cycle(api_keys)
-        self.vertex_key_cycle = cycle(vertex_api_keys)
-        self.key_cycle_lock = asyncio.Lock()
+        self.valid_api_keys = self.api_keys.copy()
+        self.key_index = 0
+        self.vertex_key_cycle = cycle(vertex_api_keys) # Vertex keys logic remains for now
         self.vertex_key_cycle_lock = asyncio.Lock()
         self.failure_count_lock = asyncio.Lock()
         self.vertex_failure_count_lock = asyncio.Lock()
@@ -114,10 +114,19 @@ class KeyManager:
             return self.valid_key_pool.get_pool_stats()
         return None
 
-    async def get_next_key(self) -> str:
-        """获取下一个API key"""
-        async with self.key_cycle_lock:
-            return next(self.key_cycle)
+    async def get_next_key(self) -> Optional[str]:
+        """获取下一个有效的API key，使用索引循环"""
+        async with self.failure_count_lock: # Re-using lock for simplicity
+            if not self.valid_api_keys:
+                return None
+            
+            # Ensure index is within bounds
+            if self.key_index >= len(self.valid_api_keys):
+                self.key_index = 0
+            
+            key = self.valid_api_keys[self.key_index]
+            self.key_index = (self.key_index + 1) % len(self.valid_api_keys)
+            return key
 
     async def get_next_vertex_key(self) -> str:
         """获取下一个 Vertex Express API key"""
@@ -151,6 +160,10 @@ class KeyManager:
         async with self.failure_count_lock:
             if key in self.key_failure_counts:
                 self.key_failure_counts[key] = 0
+                # If key was previously marked as invalid, re-add it to the valid list
+                if key not in self.valid_api_keys:
+                    self.valid_api_keys.append(key)
+                    logger.info(f"Key {redact_key_for_logging(key)} re-validated and added back to the pool.")
                 logger.info(f"Reset failure count for key: {redact_key_for_logging(key)}")
                 return True
             logger.warning(
@@ -192,40 +205,46 @@ class KeyManager:
 
     async def _original_get_next_working_key(self, model_name: str = None) -> str:
         """
-        原有的获取下一个可用API key的逻辑。
-        如果提供了 model_name，会额外检查该 key 是否因特定模型的配额问题而处于冷却状态。
+        获取下一个可用API key的优化逻辑。
+        它会从一个只包含有效密钥的列表中获取，并在失败时从中移除。
         """
-        initial_key = await self.get_next_key()
-        current_key = initial_key
+        async with self.failure_count_lock: # Using this lock to protect valid_api_keys and key_index
+            if not self.valid_api_keys:
+                logger.error("No valid API keys available in the list.")
+                # As a last resort, try to use the original full list
+                if self.api_keys:
+                    return self.api_keys[0]
+                return ""
 
-        for _ in range(len(self.api_keys) + 1):
-            # 1. 检查通用有效性 (失败次数)
-            if not await self.is_key_valid(current_key):
-                current_key = await self.get_next_key()
-                if current_key == initial_key and _ > len(self.api_keys):
-                    logger.warning("All keys have been checked and none are generally valid.")
-                    return current_key # 返回最后一个检查的key，让上层处理
-                continue
+            start_index = self.key_index
+            for _ in range(len(self.valid_api_keys)):
+                current_key = self.valid_api_keys[self.key_index]
 
-            # 2. 如果提供了模型，检查特定模型的冷却状态
-            if model_name:
-                now = datetime.now(pytz.utc)
-                model_statuses = self.key_model_status.get(current_key, {})
-                expiry_time = model_statuses.get(model_name)
+                # 1. 检查特定模型的冷却状态
+                is_in_cooldown = False
+                if model_name:
+                    now = datetime.now(pytz.utc)
+                    model_statuses = self.key_model_status.get(current_key, {})
+                    expiry_time = model_statuses.get(model_name)
+                    if expiry_time and now < expiry_time:
+                        logger.info(f"Key {redact_key_for_logging(current_key)} is in cooldown for model {model_name}. Skipping.")
+                        is_in_cooldown = True
 
-                if expiry_time and now < expiry_time:
-                    logger.info(f"Key {current_key} is in cooldown for model {model_name} until {expiry_time}. Skipping.")
-                    current_key = await self.get_next_key()
-                    if current_key == initial_key and _ > len(self.api_keys):
-                         logger.warning(f"All keys are in cooldown for model {model_name}.")
-                         return current_key # 返回最后一个检查的key
-                    continue
-            
-            # 3. 如果所有检查都通过，返回当前key
-            return current_key
-        
-        logger.error("Could not find a working key after a full cycle.")
-        return initial_key # Fallback
+                if not is_in_cooldown:
+                    # 2. 如果所有检查都通过，返回当前key并更新索引
+                    self.key_index = (self.key_index + 1) % len(self.valid_api_keys)
+                    return current_key
+                
+                # 3. 如果在冷却中，继续下一个
+                self.key_index = (self.key_index + 1) % len(self.valid_api_keys)
+                if self.key_index == start_index:
+                    # We have cycled through all keys and all are in cooldown
+                    logger.warning(f"All available keys are in cooldown for model {model_name}.")
+                    # Return the key anyway, let the caller handle the cooldown error
+                    return self.valid_api_keys[self.key_index]
+
+        logger.error("Could not find a working key after a full cycle through the valid list.")
+        return self.api_keys[0] if self.api_keys else "" # Absolute fallback
 
     async def get_next_working_vertex_key(self) -> str:
         """获取下一可用的 Vertex Express API key"""
@@ -273,7 +292,10 @@ class KeyManager:
         async with self.failure_count_lock:
             if api_key in self.key_failure_counts:
                 self.key_failure_counts[api_key] = self.MAX_FAILURES
-                logger.warning(f"API key {api_key} has been marked as failed immediately due to a critical error (e.g., 403).")
+                # Also remove from valid list
+                if api_key in self.valid_api_keys:
+                    self.valid_api_keys.remove(api_key)
+                logger.warning(f"API key {redact_key_for_logging(api_key)} has been marked as failed immediately due to a critical error (e.g., 403).")
 
     async def handle_api_failure(self, api_key: str, retries: int, model_name: str = None) -> str:
         """处理API调用失败"""
@@ -281,8 +303,11 @@ class KeyManager:
             self.key_failure_counts[api_key] += 1
             if self.key_failure_counts[api_key] >= self.MAX_FAILURES:
                 logger.warning(
-                    f"API key {redact_key_for_logging(api_key)} has failed {self.MAX_FAILURES} times"
+                    f"API key {redact_key_for_logging(api_key)} has failed {self.MAX_FAILURES} times and is being removed from the valid pool."
                 )
+                # Remove from valid list
+                if api_key in self.valid_api_keys:
+                    self.valid_api_keys.remove(api_key)
         if retries < settings.MAX_RETRIES:
             return await self.get_next_working_key(model_name=model_name)
         else:
@@ -382,21 +407,26 @@ class KeyManager:
         """
         从 KeyManager 中安全地移除一个密钥。
         """
-        # 使用 key_cycle_lock 来确保对密钥列表和循环的修改是线程安全的
-        async with self.key_cycle_lock:
+        # Using failure_count_lock as it now protects the valid_api_keys list
+        async with self.failure_count_lock:
             if key_to_remove not in self.api_keys:
                 logger.warning(f"Attempted to remove a non-existent key: {redact_key_for_logging(key_to_remove)}")
                 return False
 
             # 1. 从主列表中移除
-            self.api_keys.remove(key_to_remove)
-            logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from api_keys list.")
+            if key_to_remove in self.api_keys:
+                self.api_keys.remove(key_to_remove)
+                logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from api_keys list.")
 
-            # 2. 从失败计数中移除
-            async with self.failure_count_lock:
-                if key_to_remove in self.key_failure_counts:
-                    del self.key_failure_counts[key_to_remove]
-                    logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from failure counts.")
+            # 2. 从有效列表中移除
+            if key_to_remove in self.valid_api_keys:
+                self.valid_api_keys.remove(key_to_remove)
+                logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from valid_api_keys list.")
+
+            # 3. 从失败计数中移除
+            if key_to_remove in self.key_failure_counts:
+                del self.key_failure_counts[key_to_remove]
+                logger.debug(f"Removed '{redact_key_for_logging(key_to_remove)}' from failure counts.")
 
             # 3. 从模型状态中移除
             if key_to_remove in self.key_model_status:
@@ -413,13 +443,9 @@ class KeyManager:
                 if removed_count > 0:
                     logger.debug(f"Removed {removed_count} instance(s) of '{redact_key_for_logging(key_to_remove)}' from ValidKeyPool.")
 
-            # 5. 重建密钥循环
-            if not self.api_keys:
-                self.key_cycle = cycle([])
-                logger.warning("All API keys have been removed from KeyManager, key cycle is now empty.")
-            else:
-                self.key_cycle = cycle(self.api_keys)
-                logger.debug("Rebuilt key cycle after key removal.")
+            # 5. 重置索引（如果需要）
+            if self.key_index >= len(self.valid_api_keys) and self.valid_api_keys:
+                self.key_index = 0
 
             logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' has been successfully removed from KeyManager.")
             return True
