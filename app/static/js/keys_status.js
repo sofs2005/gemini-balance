@@ -1589,11 +1589,8 @@ function showSingleKeyDeleteConfirmModal(key, button) {
   titleElement.textContent = "确认删除密钥";
   messageElement.innerHTML = `确定要删除密钥 <span class="font-mono text-amber-300 font-semibold">${keyDisplay}</span> 吗？<br>此操作无法撤销。`;
 
-  // 移除旧的监听器并重新附加，以确保 key 和 button 参数是最新的
-  const newConfirmButton = confirmButton.cloneNode(true);
-  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
-
-  newConfirmButton.onclick = () => executeSingleKeyDelete(key, button);
+  // 直接设置onclick，避免cloneNode的问题
+  confirmButton.onclick = () => executeSingleKeyDelete(key, button);
 
   modalElement.classList.remove("hidden");
 }
@@ -1672,10 +1669,8 @@ function showDeleteConfirmationModal(type, event) {
     confirmButton.disabled = true;
   }
 
-  // Re-assign onclick to ensure it captures the correct 'type' and avoids stale closures.
-  const newConfirmButton = confirmButton.cloneNode(true);
-  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
-  newConfirmButton.onclick = () => executeDeleteSelectedKeys(type);
+  // 直接设置onclick，避免cloneNode的问题
+  confirmButton.onclick = () => executeDeleteSelectedKeys(type);
   modalElement.classList.remove("hidden");
 }
 
