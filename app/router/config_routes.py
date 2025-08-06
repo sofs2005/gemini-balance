@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 from app.core.security import verify_auth_token
 from app.log.logger import Logger, get_config_routes_logger
@@ -59,7 +59,13 @@ async def reset_config(request: Request):
 
 
 class DeleteKeysRequest(BaseModel):
-    keys: List[str] = Field(..., description="List of API keys to delete")
+    keys: List[str] = Field(default_factory=list, description="List of API keys to delete")
+
+    @validator('keys')
+    def keys_must_not_be_empty(cls, v):
+        if not v:
+            raise ValueError('Keys list cannot be empty')
+        return v
 
 
 @router.delete("/keys/{key_to_delete}", response_model=Dict[str, Any])
@@ -104,9 +110,6 @@ async def delete_selected_keys_route(
         logger.warning("Unauthorized attempt to bulk delete keys")
         return RedirectResponse(url="/", status_code=302)
 
-    if not delete_request.keys:
-        logger.warning("Attempt to bulk delete keys with an empty list.")
-        raise HTTPException(status_code=400, detail="No keys provided for deletion.")
 
     try:
         logger.info(f"Attempting to bulk delete {len(delete_request.keys)} keys.")

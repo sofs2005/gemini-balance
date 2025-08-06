@@ -168,28 +168,3 @@ async def trigger_pool_maintenance(
             content={"success": False, "message": f"Maintenance failed: {str(e)}"}
         )
 
-@router.delete("/api/keys/invalid")
-async def delete_invalid_keys(
-    request: Request,
-    key_manager: KeyManager = Depends(get_key_manager_instance),
-):
-    """
-    Delete all invalid keys.
-    """
-    auth_token = request.cookies.get("auth_token")
-    if not auth_token or not verify_auth_token(auth_token):
-        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
-
-    try:
-        removed_count = await key_manager.remove_all_invalid_keys()
-        return {
-            "success": True,
-            "message": f"Successfully removed {removed_count} invalid keys.",
-            "removed_count": removed_count,
-        }
-    except Exception as e:
-        logger.error(f"Failed to delete invalid keys: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "message": f"Failed to delete invalid keys: {str(e)}"}
-        )
