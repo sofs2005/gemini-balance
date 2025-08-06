@@ -245,10 +245,19 @@ function copyKey(key) {
 
 // showCopyStatus 函数已废弃。
 
+// 全局变量用于跟踪延迟刷新操作
+let pendingRefreshTimeout = null;
+
 async function verifyKey(key, button) {
   button.disabled = true;
   const originalHtml = button.innerHTML;
   button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
+
+  // 清除之前的延迟刷新操作，避免竞态条件
+  if (pendingRefreshTimeout) {
+    clearTimeout(pendingRefreshTimeout);
+    pendingRefreshTimeout = null;
+  }
 
   // 确定当前密钥在哪个列表中
   const listItem = button.closest('li[data-key]');
@@ -295,7 +304,7 @@ async function verifyKey(key, button) {
     // 只在可能发生状态变化时才刷新
     if (needsRefresh) {
       const scrollY = window.scrollY;
-      setTimeout(async () => {
+      pendingRefreshTimeout = setTimeout(async () => {
           try {
               // 刷新两个密钥列表以反映状态变化
               await Promise.all([
@@ -308,6 +317,8 @@ async function verifyKey(key, button) {
           } finally {
               // 恢复滚动位置
               window.scrollTo({ top: scrollY, behavior: 'auto' });
+              // 清除已完成的 timeout
+              pendingRefreshTimeout = null;
           }
       }, 2000); // 延迟2秒，让验证结果消息先显示
     }
