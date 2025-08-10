@@ -49,30 +49,24 @@ app/
 
 ## ✨ 功能亮点
 
-*   **多 Key 负载均衡**: 支持配置多个 Gemini API Key (`API_KEYS`)，自动按顺序轮询使用，提高可用性和并发能力。
+*   **多 Key 负载均衡**: 支持配置多个 Gemini API Key，通过智能 ValidKeyPool 轮询和负载均衡。
 *   **可视化配置即时生效**: 通过管理后台修改配置后，无需重启服务即可生效。
-    ![配置面板](files/image4.png)
 *   **双协议 API 兼容**: 同时支持 Gemini 和 OpenAI 格式的 CHAT API 请求转发。
     *   OpenAI Base URL: `http://localhost:8000(/hf)/v1`
     *   Gemini Base URL: `http://localhost:8000(/gemini)/v1beta`
-*   **图文对话与修图**: 通过 `IMAGE_MODELS` 配置支持图文对话和修图功能的模型，调用时使用 `配置模型-image` 模型名。
-    ![对话生图](files/image6.png)
-    ![修改图片](files/image7.png)
-*   **联网搜索**: 通过 `SEARCH_MODELS` 配置支持联网搜索的模型，调用时使用 `配置模型-search` 模型名。
-    ![联网搜索](files/image8.png)
+*   **图文对话与生成**: 通过 `IMAGE_MODELS` 配置支持图文对话和图像生成功能，调用时使用 `模型名-image` 格式。
+*   **联网搜索**: 通过 `SEARCH_MODELS` 配置支持联网搜索的模型，调用时使用 `模型名-search` 格式。
 *   **Key 状态监控**: 提供 `/keys_status` 页面（需要认证），实时查看各 Key 的状态和使用情况。
-    ![监控面板](files/image.png)
-*   **详细日志记录**: 提供详细的错误日志，方便排查问题。
-    ![调用详情](files/image1.png)
-    ![日志列表](files/image2.png)
-    ![日志详情](files/image3.png)
+*   **详细日志系统**: 提供全面的错误日志，支持搜索和过滤功能。
 *   **灵活的密钥添加**: 支持通过正则表达式 `gemini_key` 批量添加密钥，并自动去重。
-    ![添加密钥](files/image5.png)
-*   **失败重试与自动禁用**: 自动处理 API 请求失败，进行重试 (`MAX_RETRIES`)，并在 Key 失效次数过多时自动禁用 (`MAX_FAILURES`)，定时检查恢复 (`CHECK_INTERVAL_HOURS`)。
+*   **智能失败处理**: 自动重试机制 (`MAX_RETRIES`) 和失败次数超过阈值时自动禁用密钥 (`MAX_FAILURES`)。
 *   **全面的 API 兼容**:
     *   **Embeddings 接口**: 完美适配 OpenAI 格式的 `embeddings` 接口。
-    *   **画图接口**: 将 `imagen-3.0-generate-002` 模型接口改造为 OpenAI 画图接口格式。
-*   **模型列表自动维护**: 自动获取并同步 Gemini 和 OpenAI 的最新模型列表，兼容 New API。
+    *   **图像生成接口**: 将 `imagen-3.0-generate-002` 模型接口改造为 OpenAI 图像生成接口格式。
+    *   **Files API**: 完整支持文件上传和管理功能。
+    *   **Vertex Express**: 支持 Google Vertex AI 平台。
+*   **自动模型列表维护**: 自动获取并同步 Gemini 和 OpenAI 的最新模型列表，兼容 New API。
+*   **多种图床支持**: 支持 SM.MS、PicGo 和 Cloudflare 图床上传生成的图像。
 *   **代理支持**: 支持配置 HTTP/SOCKS5 代理 (`PROXIES`)，方便在特殊网络环境下使用。
 *   **Docker 支持**: 提供 AMD 和 ARM 架构的 Docker 镜像，方便快速部署。
     *   镜像地址: `ghcr.io/snailyp/gemini-balance:latest`
@@ -141,10 +135,12 @@ app/
 *   `GET /models`: 列出可用的 Gemini 模型。
 *   `POST /models/{model_name}:generateContent`: 生成内容。
 *   `POST /models/{model_name}:streamGenerateContent`: 流式生成内容。
+*   `GET /files`: 列出已上传的文件。
+*   `POST /files`: 上传文件。
 
 ### OpenAI API 格式
 
-#### 兼容 huggingface (HF) 格式
+#### 兼容 HuggingFace (HF) 格式
 
 *   `GET /hf/v1/models`: 列出模型。
 *   `POST /hf/v1/chat/completions`: 聊天补全。
@@ -157,6 +153,13 @@ app/
 *   `POST /openai/v1/chat/completions`: 聊天补全 (推荐，速度更快，防截断)。
 *   `POST /openai/v1/embeddings`: 创建文本嵌入。
 *   `POST /openai/v1/images/generations`: 生成图像。
+
+### Web 界面
+
+- **主界面**: `http://localhost:8000`
+- **密钥管理**: `http://localhost:8000/keys_status`
+- **配置管理**: `http://localhost:8000/config`
+- **错误日志**: `http://localhost:8000/error_logs`
 
 ---
 

@@ -49,18 +49,24 @@ app/
 
 ## ✨ Feature Highlights
 
-*   **Multi-Key Load Balancing**: Supports multiple Gemini API Keys with intelligent rotation and load balancing.
-*   **OpenAI API Compatibility**: Provides OpenAI-compatible API interface, seamlessly integrating with existing OpenAI applications.
-*   **Real-time Key Status Monitoring**: Web interface displays key status, failure counts, and usage statistics in real-time.
-*   **Intelligent Failure Handling**: Automatic retry mechanism (`MAX_RETRIES`) and automatic key disabling when failure count exceeds threshold (`MAX_FAILURES`), with scheduled recovery checks (`CHECK_INTERVAL_HOURS`).
-*   **Model Filtering and Management**: Supports custom model filtering (`FILTERED_MODELS`) and search model configuration (`SEARCH_MODELS`).
-*   **Image Generation Integration**: Integrates `imagen-3.0-generate-002` model and converts it to OpenAI image generation interface format.
-*   **Multiple Image Hosting Support**: Supports SM.MS, PicGo, and Cloudflare image hosting for generated images.
+*   **Multi-Key Load Balancing**: Supports multiple Gemini API Keys with intelligent ValidKeyPool rotation and load balancing.
+*   **Visual Configuration with Instant Effect**: Configuration changes through the admin panel take effect immediately without service restart.
+*   **Dual Protocol API Compatibility**: Supports both Gemini and OpenAI format CHAT API request forwarding.
+    *   OpenAI Base URL: `http://localhost:8000(/hf)/v1`
+    *   Gemini Base URL: `http://localhost:8000(/gemini)/v1beta`
+*   **Image Chat and Generation**: Supports image conversation and generation through `IMAGE_MODELS` configuration, use `model-image` format when calling.
+*   **Web Search Integration**: Supports web search through `SEARCH_MODELS` configuration, use `model-search` format when calling.
+*   **Real-time Key Status Monitoring**: Web interface at `/keys_status` (authentication required) displays key status and usage statistics in real-time.
+*   **Detailed Logging System**: Provides comprehensive error logs with search and filtering capabilities.
 *   **Flexible Key Addition**: Supports batch key addition through regex `gemini_key` with automatic deduplication.
+*   **Intelligent Failure Handling**: Automatic retry mechanism (`MAX_RETRIES`) and automatic key disabling when failure count exceeds threshold (`MAX_FAILURES`).
 *   **Comprehensive API Compatibility**:
     *   **Embeddings Interface**: Perfect adaptation to OpenAI format `embeddings` interface.
     *   **Image Generation Interface**: Converts `imagen-3.0-generate-002` model interface to OpenAI image generation interface format.
+    *   **Files API**: Full support for file upload and management.
+    *   **Vertex Express**: Support for Google Vertex AI platform.
 *   **Automatic Model List Maintenance**: Automatically fetches and syncs the latest model lists from Gemini and OpenAI, compatible with New API.
+*   **Multiple Image Hosting Support**: Supports SM.MS, PicGo, and Cloudflare image hosting for generated images.
 *   **Proxy Support**: Supports HTTP/SOCKS5 proxy configuration (`PROXIES`) for use in special network environments.
 *   **Docker Support**: Provides Docker images for AMD and ARM architectures for quick deployment.
     *   Image address: `ghcr.io/snailyp/gemini-balance:latest`
@@ -147,10 +153,36 @@ Copy `.env.example` to `.env` and configure your settings. Key configuration ite
 
 ## 🔗 API Endpoints
 
-- **Web Interface**: `http://localhost:8000`
+### Gemini API Format (`/gemini/v1beta`)
+
+*   `GET /models`: List available Gemini models.
+*   `POST /models/{model_name}:generateContent`: Generate content.
+*   `POST /models/{model_name}:streamGenerateContent`: Stream generate content.
+*   `GET /files`: List uploaded files.
+*   `POST /files`: Upload files.
+
+### OpenAI API Format
+
+#### HuggingFace (HF) Compatible Format
+
+*   `GET /hf/v1/models`: List models.
+*   `POST /hf/v1/chat/completions`: Chat completions.
+*   `POST /hf/v1/embeddings`: Create text embeddings.
+*   `POST /hf/v1/images/generations`: Generate images.
+
+#### Standard OpenAI Format
+
+*   `GET /openai/v1/models`: List models.
+*   `POST /openai/v1/chat/completions`: Chat completions (recommended, faster, prevents truncation).
+*   `POST /openai/v1/embeddings`: Create text embeddings.
+*   `POST /openai/v1/images/generations`: Generate images.
+
+### Web Interface
+
+- **Main Interface**: `http://localhost:8000`
 - **Key Management**: `http://localhost:8000/keys_status`
-- **OpenAI Compatible**: `http://localhost:8000/v1`
-- **Gemini Native**: `http://localhost:8000/gemini/v1beta`
+- **Configuration**: `http://localhost:8000/config`
+- **Error Logs**: `http://localhost:8000/error_logs`
 
 ## 🎁 Project Support
 
