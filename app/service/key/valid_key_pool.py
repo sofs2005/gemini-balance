@@ -186,48 +186,17 @@ class ValidKeyPool:
                     # 使用次数已达到当前模型限制，不放回池中
                     logger.info(f"Key {redact_key_for_logging(key_obj.key)} reached usage limit for model type, removed from pool")
 
-                # 检查是否需要紧急补充
-                min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
-                current_size = len(self.valid_keys)
-
-                if current_size < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
-                    logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
-                    asyncio.create_task(self.emergency_refill_async())
-                elif current_size < self.pool_size:  # 未达到最大容量时继续补充
-                    # 循序式补充策略：每次只补充1个密钥，避免并发验证过多
-                    import random
-
-                    if current_size < min_threshold:
-                        # 低于阈值时，高概率补充1个
-                        refill_chance = 0.8  # 80%概率补充
-                        logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering sequential refill (80% chance)")
-                    elif current_size < self.pool_size * 0.8:  # 低于80%容量时
-                        # 根据池大小动态调整补充概率
-                        if current_size < min_threshold * 1.5:  # 低于15个时
-                            refill_chance = 0.6  # 60%概率补充
-                        elif current_size < min_threshold * 2:  # 低于20个时
-                            refill_chance = 0.4  # 40%概率补充
-                        else:  # 20-40个时
-                            refill_chance = 0.2  # 20%概率补充
-                        logger.debug(f"Pool size {current_size} below 80% capacity, refill chance: {refill_chance*100:.0f}%")
-                    else:
-                        # 接近满容量时，低概率补充
-                        refill_chance = 0.05  # 5%概率补充
-                        logger.debug(f"Pool size {current_size} near capacity, refill chance: {refill_chance*100:.0f}%")
-
-                    if random.random() < refill_chance:
-                        logger.info(f"Pool size {current_size}, triggering sequential async refill")
-                        asyncio.create_task(self.async_verify_and_add(model_name))
-                    else:
-                        logger.debug(f"Pool size {current_size}, skipping refill")
-                else:
-                    logger.debug(f"Pool size {current_size} at capacity {self.pool_size}, no refill needed")
+                    # 只有在key被移出池子时才触发补充
+                    self._trigger_refill_on_key_removal(model_name)
 
                 return key_obj.key
             else:
                 # 密钥已过期
                 self.stats["expired_keys_removed"] += 1
                 logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
+
+                # 过期密钥被移除时也触发补充
+                self._trigger_refill_on_key_removal(model_name)
 
         # 池为空或严重不足，记录miss并进入紧急恢复模式
         self.stats["miss_count"] += 1
@@ -239,6 +208,45 @@ class ValidKeyPool:
 
         return await self.emergency_refill(model_name)
 
+    def _trigger_refill_on_key_removal(self, model_name: str = None) -> None:
+        """
+        当密钥被移出池子时触发补充逻辑
+        """
+        min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
+        current_size = len(self.valid_keys)
+
+        if current_size < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
+            logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
+            asyncio.create_task(self.emergency_refill_async())
+        elif current_size < self.pool_size:  # 未达到最大容量时继续补充
+            # 循序式补充策略：每次只补充1个密钥
+            import random
+
+            if current_size < min_threshold:
+                # 低于阈值时，高概率补充1个
+                refill_chance = 0.9  # 90%概率补充
+                logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering sequential refill (90% chance)")
+            elif current_size < self.pool_size * 0.8:  # 低于80%容量时
+                # 根据池大小动态调整补充概率
+                if current_size < min_threshold * 1.5:  # 低于30个时
+                    refill_chance = 0.7  # 70%概率补充
+                elif current_size < min_threshold * 2:  # 低于40个时
+                    refill_chance = 0.5  # 50%概率补充
+                else:  # 40个以上时
+                    refill_chance = 0.3  # 30%概率补充
+                logger.debug(f"Pool size {current_size} below 80% capacity, refill chance: {refill_chance*100:.0f}%")
+            else:
+                # 接近满容量时，低概率补充
+                refill_chance = 0.1  # 10%概率补充
+                logger.debug(f"Pool size {current_size} near capacity, refill chance: {refill_chance*100:.0f}%")
+
+            if random.random() < refill_chance:
+                logger.info(f"Key removed from pool, current size {current_size}, triggering sequential async refill")
+                asyncio.create_task(self.async_verify_and_add(model_name))
+            else:
+                logger.debug(f"Key removed from pool, current size {current_size}, skipping refill")
+        else:
+            logger.debug(f"Pool size {current_size} at capacity {self.pool_size}, no refill needed")
 
     async def async_verify_and_add(self, model_name: str = None) -> None:
         """
