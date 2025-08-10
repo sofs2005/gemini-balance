@@ -22,6 +22,10 @@
 
 **Gemini Balance** is a Python FastAPI-based application designed to provide proxy and load balancing functions for the Google Gemini API. It allows you to manage multiple Gemini API Keys and implement key rotation, authentication, model filtering, and status monitoring through simple configuration. Additionally, the project integrates image generation and multiple image hosting upload functions, and supports OpenAI API format proxy.
 
+This is a personal fork of the excellent **Gemini Balance** project by [snailyp](https://github.com/snailyp). The original project provides comprehensive Gemini API proxy and load balancing functionality.
+
+**Original Project**: [https://github.com/snailyp/gemini-balance](https://github.com/snailyp/gemini-balance)
+
 <details>
 <summary>📂 View Project Structure</summary>
 
@@ -216,9 +220,7 @@ If you find this project helpful, you can support me through the following ways:
 
 This project is licensed under [CC BY-NC 4.0](LICENSE) (Attribution-NonCommercial).
 
-## 💖 Friendly Projects
 
-*   **[OneLine](https://github.com/chengtx809/OneLine)** by [chengtx809](https://github.com/chengtx809) - AI-driven hot event timeline generation tool.
 
 
 

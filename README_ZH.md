@@ -22,6 +22,10 @@
 
 **Gemini Balance** 是一个基于 Python FastAPI 构建的应用程序，旨在提供 Google Gemini API 的代理和负载均衡功能。它允许您管理多个 Gemini API Key，并通过简单的配置实现 Key 的轮询、认证、模型过滤和状态监控。此外，项目还集成了图像生成和多种图床上传功能，并支持 OpenAI API 格式的代理。
 
+这是基于 [snailyp](https://github.com/snailyp) 优秀的 **Gemini Balance** 项目的个人分支版本。原项目提供了全面的 Gemini API 代理和负载均衡功能。
+
+**原项目地址**: [https://github.com/snailyp/gemini-balance](https://github.com/snailyp/gemini-balance)
+
 <details>
 <summary>📂 查看项目结构</summary>
 
@@ -195,9 +199,7 @@ app/
 
 本项目采用 [CC BY-NC 4.0](LICENSE)（署名-非商业性使用）协议。
 
-## 💖 友情项目
 
-*   **[OneLine](https://github.com/chengtx809/OneLine)** by [chengtx809](https://github.com/chengtx809) - AI 驱动的热点事件时间轴生成工具。
 
 
 
