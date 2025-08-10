@@ -171,20 +171,24 @@ class ValidKeyPool:
                     usage_limit_reached = True
                     self.stats["usage_exhausted_keys_removed"] += 1
 
-                # 记录详细的命中日志
-                hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-                usage_limit_str = str(max_usage_for_model)
-                logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
-                           f"usage: {key_obj.usage_count}/{usage_limit_str}, "
-                           f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
-
                 # 如果密钥未达到当前模型的使用限制，放回池中
                 if not usage_limit_reached:
                     self.valid_keys.append(key_obj)
                     self._pool_keys_set.add(key_obj.key)
+
+                    # 记录详细的命中日志（密钥放回池中后）
+                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+                    usage_limit_str = str(max_usage_for_model)
+                    logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
+                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
+                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
                 else:
                     # 使用次数已达到当前模型限制，不放回池中
-                    logger.info(f"Key {redact_key_for_logging(key_obj.key)} reached usage limit for model type, removed from pool")
+                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+                    usage_limit_str = str(max_usage_for_model)
+                    logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
+                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
+                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%} - REMOVED (usage limit reached)")
 
                     # 只有在key被移出池子时才触发补充
                     self._trigger_refill_on_key_removal(model_name)
