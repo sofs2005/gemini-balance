@@ -2391,47 +2391,7 @@ endblock %} {% block head_extra_styles %}
           >
         </div>
 
-        <!-- 调度器控制 -->
-        <div class="mb-6 p-4 bg-gray-50 rounded-lg border">
-          <h3 class="text-lg font-semibold mb-3 text-gray-800 flex items-center gap-2">
-            <i class="fas fa-cogs text-blue-500"></i>
-            调度器控制
-          </h3>
 
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <span class="font-medium text-gray-700">调度器状态:</span>
-              <span id="schedulerStatusDisplay" class="ml-2 text-sm">
-                <i class="fas fa-spinner fa-spin text-gray-400"></i> 检查中...
-              </span>
-            </div>
-          </div>
-
-          <div class="flex gap-3">
-            <button
-              id="startSchedulerBtn"
-              onclick="controlScheduler('start')"
-              class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 flex items-center gap-2"
-              disabled
-            >
-              <i class="fas fa-play"></i>
-              <span>启动调度器</span>
-            </button>
-            <button
-              id="stopSchedulerBtn"
-              onclick="controlScheduler('stop')"
-              class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 flex items-center gap-2"
-              disabled
-            >
-              <i class="fas fa-stop"></i>
-              <span>停止调度器</span>
-            </button>
-          </div>
-
-          <small class="text-gray-500 mt-2 block">
-            调度器负责密钥池维护、日志清理等后台任务。通常应保持运行状态。
-          </small>
-        </div>
 
         <!-- Gemini配额重置时间 -->
         <div class="mb-6">
