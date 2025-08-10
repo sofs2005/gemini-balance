@@ -5,7 +5,7 @@
 import asyncio
 import random
 from collections import deque
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from datetime import datetime
 import time
 
@@ -61,7 +61,10 @@ class ValidKeyPool:
             "maintenance_count": 0,
             "preload_count": 0,
             "fallback_count": 0,
-            "verification_failures": 0
+            "verification_failures": 0,
+            "usage_exhausted_keys_removed": 0,  # 新增：因使用次数耗尽而移除的密钥数
+            "pro_model_requests": 0,  # 新增：Pro模型请求数
+            "non_pro_model_requests": 0  # 新增：非Pro模型请求数
         }
 
         # 性能监控
@@ -74,11 +77,56 @@ class ValidKeyPool:
         }
         
         logger.info(f"ValidKeyPool initialized with pool_size={pool_size}, ttl_hours={ttl_hours}")
-    
+
     def set_chat_service(self, chat_service):
         """设置聊天服务实例"""
         self.chat_service = chat_service
         logger.debug("Chat service set for ValidKeyPool")
+
+    def _is_pro_model(self, model_name: str) -> bool:
+        """
+        判断是否为Pro模型
+
+        Args:
+            model_name: 模型名称
+
+        Returns:
+            bool: 如果是Pro模型返回True，否则返回False
+        """
+        if not model_name:
+            return False
+
+        # 移除模型名称中的后缀
+        clean_model = model_name
+        if clean_model.endswith("-search"):
+            clean_model = clean_model[:-7]
+        if clean_model.endswith("-image"):
+            clean_model = clean_model[:-6]
+        if clean_model.endswith("-non-thinking"):
+            clean_model = clean_model[:-13]
+
+        # 检查是否在Pro模型列表中
+        is_pro = any(pro_model in clean_model for pro_model in settings.PRO_MODELS)
+
+        if is_pro:
+            logger.debug(f"Model {model_name} identified as Pro model")
+
+        return is_pro
+
+    def _get_max_usage_for_model(self, model_name: str) -> int:
+        """
+        根据模型类型获取最大使用次数
+
+        Args:
+            model_name: 模型名称
+
+        Returns:
+            int: 最大使用次数
+        """
+        if self._is_pro_model(model_name):
+            return getattr(settings, 'PRO_MODEL_MAX_USAGE', 5)
+        else:
+            return getattr(settings, 'NON_PRO_MODEL_MAX_USAGE', 20)
     
     async def get_valid_key(self, model_name: str = None) -> str:
         """
@@ -90,8 +138,14 @@ class ValidKeyPool:
         Returns:
             str: 有效的API密钥
         """
-        start_time = time.time()
         self.performance_stats["total_get_key_calls"] += 1
+
+        # 记录模型请求统计
+        if model_name:
+            if self._is_pro_model(model_name):
+                self.stats["pro_model_requests"] += 1
+            else:
+                self.stats["non_pro_model_requests"] += 1
 
         # 清理过期密钥
         expired_count = self._remove_expired_keys()
@@ -101,14 +155,36 @@ class ValidKeyPool:
             key_obj = self.valid_keys.popleft()
             self._pool_keys_set.discard(key_obj.key)
 
+            # 检查密钥是否可以使用（未过期）
             if not key_obj.is_expired():
+                # 增加使用计数
+                key_obj.increment_usage()
+
                 self.stats["hit_count"] += 1
                 self.performance_stats["last_hit_time"] = datetime.now()
 
+                # 检查当前模型的使用次数限制
+                max_usage_for_model = self._get_max_usage_for_model(model_name) if model_name else getattr(settings, 'NON_PRO_MODEL_MAX_USAGE', 20)
+                usage_limit_reached = False
+
+                if max_usage_for_model > 0 and key_obj.usage_count >= max_usage_for_model:
+                    usage_limit_reached = True
+                    self.stats["usage_exhausted_keys_removed"] += 1
+
                 # 记录详细的命中日志
                 hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+                usage_limit_str = str(max_usage_for_model)
                 logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
+                           f"usage: {key_obj.usage_count}/{usage_limit_str}, "
                            f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
+
+                # 如果密钥未达到当前模型的使用限制，放回池中
+                if not usage_limit_reached:
+                    self.valid_keys.append(key_obj)
+                    self._pool_keys_set.add(key_obj.key)
+                else:
+                    # 使用次数已达到当前模型限制，不放回池中
+                    logger.info(f"Key {redact_key_for_logging(key_obj.key)} reached usage limit for model type, removed from pool")
 
                 # 检查是否需要紧急补充
                 min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
@@ -122,8 +198,8 @@ class ValidKeyPool:
                     if current_size < min_threshold:
                         # 低于阈值时，每次补充2个以加速增长
                         logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering 2x async refill")
-                        asyncio.create_task(self.async_verify_and_add())
-                        asyncio.create_task(self.async_verify_and_add())
+                        asyncio.create_task(self.async_verify_and_add(model_name))
+                        asyncio.create_task(self.async_verify_and_add(model_name))
                     elif current_size < self.pool_size * 0.8:  # 低于80%容量时，偶尔补充
                         import random
                         # 根据池大小动态调整补充概率和数量
@@ -143,7 +219,7 @@ class ValidKeyPool:
                         if random.random() < refill_chance:
                             logger.info(f"Pool size {current_size} below 80% capacity, triggering {refill_count}x async refill ({refill_chance*100:.0f}% chance)")
                             for _ in range(refill_count):
-                                asyncio.create_task(self.async_verify_and_add())
+                                asyncio.create_task(self.async_verify_and_add(model_name))
                         else:
                             logger.debug(f"Pool size {current_size}, skipping refill ({(1-refill_chance)*100:.0f}% chance)")
                     else:
@@ -151,7 +227,7 @@ class ValidKeyPool:
                         import random
                         if random.random() < 0.1:  # 10%概率补充
                             logger.info(f"Pool size {current_size} near capacity, triggering async refill (10% chance)")
-                            asyncio.create_task(self.async_verify_and_add())
+                            asyncio.create_task(self.async_verify_and_add(model_name))
                         else:
                             logger.debug(f"Pool size {current_size}, skipping refill (90% chance)")
                 else:
@@ -159,6 +235,7 @@ class ValidKeyPool:
 
                 return key_obj.key
             else:
+                # 密钥已过期
                 self.stats["expired_keys_removed"] += 1
                 logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
 
@@ -171,10 +248,14 @@ class ValidKeyPool:
                       f"miss rate: {miss_rate:.2%}, expired removed: {expired_count}")
 
         return await self.emergency_refill(model_name)
-    
-    async def async_verify_and_add(self) -> None:
+
+
+    async def async_verify_and_add(self, model_name: str = None) -> None:
         """
         异步验证随机密钥并添加到池中
+
+        Args:
+            model_name: 模型名称，用于确定使用次数限制
         """
         logger.info("Starting async_verify_and_add")
 
@@ -184,7 +265,7 @@ class ValidKeyPool:
             if len(self.valid_keys) >= self.pool_size:
                 logger.debug("Pool is full, skipping verification")
                 return
-            
+
             # 获取可能有效的密钥列表（排除已知失效的密钥）
             available_keys = []
             total_keys = len(self.key_manager.api_keys)
@@ -199,39 +280,48 @@ class ValidKeyPool:
                 logger.warning("No valid API keys available for verification")
                 return
 
-            # 从有效密钥中随机选择
-            random_key = random.choice(available_keys)
-            logger.info(f"Selected key {redact_key_for_logging(random_key)} from {len(available_keys)} available keys")
-            
+            # 选择密钥策略：优先选择未在池中的密钥
+            pool_keys = self._pool_keys_set
+            unused_keys = [key for key in available_keys if key not in pool_keys]
+
+            if unused_keys:
+                # 从未使用的密钥中随机选择
+                selected_key = random.choice(unused_keys)
+                logger.info(f"Selected unused key {redact_key_for_logging(selected_key)} from {len(unused_keys)} unused keys")
+            else:
+                # 如果所有密钥都在池中，随机选择一个
+                selected_key = random.choice(available_keys)
+                logger.info(f"All keys in use, selected key {redact_key_for_logging(selected_key)} from {len(available_keys)} available keys")
+
             # 检查密钥是否已在池中
-            if self._is_key_in_pool(random_key):
-                logger.info(f"Key {redact_key_for_logging(random_key)} already in pool, skipping")
+            if self._is_key_in_pool(selected_key):
+                logger.info(f"Key {redact_key_for_logging(selected_key)} already in pool, skipping")
                 return
-            
+
             # 验证密钥
             verification_start = time.time()
-            if await self._verify_key(random_key):
+            if await self._verify_key(selected_key):
                 # 验证成功后，再次检查池大小（防止竞态条件）
                 if len(self.valid_keys) >= self.pool_size:
-                    logger.warning(f"Pool size limit reached ({self.pool_size}) after verification, skipping add for key {redact_key_for_logging(random_key)}")
+                    logger.warning(f"Pool size limit reached ({self.pool_size}) after verification, skipping add for key {redact_key_for_logging(selected_key)}")
                     return
 
-                # 添加到池中
+                # 添加到池中（使用默认的无限制，具体限制在获取时根据模型类型判断）
                 verification_time = time.time() - verification_start
                 self._update_avg_verification_time(verification_time)
 
-                key_obj = ValidKeyWithTTL(random_key, self.ttl_hours)
+                key_obj = ValidKeyWithTTL(selected_key, self.ttl_hours)
                 self.valid_keys.append(key_obj)
                 self._pool_keys_set.add(key_obj.key)
                 self.stats["successful_verifications"] += 1
 
                 # 记录详细的验证成功日志
                 pool_utilization = len(self.valid_keys) / self.pool_size if self.pool_size > 0 else 0
-                logger.info(f"Successfully verified and added key {redact_key_for_logging(random_key)} to pool, "
+                logger.info(f"Successfully verified and added key {redact_key_for_logging(selected_key)} to pool, "
                            f"verification time: {verification_time:.3f}s, pool utilization: {pool_utilization:.1%}")
             else:
                 self.stats["verification_failures"] += 1
-                logger.debug(f"Key verification failed for {redact_key_for_logging(random_key)}")
+                logger.debug(f"Key verification failed for {redact_key_for_logging(selected_key)}")
     
     async def emergency_refill(self, model_name: str = None) -> str:
         """
@@ -292,7 +382,7 @@ class ValidKeyPool:
                             self.valid_keys.append(key_obj)
                             self._pool_keys_set.add(key_obj.key)
                             success_count += 1
-                            logger.info(f"Background refill: added key {redact_key_for_logging(result)} to pool.")
+                            logger.info(f"Background refill: added key {redact_key_for_logging(result)} to pool")
                         else:
                             logger.warning("Pool size limit reached during background refill, stopping.")
                             break
@@ -567,7 +657,8 @@ class ValidKeyPool:
                 if len(self.valid_keys) < self.pool_size:
                     self.valid_keys.append(new_key_obj)
                     self._pool_keys_set.add(new_key_obj.key)
-                    logger.info(f"Successfully re-validated and re-added key {redact_key_for_logging(key)} to the pool. New pool size: {len(self.valid_keys)}")
+                    logger.info(f"Successfully re-validated and re-added key {redact_key_for_logging(key)} to the pool. "
+                               f"New pool size: {len(self.valid_keys)}")
                 else:
                     logger.warning(f"Pool became full during re-validation. Discarding re-validated key: {redact_key_for_logging(key)}")
             else:
@@ -824,6 +915,9 @@ class ValidKeyPool:
         logger.info(f"Average Key Age: {stats['avg_key_age_seconds']}s "
                    f"(min: {stats['min_key_age_seconds']}s, max: {stats['max_key_age_seconds']}s)")
         logger.info(f"Total Requests: {stats['stats']['hit_count'] + stats['stats']['miss_count']}")
+        logger.info(f"Pro Model Requests: {stats['stats']['pro_model_requests']}, "
+                   f"Non-Pro Model Requests: {stats['stats']['non_pro_model_requests']}")
+        logger.info(f"Usage Exhausted Keys Removed: {stats['stats']['usage_exhausted_keys_removed']}")
         logger.info(f"Emergency Refills: {stats['stats']['emergency_refill_count']}")
         logger.info(f"Maintenance Runs: {stats['stats']['maintenance_count']}")
         logger.info(f"Average Verification Time: {stats['performance_stats']['avg_verification_time']:.3f}s")
@@ -845,7 +939,10 @@ class ValidKeyPool:
             "maintenance_count": 0,
             "preload_count": 0,
             "fallback_count": 0,
-            "verification_failures": 0
+            "verification_failures": 0,
+            "usage_exhausted_keys_removed": 0,  # 因使用次数耗尽而移除的密钥数
+            "pro_model_requests": 0,  # Pro模型请求数
+            "non_pro_model_requests": 0  # 非Pro模型请求数
         }
 
         self.performance_stats = {

@@ -2132,12 +2132,12 @@ endblock %} {% block head_extra_styles %}
           <i class="fas fa-clock text-violet-400"></i> 定时任务配置
         </h2>
 
-        <!-- 检查间隔 -->
-        <div class="mb-6">
+        <!-- 检查间隔 (已弃用) -->
+        <div class="mb-6 opacity-50">
           <label
             for="CHECK_INTERVAL_HOURS"
             class="block font-semibold mb-2 text-gray-700"
-            >检查间隔（小时）</label
+            >检查间隔（小时）<span class="text-red-500 text-sm ml-2">[已弃用]</span></label
           >
           <input
             type="number"
@@ -2145,18 +2145,19 @@ endblock %} {% block head_extra_styles %}
             name="CHECK_INTERVAL_HOURS"
             min="1"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
+            disabled
           />
           <small class="text-gray-500 mt-1 block"
-            >定时检查密钥状态的间隔时间（单位：小时）</small
+            >此配置已弃用，现在使用ValidKeyPool的定期维护机制来管理密钥有效性</small
           >
         </div>
 
-        <!-- 批次大小 -->
-        <div class="mb-6">
+        <!-- 批次大小 (已弃用) -->
+        <div class="mb-6 opacity-50">
           <label
             for="KEY_VERIFICATION_BATCH_SIZE"
             class="block font-semibold mb-2 text-gray-700"
-            >密钥验证批次大小</label
+            >密钥验证批次大小<span class="text-red-500 text-sm ml-2">[已弃用]</span></label
           >
           <input
             type="number"
@@ -2165,9 +2166,10 @@ endblock %} {% block head_extra_styles %}
             min="1"
             max="100"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
+            disabled
           />
           <small class="text-gray-500 mt-1 block"
-            >每批同时验证的密钥数量。小批次(1-10)：低负载；中批次(10-50)：平衡；大批次(50-100)：快速验证</small
+            >此配置已弃用，现在使用ValidKeyPool的定期维护机制来管理密钥验证</small
           >
         </div>
 

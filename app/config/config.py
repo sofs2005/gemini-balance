@@ -111,8 +111,8 @@ class Settings(BaseSettings):
     FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS: int = 5  # 假流式发送空数据的间隔时间（秒）
 
     # 调度器配置
-    CHECK_INTERVAL_HOURS: int = 1  # 默认检查间隔为1小时
-    KEY_VERIFICATION_BATCH_SIZE: int = 20  # 密钥验证批次大小，每批验证的密钥数量
+    CHECK_INTERVAL_HOURS: int = 1  # [已弃用] 原定时检查间隔，现使用ValidKeyPool维护机制
+    KEY_VERIFICATION_BATCH_SIZE: int = 20  # [已弃用] 原密钥验证批次大小，现使用ValidKeyPool维护机制
     GEMINI_QUOTA_RESET_HOUR: int = 16  # Gemini配额重置时间（24小时制，UTC+8）
     TIMEZONE: str = "Asia/Shanghai"  # 默认时区
 
@@ -123,6 +123,14 @@ class Settings(BaseSettings):
     POOL_MIN_THRESHOLD: int = 10  # 池大小最小阈值，低于此值时主动补充
     EMERGENCY_REFILL_COUNT: int = 5  # 紧急补充时并发验证的密钥数量
     POOL_MAINTENANCE_INTERVAL_MINUTES: int = 30  # 密钥池维护间隔（分钟）
+
+    # 密钥池使用策略配置
+    PRO_MODELS: List[str] = [
+        "gemini-1.5-pro", "gemini-1.5-pro-latest", "gemini-1.5-pro-002",
+        "gemini-2.0-pro", "gemini-2.0-pro-exp", "gemini-2.5-pro"
+    ]  # Pro模型列表，这些模型的密钥在池中使用次数有限制
+    PRO_MODEL_MAX_USAGE: int = 5  # Pro模型密钥在池中的最大使用次数
+    NON_PRO_MODEL_MAX_USAGE: int = 20  # 非Pro模型密钥在池中的最大使用次数
 
     # github
     GITHUB_REPO_OWNER: str = "snailyp"

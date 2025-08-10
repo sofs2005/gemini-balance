@@ -254,7 +254,32 @@ app/
 
 ## 🎁 项目支持
 
-如果你觉得这个项目对你有帮助，可以考虑通过 [爱发电](https://afdian.com/a/snaily) 支持我。
+如果你觉得这个项目对你有帮助，可以考虑通过以下方式支持我：
+
+### 💰 赞助方式
+
+- **[爱发电](https://afdian.com/a/snaily)** - 持续支持项目发展
+- **微信赞赏** - 扫描下方二维码
+- **支付宝** - 扫描下方二维码
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="https://raw.githubusercontent.com/sofs2005/difytask/refs/heads/main/img/wx.png" alt="微信赞赏码" width="200"/>
+        <br/>
+        <strong>微信赞赏</strong>
+      </td>
+      <td align="center">
+        <img src="https://raw.githubusercontent.com/sofs2005/difytask/refs/heads/main/img/zfb.jpg" alt="支付宝收款码" width="200"/>
+        <br/>
+        <strong>支付宝</strong>
+      </td>
+    </tr>
+  </table>
+</div>
+
+> 💡 你的支持是我持续维护和改进这个项目的动力！
 
 ## 许可证
 
