@@ -3113,73 +3113,7 @@ endblock %} {% block head_extra_styles %}
       });
     });
 
-    // 调度器控制相关函数
-    async function controlScheduler(action) {
-      const startBtn = document.getElementById('startSchedulerBtn');
-      const stopBtn = document.getElementById('stopSchedulerBtn');
-      const statusDisplay = document.getElementById('schedulerStatusDisplay');
 
-      // 禁用按钮并显示加载状态
-      startBtn.disabled = true;
-      stopBtn.disabled = true;
-      statusDisplay.innerHTML = '<i class="fas fa-spinner fa-spin text-blue-500"></i> 执行中...';
-
-      try {
-        const response = await fetch(`/api/scheduler/${action}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-          showNotification(`调度器${action === 'start' ? '启动' : '停止'}成功`, 'success');
-          // 更新状态显示
-          setTimeout(() => {
-            checkSchedulerStatus();
-          }, 1000);
-        } else {
-          throw new Error(result.detail || `调度器${action === 'start' ? '启动' : '停止'}失败`);
-        }
-      } catch (error) {
-        console.error('调度器控制错误:', error);
-        showNotification(`调度器${action === 'start' ? '启动' : '停止'}失败: ${error.message}`, 'error');
-        // 重新启用按钮
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
-        statusDisplay.innerHTML = '<i class="fas fa-exclamation-triangle text-red-500"></i> 状态未知';
-      }
-    }
-
-    // 检查调度器状态
-    async function checkSchedulerStatus() {
-      const statusDisplay = document.getElementById('schedulerStatusDisplay');
-      const startBtn = document.getElementById('startSchedulerBtn');
-      const stopBtn = document.getElementById('stopSchedulerBtn');
-
-      try {
-        // 这里可以添加一个检查调度器状态的API端点
-        // 目前先假设调度器正在运行
-        statusDisplay.innerHTML = '<i class="fas fa-check-circle text-green-500"></i> 运行中';
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-      } catch (error) {
-        console.error('检查调度器状态失败:', error);
-        statusDisplay.innerHTML = '<i class="fas fa-question-circle text-gray-500"></i> 状态未知';
-        startBtn.disabled = false;
-        stopBtn.disabled = false;
-      }
-    }
-
-    // 页面加载时检查调度器状态
-    document.addEventListener('DOMContentLoaded', function() {
-      // 延迟检查调度器状态，确保页面完全加载
-      setTimeout(() => {
-        checkSchedulerStatus();
-      }, 1000);
-    });
   });
 </script>
 {% endblock %}
