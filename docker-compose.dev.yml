@@ -5,12 +5,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gemini-balance
+      # 开发模式下可以添加构建参数
+      # args:
+      #   - BUILD_ENV=development
+    container_name: gemini-balance-dev
     restart: unless-stopped
     ports:
       - "8000:8000"
     env_file:
       - .env
+    # 开发模式下可以挂载代码目录实现热重载
+    # volumes:
+    #   - ./app:/app/app
     depends_on:
       mysql:
         condition: service_healthy
@@ -20,22 +26,26 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    # 开发模式下可以启用调试
+    # environment:
+    #   - DEBUG=1
+    #   - LOG_LEVEL=DEBUG
   mysql:
     image: mysql:8
-    container_name: gemini-balance-mysql
+    container_name: gemini-balance-mysql-dev
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: your_root_password
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    # ports:
-    #   - "3306:3306"
+    ports:
+      - "3306:3306"  # 开发模式下暴露MySQL端口
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
-      interval: 10s # 每隔10秒检查一次
-      timeout: 5s   # 每次检查的超时时间为5秒
-      retries: 3    # 重试3次失败后标记为 unhealthy
-      start_period: 30s # 容器启动后等待30秒再开始第一次健康检查
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
