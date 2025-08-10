@@ -21,15 +21,13 @@ async function checkTokens() {
     const duplicateResults = document.getElementById('duplicateResults');
     const validButtons = document.getElementById('validButtons');
     
-    const apiBaseUrl = document.getElementById('apiBaseUrl').value.trim();
     const testModel = document.getElementById('testModel').value.trim();
 
-    // 保存设置到localStorage
-    localStorage.setItem('batchVerify_apiBaseUrl', apiBaseUrl);
+    // 保存设置到localStorage (API地址不再需要)
     localStorage.setItem('batchVerify_testModel', testModel);
 
-    if (!apiBaseUrl || !testModel) {
-        showAlert('请填写有效的 API 地址和测试模型', 'warning');
+    if (!testModel) {
+        showAlert('请填写有效的测试模型', 'warning');
         return;
     }
 
@@ -71,7 +69,7 @@ async function checkTokens() {
     try {
         // 并发检测所有密钥
         const results = await Promise.all(
-            uniqueTokens.map(token => checkToken(token, apiBaseUrl, testModel))
+            uniqueTokens.map(token => checkToken(token, testModel))
         );
 
         const validTokens = [];
@@ -122,40 +120,27 @@ async function checkTokens() {
     }
 }
 
-async function checkToken(token, apiBaseUrl, testModel) {
-    // 使用 Gemini 原生 API 格式，参考主功能的验证方法
-    // 确保 apiBaseUrl 以正确的格式结尾
-    const baseUrl = apiBaseUrl.replace(/\/$/, '');
-    const fullUrl = `${baseUrl}/models/${testModel}:generateContent?key=${token}`;
-
+async function checkToken(token, testModel) {
+    // 使用与主功能相同的后端验证接口，而不是直接调用 Gemini API
     try {
-        const response = await fetch(fullUrl, {
+        const response = await fetch(`/gemini/v1beta/verify-key/${encodeURIComponent(token)}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                "contents": [
-                    {
-                        "role": "user",
-                        "parts": [{"text": "hi"}]
-                    }
-                ],
-                "generationConfig": {
-                    "temperature": 0.7,
-                    "topP": 1.0,
-                    "maxOutputTokens": 10
-                }
-            })
+            }
         });
 
         if (response.ok) {
-            return { token, isValid: true };
+            const data = await response.json();
+            if (data.success || data.status === "valid") {
+                return { token, isValid: true };
+            } else {
+                const errorMessage = data.error || data.message || "密钥验证失败";
+                return { token, isValid: false, message: errorMessage };
+            }
         } else {
-            const errorData = await response.json();
-            const errorMessage = errorData.error
-                ? errorData.error.message
-                : (errorData.message || `HTTP ${response.status} - ${response.statusText}`);
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error || errorData.message || `HTTP ${response.status} - ${response.statusText}`;
             return { token, isValid: false, message: errorMessage };
         }
     } catch (error) {
