@@ -190,7 +190,6 @@ If you find this project helpful, you can support me through the following ways:
 
 ### 💰 Sponsorship Methods
 
-- **[Afdian](https://afdian.com/a/snaily)** - Continuous support for project development
 - **WeChat Appreciation** - Scan the QR code below
 - **Alipay** - Scan the QR code below
 
@@ -221,17 +220,5 @@ This project is licensed under [CC BY-NC 4.0](LICENSE) (Attribution-NonCommercia
 
 *   **[OneLine](https://github.com/chengtx809/OneLine)** by [chengtx809](https://github.com/chengtx809) - AI-driven hot event timeline generation tool.
 
-## Sponsors
 
-Special thanks to [DigitalOcean](https://m.do.co/c/b249dd7f3b4c) for providing stable and reliable cloud infrastructure support for this project.
-
-<a href="https://m.do.co/c/b249dd7f3b4c">
-  <img src="files/dataocean.svg" alt="DigitalOcean Logo" width="200"/>
-</a>
-
-The CDN acceleration and security protection for this project are sponsored by [Tencent EdgeOne](https://edgeone.ai/?from=github).
-
-<a href="https://edgeone.ai/?from=github">
-  <img src="https://edgeone.ai/media/34fe3a45-492d-4ea4-ae5d-ea1087ca7b4b.png" alt="EdgeOne Logo" width="200"/>
-</a>
 
