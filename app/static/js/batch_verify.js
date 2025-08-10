@@ -123,20 +123,29 @@ async function checkTokens() {
 }
 
 async function checkToken(token, apiBaseUrl, testModel) {
-    const fullUrl = `${apiBaseUrl.replace(/\/$/, '')}/chat/completions`;
-    
+    // 使用 Gemini 原生 API 格式，参考主功能的验证方法
+    // 确保 apiBaseUrl 以正确的格式结尾
+    const baseUrl = apiBaseUrl.replace(/\/$/, '');
+    const fullUrl = `${baseUrl}/models/${testModel}:generateContent?key=${token}`;
+
     try {
         const response = await fetch(fullUrl, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                "model": testModel,
-                "messages": [{ "role": "user", "content": "hi" }],
-                "max_tokens": 1,
-                "stream": false
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "hi"}]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "topP": 1.0,
+                    "maxOutputTokens": 10
+                }
             })
         });
 
@@ -144,8 +153,8 @@ async function checkToken(token, apiBaseUrl, testModel) {
             return { token, isValid: true };
         } else {
             const errorData = await response.json();
-            const errorMessage = errorData.error 
-                ? errorData.error.message 
+            const errorMessage = errorData.error
+                ? errorData.error.message
                 : (errorData.message || `HTTP ${response.status} - ${response.statusText}`);
             return { token, isValid: false, message: errorMessage };
         }
