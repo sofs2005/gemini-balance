@@ -2,9 +2,7 @@ volumes:
   mysql_data:
 services:
   gemini-balance:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: softs2005/gemini-balance:latest
     container_name: gemini-balance
     restart: unless-stopped
     ports:
