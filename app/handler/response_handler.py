@@ -42,21 +42,35 @@ class GeminiResponseHandler(ResponseHandler):
 def _handle_openai_stream_response(
     response: Dict[str, Any], model: str, finish_reason: str, usage_metadata: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    text, reasoning_content, tool_calls, _ = _extract_result(
-        response, model, stream=True, gemini_format=False
-    )
-    if not text and not tool_calls and not reasoning_content:
-        delta = {}
-    else:
-        delta = {"content": text, "reasoning_content": reasoning_content, "role": "assistant"}
-        if tool_calls:
-            delta["tool_calls"] = tool_calls
+    choices = []
+    candidates = response.get("candidates", [])
+
+    for candidate in candidates:
+        index = candidate.get("index", 0)
+        text, reasoning_content, tool_calls, _ = _extract_result(
+            {"candidates": [candidate]}, model, stream=True, gemini_format=False
+        )
+
+        if not text and not tool_calls and not reasoning_content:
+            delta = {}
+        else:
+            delta = {"content": text, "reasoning_content": reasoning_content, "role": "assistant"}
+            if tool_calls:
+                delta["tool_calls"] = tool_calls
+        
+        choice = {
+            "index": index,
+            "delta": delta,
+            "finish_reason": finish_reason
+        }
+        choices.append(choice)
+
     template_chunk = {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion.chunk",
         "created": int(time.time()),
         "model": model,
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+        "choices": choices,
     }
     if usage_metadata:
         template_chunk["usage"] = {"prompt_tokens": usage_metadata.get("promptTokenCount", 0), "completion_tokens": usage_metadata.get("candidatesTokenCount",0), "total_tokens": usage_metadata.get("totalTokenCount", 0)}
@@ -66,26 +80,31 @@ def _handle_openai_stream_response(
 def _handle_openai_normal_response(
     response: Dict[str, Any], model: str, finish_reason: str, usage_metadata: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
-    text, reasoning_content, tool_calls, _ = _extract_result(
-        response, model, stream=False, gemini_format=False
-    )
+    choices = []
+    candidates = response.get("candidates", [])
+    
+    for i, candidate in enumerate(candidates):
+        text, reasoning_content, tool_calls, _ = _extract_result(
+            {"candidates": [candidate]}, model, stream=False, gemini_format=False
+        )
+        choice = {
+            "index": i,
+            "message": {
+                "role": "assistant",
+                "content": text,
+                "reasoning_content": reasoning_content,
+                "tool_calls": tool_calls,
+            },
+            "finish_reason": finish_reason,
+        }
+        choices.append(choice)
+
     return {
         "id": f"chatcmpl-{uuid.uuid4()}",
         "object": "chat.completion",
         "created": int(time.time()),
         "model": model,
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": text,
-                    "reasoning_content": reasoning_content,
-                    "tool_calls": tool_calls,
-                },
-                "finish_reason": finish_reason,
-            }
-        ],
+        "choices": choices,
         "usage": {"prompt_tokens": usage_metadata.get("promptTokenCount", 0), "completion_tokens": usage_metadata.get("candidatesTokenCount",0), "total_tokens": usage_metadata.get("totalTokenCount", 0)},
     }
 

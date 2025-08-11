@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = None
     top_p: Optional[float] = DEFAULT_TOP_P
     top_k: Optional[int] = DEFAULT_TOP_K
+    n: Optional[int] = 1
     stop: Optional[Union[List[str],str]] = None
     reasoning_effort: Optional[str] = None
     tools: Optional[Union[List[Dict[str, Any]], Dict[str, Any]]] = []

@@ -197,6 +197,10 @@ def _build_payload(
     
     # 处理 max_tokens 参数
     _validate_and_set_max_tokens(payload, request.max_tokens, logger)
+
+    # 处理 n 参数
+    if request.n is not None and request.n > 0:
+        payload["generationConfig"]["candidateCount"] = request.n
     
     if request.model.endswith("-image") or request.model.endswith("-image-generation"):
         payload["generationConfig"]["responseModalities"] = ["Text", "Image"]
