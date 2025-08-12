@@ -439,6 +439,10 @@ class KeyManager:
                 self.valid_key_pool.valid_keys = [
                     key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
                 ]
+                # 同时从_pool_keys_set中移除
+                if hasattr(self.valid_key_pool, '_pool_keys_set') and key_to_remove in self.valid_key_pool._pool_keys_set:
+                    self.valid_key_pool._pool_keys_set.remove(key_to_remove)
+
                 removed_count = initial_pool_size - len(self.valid_key_pool.valid_keys)
                 if removed_count > 0:
                     logger.debug(f"Removed {removed_count} instance(s) of '{redact_key_for_logging(key_to_remove)}' from ValidKeyPool.")
