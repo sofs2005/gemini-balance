@@ -99,14 +99,18 @@ async def handle_api_error_and_get_next_key(
 
     if is_429_error:
         if model_name:
-            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown.")
+            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown and removing from active pool.")
             await key_manager.mark_key_model_as_cooling(old_key, model_name)
+            await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
         else:
+            # This case is less likely with model-specific logic, but as a fallback:
             logger.info(f"Detected 429 error with key '{old_key}'. Marking key as failed due to rate limit.")
-            await key_manager.mark_key_as_failed(old_key)
+            await key_manager.mark_key_as_failed(old_key) # This will remove it from the valid_api_keys list
+        
         logger.info(f"Getting next working key for 429 error...")
         new_key = await key_manager.get_next_working_key(model_name=model_name)
         logger.info(f"429 error: got new_key={redact_key_for_logging(new_key)}")
+
     elif is_fatal_error:
         error_category = "auth" if is_auth_error else ("client" if is_client_error else "server")
         logger.warning(f"Detected fatal {error_category} error ({error_str.split(',')[0]}) for key '{old_key}'. Marking key as failed immediately.")
@@ -114,9 +118,14 @@ async def handle_api_error_and_get_next_key(
         new_key = await key_manager.get_next_working_key(model_name=model_name)
     elif is_retryable_error:
         if is_service_unavailable:
-            logger.warning(f"Detected 503 Service Unavailable for key '{old_key}'. Switching key without penalty.")
+            logger.warning(f"Detected 503 Service Unavailable for key '{old_key}'. Temporarily removing from pool and switching key.")
+            await key_manager.remove_key_from_pool(old_key)
         elif is_timeout_error:
-            logger.warning(f"Detected 408 Request Timeout for key '{old_key}'. Switching key without penalty.")
+            logger.warning(f"Detected 408 Request Timeout for key '{old_key}'. Temporarily removing from pool and switching key.")
+            await key_manager.remove_key_from_pool(old_key)
+        else: # General server errors
+             logger.warning(f"Detected retryable server error for key '{old_key}'. Temporarily removing from pool and switching key.")
+             await key_manager.remove_key_from_pool(old_key)
         new_key = await key_manager.get_next_working_key(model_name=model_name)
     else:
         # For other errors, use the original failure counting logic

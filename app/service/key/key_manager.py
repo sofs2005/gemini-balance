@@ -478,6 +478,30 @@ class KeyManager:
         logger.info(f"Attempted to remove {len(invalid_keys_to_remove)} invalid keys, successfully removed {removed_count}.")
         return removed_count
 
+    async def remove_key_from_pool(self, key_to_remove: str):
+        """
+        仅从 ValidKeyPool 中移除一个密钥，不影响其在主列表中的状态。
+        用于密钥因临时问题（如速率限制）需要暂时移出活跃池的场景。
+        """
+        if self.valid_key_pool and self.valid_key_pool.valid_keys:
+            async with self.failure_count_lock: # Use a lock to protect pool access
+                initial_pool_size = len(self.valid_key_pool.valid_keys)
+                
+                from collections import deque
+                filtered_keys = deque(
+                    key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
+                )
+                
+                if len(filtered_keys) < initial_pool_size:
+                    self.valid_key_pool.valid_keys = filtered_keys
+                    
+                    if hasattr(self.valid_key_pool, '_pool_keys_set') and key_to_remove in self.valid_key_pool._pool_keys_set:
+                        self.valid_key_pool._pool_keys_set.remove(key_to_remove)
+                    
+                    logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' temporarily removed from ValidKeyPool.")
+                    return True
+        return False
+
 
 _singleton_instance = None
 _singleton_lock = asyncio.Lock()
