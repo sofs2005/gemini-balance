@@ -464,15 +464,6 @@ class GeminiChatService:
                 else:
                     status_code = 500
 
-                asyncio.create_task(add_error_log(
-                    gemini_key=current_attempt_key,
-                    model_name=model,
-                    error_type="gemini-chat-stream",
-                    error_log=error_log_msg,
-                    error_code=status_code,
-                    request_msg=payload
-                ))
-
                 new_key = await handle_api_error_and_get_next_key(
                     self.key_manager, e, current_attempt_key, model, retries
                 )
