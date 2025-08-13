@@ -594,8 +594,15 @@ class ValidKeyPool:
             logger.debug(f"Emergency key verification cancelled for {redact_key_for_logging(key)}")
             raise
         except Exception as e:
-            # 简化错误处理，不调用错误处理器，避免递归
+            # 调用通用错误处理器来记录日志和处理密钥状态
             logger.debug(f"Emergency key verification failed for {redact_key_for_logging(key)}: {str(e)}")
+            await handle_api_error_and_get_next_key(
+                key_manager=self.key_manager,
+                error=e,
+                old_key=key,
+                model_name=settings.TEST_MODEL,
+                retries=self.key_manager.MAX_FAILURES  # 传递高重试次数以确保必要时标记为失败
+            )
             return None
 
     def _remove_expired_keys(self) -> int:
