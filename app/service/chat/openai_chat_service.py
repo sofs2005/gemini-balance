@@ -18,6 +18,7 @@ from app.domain.openai_models import ChatRequest, ImageGenerationRequest
 from app.handler.message_converter import OpenAIMessageConverter
 from app.handler.response_handler import OpenAIResponseHandler
 from app.handler.stream_optimizer import openai_optimizer
+from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.log.logger import get_openai_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.image.image_create_service import ImageCreateService
@@ -530,8 +531,8 @@ class OpenAIChatService:
                 )
 
                 if self.key_manager:
-                    new_api_key = await self.key_manager.handle_api_failure(
-                        current_attempt_key, retries
+                    new_api_key = await handle_api_error_and_get_next_key(
+                        self.key_manager, e, current_attempt_key, model, retries
                     )
                     if new_api_key and new_api_key != current_attempt_key:
                         final_api_key = new_api_key

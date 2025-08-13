@@ -436,9 +436,13 @@ class KeyManager:
             # 4. 从有效密钥池中移除
             if self.valid_key_pool and self.valid_key_pool.valid_keys:
                 initial_pool_size = len(self.valid_key_pool.valid_keys)
-                self.valid_key_pool.valid_keys = [
+                # 保持deque类型，不要转换为list
+                from collections import deque
+                filtered_keys = deque(
                     key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
-                ]
+                )
+                self.valid_key_pool.valid_keys = filtered_keys
+
                 # 同时从_pool_keys_set中移除
                 if hasattr(self.valid_key_pool, '_pool_keys_set') and key_to_remove in self.valid_key_pool._pool_keys_set:
                     self.valid_key_pool._pool_keys_set.remove(key_to_remove)
