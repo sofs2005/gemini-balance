@@ -73,29 +73,18 @@ async def delete_single_key(
         return RedirectResponse(url="/", status_code=302)
     try:
         logger.info(f"Attempting to delete key: {redact_key_for_logging(key_to_delete)}")
-
-        # 先从 KeyManager 中移除密钥，避免触发重新初始化
-        key_manager = await get_key_manager_instance()
-        key_removed_from_manager = await key_manager.remove_key(key_to_delete)
-
-        if not key_removed_from_manager:
-            raise HTTPException(status_code=404, detail=f"Key not found in KeyManager")
-
-        logger.info(f"Key '{redact_key_for_logging(key_to_delete)}' removed from KeyManager.")
-
-        # 然后更新配置（这样keys_changed检查就不会触发重新初始化）
+        
+        # 将删除操作完全委托给ConfigService
         result = await ConfigService.delete_key(key_to_delete)
+        
         if not result.get("success"):
-            # 如果配置更新失败，需要将密钥重新添加回KeyManager
-            # 但这种情况很少见，暂时记录错误
-            logger.error(f"Failed to update config after removing key from KeyManager: {result.get('message')}")
             raise HTTPException(
                 status_code=(
                     404 if "not found" in result.get("message", "").lower() else 400
                 ),
                 detail=result.get("message"),
             )
-
+        
         return result
     except HTTPException as e:
         raise e
