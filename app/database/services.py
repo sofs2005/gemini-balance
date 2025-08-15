@@ -1,12 +1,15 @@
 """
 数据库服务模块
 """
-from typing import List, Optional, Dict, Any, Union
-from datetime import datetime, timezone
-from sqlalchemy import func, desc, asc, select, insert, update, delete
+
 import json
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
+
+from sqlalchemy import asc, delete, desc, func, insert, select, update
+
 from app.database.connection import database
-from app.database.models import Settings, ErrorLog, RequestLog, FileRecord, FileState
+from app.database.models import ErrorLog, FileRecord, FileState, RequestLog, Settings
 from app.log.logger import get_database_logger
 from app.utils.helpers import redact_key_for_logging
 
@@ -16,7 +19,7 @@ logger = get_database_logger()
 async def get_all_settings() -> List[Dict[str, Any]]:
     """
     获取所有设置
-    
+
     Returns:
         List[Dict[str, Any]]: 设置列表
     """
@@ -32,10 +35,10 @@ async def get_all_settings() -> List[Dict[str, Any]]:
 async def get_setting(key: str) -> Optional[Dict[str, Any]]:
     """
     获取指定键的设置
-    
+
     Args:
         key: 设置键名
-    
+
     Returns:
         Optional[Dict[str, Any]]: 设置信息，如果不存在则返回None
     """
@@ -48,22 +51,24 @@ async def get_setting(key: str) -> Optional[Dict[str, Any]]:
         raise
 
 
-async def update_setting(key: str, value: str, description: Optional[str] = None) -> bool:
+async def update_setting(
+    key: str, value: str, description: Optional[str] = None
+) -> bool:
     """
     更新设置
-    
+
     Args:
         key: 设置键名
         value: 设置值
         description: 设置描述
-    
+
     Returns:
         bool: 是否更新成功
     """
     try:
         # 检查设置是否存在
         setting = await get_setting(key)
-        
+
         if setting:
             # 更新设置
             query = (
@@ -72,7 +77,7 @@ async def update_setting(key: str, value: str, description: Optional[str] = None
                 .values(
                     value=value,
                     description=description if description else setting["description"],
-                    updated_at=datetime.now()
+                    updated_at=datetime.now(),
                 )
             )
             await database.execute(query)
@@ -80,15 +85,12 @@ async def update_setting(key: str, value: str, description: Optional[str] = None
             return True
         else:
             # 插入设置
-            query = (
-                insert(Settings)
-                .values(
-                    key=key,
-                    value=value,
-                    description=description,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now()
-                )
+            query = insert(Settings).values(
+                key=key,
+                value=value,
+                description=description,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
             )
             await database.execute(query)
             logger.info(f"Inserted setting: {key}")
@@ -104,7 +106,7 @@ async def add_error_log(
     error_type: Optional[str] = None,
     error_log: Optional[str] = None,
     error_code: Optional[int] = None,
-    request_msg: Optional[Union[Dict[str, Any], str]] = None
+    request_msg: Optional[Union[Dict[str, Any], str]] = None,
 ) -> bool:
     """
     添加错误日志
@@ -138,17 +140,14 @@ async def add_error_log(
             request_msg_json = None
 
         # 插入错误日志
-        query = (
-            insert(ErrorLog)
-            .values(
-                gemini_key=gemini_key,
-                error_type=error_type,
-                error_log=error_log,
-                model_name=model_name,
-                error_code=error_code,
-                request_msg=request_msg_json,
-                request_time=datetime.now()
-            )
+        query = insert(ErrorLog).values(
+            gemini_key=gemini_key,
+            error_type=error_type,
+            error_log=error_log,
+            model_name=model_name,
+            error_code=error_code,
+            request_msg=request_msg_json,
+            request_time=datetime.now(),
         )
         result = await database.execute(query)
         logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}, result: {result}")
@@ -166,8 +165,8 @@ async def get_error_logs(
     error_code_search: Optional[str] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    sort_by: str = 'id',
-    sort_order: str = 'desc'
+    sort_by: str = "id",
+    sort_order: str = "desc",
 ) -> List[Dict[str, Any]]:
     """
     获取错误日志，支持搜索、日期过滤和排序
@@ -194,15 +193,15 @@ async def get_error_logs(
             ErrorLog.error_type,
             ErrorLog.error_log,
             ErrorLog.error_code,
-            ErrorLog.request_time
+            ErrorLog.request_time,
         )
-        
+
         if key_search:
             query = query.where(ErrorLog.gemini_key.ilike(f"%{key_search}%"))
         if error_search:
             query = query.where(
-                (ErrorLog.error_type.ilike(f"%{error_search}%")) |
-                (ErrorLog.error_log.ilike(f"%{error_search}%"))
+                (ErrorLog.error_type.ilike(f"%{error_search}%"))
+                | (ErrorLog.error_log.ilike(f"%{error_search}%"))
             )
         if start_date:
             query = query.where(ErrorLog.request_time >= start_date)
@@ -213,10 +212,12 @@ async def get_error_logs(
                 error_code_int = int(error_code_search)
                 query = query.where(ErrorLog.error_code == error_code_int)
             except ValueError:
-                logger.warning(f"Invalid format for error_code_search: '{error_code_search}'. Expected an integer. Skipping error code filter.")
+                logger.warning(
+                    f"Invalid format for error_code_search: '{error_code_search}'. Expected an integer. Skipping error code filter."
+                )
 
         sort_column = getattr(ErrorLog, sort_by, ErrorLog.id)
-        if sort_order.lower() == 'asc':
+        if sort_order.lower() == "asc":
             query = query.order_by(asc(sort_column))
         else:
             query = query.order_by(desc(sort_column))
@@ -235,7 +236,7 @@ async def get_error_logs_count(
     error_search: Optional[str] = None,
     error_code_search: Optional[str] = None,
     start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None,
 ) -> int:
     """
     获取符合条件的错误日志总数
@@ -257,8 +258,8 @@ async def get_error_logs_count(
             query = query.where(ErrorLog.gemini_key.ilike(f"%{key_search}%"))
         if error_search:
             query = query.where(
-                (ErrorLog.error_type.ilike(f"%{error_search}%")) |
-                (ErrorLog.error_log.ilike(f"%{error_search}%"))
+                (ErrorLog.error_type.ilike(f"%{error_search}%"))
+                | (ErrorLog.error_log.ilike(f"%{error_search}%"))
             )
         if start_date:
             query = query.where(ErrorLog.request_time >= start_date)
@@ -269,8 +270,9 @@ async def get_error_logs_count(
                 error_code_int = int(error_code_search)
                 query = query.where(ErrorLog.error_code == error_code_int)
             except ValueError:
-                logger.warning(f"Invalid format for error_code_search in count: '{error_code_search}'. Expected an integer. Skipping error code filter.")
-
+                logger.warning(
+                    f"Invalid format for error_code_search in count: '{error_code_search}'. Expected an integer. Skipping error code filter."
+                )
 
         count_result = await database.fetch_one(query)
         return count_result[0] if count_result else 0
@@ -296,12 +298,14 @@ async def get_error_log_details(log_id: int) -> Optional[Dict[str, Any]]:
         if result:
             # 将 request_msg (JSONB) 转换为字符串以便在 API 中返回
             log_dict = dict(result)
-            if 'request_msg' in log_dict and log_dict['request_msg'] is not None:
+            if "request_msg" in log_dict and log_dict["request_msg"] is not None:
                 # 确保即使是 None 或非 JSON 数据也能处理
                 try:
-                    log_dict['request_msg'] = json.dumps(log_dict['request_msg'], ensure_ascii=False, indent=2)
+                    log_dict["request_msg"] = json.dumps(
+                        log_dict["request_msg"], ensure_ascii=False, indent=2
+                    )
                 except TypeError:
-                    log_dict['request_msg'] = str(log_dict['request_msg'])
+                    log_dict["request_msg"] = str(log_dict["request_msg"])
             return log_dict
         else:
             return None
@@ -334,11 +338,14 @@ async def delete_error_logs_by_ids(log_ids: List[int]) -> int:
         # 注意：databases 的 execute 不返回 rowcount，所以我们不能直接返回删除的数量
         # 返回 log_ids 的长度作为尝试删除的数量，或者返回 0/1 表示操作尝试
         logger.info(f"Attempted bulk deletion for error logs with IDs: {log_ids}")
-        return len(log_ids) # 返回尝试删除的数量
+        return len(log_ids)  # 返回尝试删除的数量
     except Exception as e:
         # 数据库连接或执行错误
-        logger.error(f"Error during bulk deletion of error logs {log_ids}: {e}", exc_info=True)
+        logger.error(
+            f"Error during bulk deletion of error logs {log_ids}: {e}", exc_info=True
+        )
         raise
+
 
 async def delete_error_log_by_id(log_id: int) -> bool:
     """
@@ -356,7 +363,9 @@ async def delete_error_log_by_id(log_id: int) -> bool:
         exists = await database.fetch_one(check_query)
 
         if not exists:
-            logger.warning(f"Attempted to delete non-existent error log with ID: {log_id}")
+            logger.warning(
+                f"Attempted to delete non-existent error log with ID: {log_id}"
+            )
             return False
 
         # 执行删除
@@ -367,35 +376,31 @@ async def delete_error_log_by_id(log_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error deleting error log with ID {log_id}: {e}", exc_info=True)
         raise
- 
- 
+
+
 async def delete_all_error_logs() -> int:
     """
     删除所有错误日志条目。
- 
+
     Returns:
-        int: 被删除的错误日志数量。
+        int: 被删除的错误日志数量。如果使用的数据库驱动不支持返回受影响行数，则返回 -1 表示操作成功。
     """
     try:
-        # 1. 获取删除前的总数
-        count_query = select(func.count()).select_from(ErrorLog)
-        total_to_delete = await database.fetch_val(count_query)
- 
-        if total_to_delete == 0:
-            logger.info("No error logs found to delete.")
-            return 0
- 
-        # 2. 执行删除操作
+        # 直接执行删除操作，避免不必要的查询
         delete_query = delete(ErrorLog)
         await database.execute(delete_query)
-        
-        logger.info(f"Successfully deleted all {total_to_delete} error logs.")
-        return total_to_delete
+
+        logger.info("Successfully deleted all error logs.")
+
+        # 由于 databases 库的 execute 方法不返回受影响的行数，
+        # 返回 -1 表示删除操作成功执行，但具体删除数量未知
+        # 这比先查询再删除的方式更高效
+        return -1
     except Exception as e:
         logger.error(f"Failed to delete all error logs: {str(e)}", exc_info=True)
         raise
- 
- 
+
+
 # 新增函数：添加请求日志
 async def add_request_log(
     model_name: Optional[str],
@@ -403,7 +408,7 @@ async def add_request_log(
     is_success: bool,
     status_code: Optional[int] = None,
     latency_ms: Optional[int] = None,
-    request_time: Optional[datetime] = None
+    request_time: Optional[datetime] = None,
 ) -> bool:
     """
     添加 API 请求日志
@@ -431,7 +436,7 @@ async def add_request_log(
             api_key=api_key,
             is_success=is_success,
             status_code=status_code,
-            latency_ms=latency_ms
+            latency_ms=latency_ms,
         )
         await database.execute(query)
         logger.debug("Request log added successfully")
@@ -442,6 +447,7 @@ async def add_request_log(
 
 
 # ==================== 文件记录相关函数 ====================
+
 
 async def create_file_record(
     name: str,
@@ -456,11 +462,11 @@ async def create_file_record(
     display_name: Optional[str] = None,
     sha256_hash: Optional[str] = None,
     upload_url: Optional[str] = None,
-    user_token: Optional[str] = None
+    user_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     创建文件记录
-    
+
     Args:
         name: 文件名称（格式: files/{file_id}）
         mime_type: MIME 类型
@@ -474,7 +480,7 @@ async def create_file_record(
         sha256_hash: SHA256 哈希值
         upload_url: 临时上传 URL
         user_token: 上传用户的 token
-    
+
     Returns:
         Dict[str, Any]: 创建的文件记录
     """
@@ -492,10 +498,10 @@ async def create_file_record(
             uri=uri,
             api_key=api_key,
             upload_url=upload_url,
-            user_token=user_token
+            user_token=user_token,
         )
         await database.execute(query)
-        
+
         # 返回创建的记录
         return await get_file_record_by_name(name)
     except Exception as e:
@@ -506,10 +512,10 @@ async def create_file_record(
 async def get_file_record_by_name(name: str) -> Optional[Dict[str, Any]]:
     """
     根据文件名获取文件记录
-    
+
     Args:
         name: 文件名称（格式: files/{file_id}）
-    
+
     Returns:
         Optional[Dict[str, Any]]: 文件记录，如果不存在则返回 None
     """
@@ -522,24 +528,23 @@ async def get_file_record_by_name(name: str) -> Optional[Dict[str, Any]]:
         raise
 
 
-
 async def update_file_record_state(
     file_name: str,
     state: FileState,
     update_time: Optional[datetime] = None,
     upload_completed: Optional[datetime] = None,
-    sha256_hash: Optional[str] = None
+    sha256_hash: Optional[str] = None,
 ) -> bool:
     """
     更新文件记录状态
-    
+
     Args:
         file_name: 文件名
         state: 新状态
         update_time: 更新时间
         upload_completed: 上传完成时间
         sha256_hash: SHA256 哈希值
-    
+
     Returns:
         bool: 是否更新成功
     """
@@ -551,14 +556,14 @@ async def update_file_record_state(
             values["upload_completed"] = upload_completed
         if sha256_hash:
             values["sha256_hash"] = sha256_hash
-            
+
         query = update(FileRecord).where(FileRecord.name == file_name).values(**values)
         result = await database.execute(query)
-        
+
         if result:
             logger.info(f"Updated file record state for {file_name} to {state}")
             return True
-        
+
         logger.warning(f"File record not found for update: {file_name}")
         return False
     except Exception as e:
@@ -570,31 +575,33 @@ async def list_file_records(
     user_token: Optional[str] = None,
     api_key: Optional[str] = None,
     page_size: int = 10,
-    page_token: Optional[str] = None
+    page_token: Optional[str] = None,
 ) -> tuple[List[Dict[str, Any]], Optional[str]]:
     """
     列出文件记录
-    
+
     Args:
         user_token: 用户 token（如果提供，只返回该用户的文件）
         api_key: API Key（如果提供，只返回使用该 key 的文件）
         page_size: 每页大小
         page_token: 分页标记（偏移量）
-    
+
     Returns:
         tuple[List[Dict[str, Any]], Optional[str]]: (文件列表, 下一页标记)
     """
     try:
-        logger.debug(f"list_file_records called with page_size={page_size}, page_token={page_token}")
+        logger.debug(
+            f"list_file_records called with page_size={page_size}, page_token={page_token}"
+        )
         query = select(FileRecord).where(
             FileRecord.expiration_time > datetime.now(timezone.utc)
         )
-        
+
         if user_token:
             query = query.where(FileRecord.user_token == user_token)
         if api_key:
             query = query.where(FileRecord.api_key == api_key)
-            
+
         # 使用偏移量进行分页
         offset = 0
         if page_token:
@@ -603,16 +610,18 @@ async def list_file_records(
             except ValueError:
                 logger.warning(f"Invalid page token: {page_token}")
                 offset = 0
-                
+
         # 按ID升序排列，使用 OFFSET 和 LIMIT
         query = query.order_by(FileRecord.id).offset(offset).limit(page_size + 1)
-        
+
         results = await database.fetch_all(query)
-        
+
         logger.debug(f"Query returned {len(results)} records")
         if results:
-            logger.debug(f"First record ID: {results[0]['id']}, Last record ID: {results[-1]['id']}")
-        
+            logger.debug(
+                f"First record ID: {results[0]['id']}, Last record ID: {results[-1]['id']}"
+            )
+
         # 处理分页
         has_next = len(results) > page_size
         if has_next:
@@ -620,11 +629,13 @@ async def list_file_records(
             # 下一页的偏移量是当前偏移量加上本页返回的记录数
             next_offset = offset + page_size
             next_page_token = str(next_offset)
-            logger.debug(f"Has next page, offset={offset}, page_size={page_size}, next_page_token={next_page_token}")
+            logger.debug(
+                f"Has next page, offset={offset}, page_size={page_size}, next_page_token={next_page_token}"
+            )
         else:
             next_page_token = None
             logger.debug(f"No next page, returning {len(results)} results")
-            
+
         return [dict(row) for row in results], next_page_token
     except Exception as e:
         logger.error(f"Failed to list file records: {str(e)}")
@@ -634,10 +645,10 @@ async def list_file_records(
 async def delete_file_record(name: str) -> bool:
     """
     删除文件记录
-    
+
     Args:
         name: 文件名称
-    
+
     Returns:
         bool: 是否删除成功
     """
@@ -653,7 +664,7 @@ async def delete_file_record(name: str) -> bool:
 async def delete_expired_file_records() -> List[Dict[str, Any]]:
     """
     删除已过期的文件记录
-    
+
     Returns:
         List[Dict[str, Any]]: 删除的记录列表
     """
@@ -663,16 +674,16 @@ async def delete_expired_file_records() -> List[Dict[str, Any]]:
             FileRecord.expiration_time <= datetime.now(timezone.utc)
         )
         expired_records = await database.fetch_all(query)
-        
+
         if not expired_records:
             return []
-            
+
         # 执行删除
         delete_query = delete(FileRecord).where(
             FileRecord.expiration_time <= datetime.now(timezone.utc)
         )
         await database.execute(delete_query)
-        
+
         logger.info(f"Deleted {len(expired_records)} expired file records")
         return [dict(record) for record in expired_records]
     except Exception as e:
@@ -683,17 +694,17 @@ async def delete_expired_file_records() -> List[Dict[str, Any]]:
 async def get_file_api_key(name: str) -> Optional[str]:
     """
     获取文件对应的 API Key
-    
+
     Args:
         name: 文件名称
-    
+
     Returns:
         Optional[str]: API Key，如果文件不存在或已过期则返回 None
     """
     try:
         query = select(FileRecord.api_key).where(
-            (FileRecord.name == name) &
-            (FileRecord.expiration_time > datetime.now(timezone.utc))
+            (FileRecord.name == name)
+            & (FileRecord.expiration_time > datetime.now(timezone.utc))
         )
         result = await database.fetch_one(query)
         return result["api_key"] if result else None
