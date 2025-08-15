@@ -1,10 +1,12 @@
 name: Build and Push Docker Image to Docker Hub
 
-# Controls when the action will run. 
-# Triggers the workflow on push events but only for the main branch
+# Controls when the action will run.
+# Triggers the workflow on push events for the main branch and for tags like v1.0.0
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*.*.*'
 
 jobs:
   build-and-push:
@@ -19,8 +21,15 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Extract metadata (tags, labels) for Docker
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: softs2005/gemini-balance # IMPORTANT: Replace with your Docker Hub username/repository
 
       # Build and push Docker image
       - name: Build and push
@@ -28,4 +37,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: softs2005/gemini-balance:latest # IMPORTANT: Replace with your Docker Hub username/repository
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
