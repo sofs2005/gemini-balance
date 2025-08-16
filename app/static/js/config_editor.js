@@ -16,6 +16,13 @@ const PROXY_REGEX =
 const VERTEX_API_KEY_REGEX = /AQ\.[a-zA-Z0-9_\-]{50}/g; // 新增 Vertex Express API Key 正则
 const MASKED_VALUE = "••••••••";
 
+// API Keys Pagination Constants
+const API_KEYS_PER_PAGE = 20; // 每页显示的API密钥数量
+let currentApiKeyPage = 1;
+let totalApiKeyPages = 1;
+let allApiKeys = []; // 存储所有API密钥数据
+let filteredApiKeys = []; // 存储过滤后的API密钥数据
+
 // DOM Elements - Global Scope for frequently accessed elements
 const safetySettingsContainer = document.getElementById(
   "SAFETY_SETTINGS_container"
@@ -146,6 +153,17 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmAddApiKeyBtn.addEventListener("click", handleBulkAddApiKeys);
   if (apiKeySearchInput)
     apiKeySearchInput.addEventListener("input", handleApiKeySearch);
+
+  // API Key Pagination Event Listeners
+  const apiKeyPrevBtn = document.getElementById("apiKeyPrevBtn");
+  const apiKeyNextBtn = document.getElementById("apiKeyNextBtn");
+  
+  if (apiKeyPrevBtn) {
+    apiKeyPrevBtn.addEventListener("click", prevApiKeyPage);
+  }
+  if (apiKeyNextBtn) {
+    apiKeyNextBtn.addEventListener("click", nextApiKeyPage);
+  }
 
   // Bulk Delete API Key Modal Elements and Events
   const bulkDeleteApiKeyBtn = document.getElementById("bulkDeleteApiKeyBtn");
@@ -926,9 +944,9 @@ function populateForm(config) {
       '<div class="text-gray-500 text-sm italic">添加自定义请求头，例如 X-Api-Key: your-key</div>';
   }
 
-  // 4. Populate other array fields (excluding THINKING_MODELS)
+  // 4. Populate other array fields (excluding THINKING_MODELS and API_KEYS)
   for (const [key, value] of Object.entries(config)) {
-    if (Array.isArray(value) && key !== "THINKING_MODELS") {
+    if (Array.isArray(value) && key !== "THINKING_MODELS" && key !== "API_KEYS") {
       const container = document.getElementById(`${key}_container`);
       if (container) {
         value.forEach((itemValue) => {
@@ -940,6 +958,17 @@ function populateForm(config) {
         });
       }
     }
+  }
+
+  // 4.1. 特殊处理API_KEYS - 使用分页
+  if (Array.isArray(config.API_KEYS)) {
+    allApiKeys = config.API_KEYS.filter(key =>
+      typeof key === "string" && key.trim() !== ""
+    );
+    filteredApiKeys = [...allApiKeys];
+    currentApiKeyPage = 1;
+    renderApiKeyPage();
+    updateApiKeyPagination();
   }
 
   // 5. Populate non-array/non-budget fields
@@ -1064,44 +1093,31 @@ function populateForm(config) {
  * Handles the bulk addition of API keys from the modal input.
  */
 function handleBulkAddApiKeys() {
-  const apiKeyContainer = document.getElementById("API_KEYS_container");
-  if (!apiKeyBulkInput || !apiKeyContainer || !apiKeyModal) return;
+  if (!apiKeyBulkInput || !apiKeyModal) return;
 
   const bulkText = apiKeyBulkInput.value;
   const extractedKeys = bulkText.match(API_KEY_REGEX) || [];
 
-  const currentKeyInputs = apiKeyContainer.querySelectorAll(
-    `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-  );
-  let currentKeys = Array.from(currentKeyInputs)
-    .map((input) => {
-      return input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value")
-        : input.value;
-    })
-    .filter((key) => key && key.trim() !== "" && key !== MASKED_VALUE);
-
-  const combinedKeys = new Set([...currentKeys, ...extractedKeys]);
+  // 合并现有密钥和新密钥，去重
+  const combinedKeys = new Set([...allApiKeys, ...extractedKeys]);
   const uniqueKeys = Array.from(combinedKeys);
 
-  apiKeyContainer.innerHTML = ""; // Clear existing items more directly
+  // 更新全局密钥数组
+  allApiKeys = uniqueKeys;
+  
+  // 更新过滤后的数组
+  const searchTerm = apiKeySearchInput ? apiKeySearchInput.value.toLowerCase() : "";
+  if (!searchTerm) {
+    filteredApiKeys = [...allApiKeys];
+  } else {
+    filteredApiKeys = allApiKeys.filter(key =>
+      key.toLowerCase().includes(searchTerm)
+    );
+  }
 
-  uniqueKeys.forEach((key) => {
-    addArrayItemWithValue("API_KEYS", key);
-  });
-
-  const newKeyInputs = apiKeyContainer.querySelectorAll(
-    `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-  );
-  newKeyInputs.forEach((input) => {
-    if (configForm && typeof initializeSensitiveFields === "function") {
-      const focusoutEvent = new Event("focusout", {
-        bubbles: true,
-        cancelable: true,
-      });
-      input.dispatchEvent(focusoutEvent);
-    }
-  });
+  // 重新渲染当前页
+  renderApiKeyPage();
+  updateApiKeyPagination();
 
   closeModal(apiKeyModal);
   showNotification(`添加/更新了 ${uniqueKeys.length} 个唯一密钥`, "success");
@@ -1111,32 +1127,139 @@ function handleBulkAddApiKeys() {
  * Handles searching/filtering of API keys in the list.
  */
 function handleApiKeySearch() {
-  const apiKeyContainer = document.getElementById("API_KEYS_container");
-  if (!apiKeySearchInput || !apiKeyContainer) return;
+  if (!apiKeySearchInput) return;
 
   const searchTerm = apiKeySearchInput.value.toLowerCase();
-  const keyItems = apiKeyContainer.querySelectorAll(`.${ARRAY_ITEM_CLASS}`);
-
-  keyItems.forEach((item) => {
-    const input = item.querySelector(
-      `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
+  
+  // 过滤API密钥
+  if (!searchTerm) {
+    filteredApiKeys = [...allApiKeys];
+  } else {
+    filteredApiKeys = allApiKeys.filter(key =>
+      key.toLowerCase().includes(searchTerm)
     );
-    if (input) {
-      const realValue = input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value").toLowerCase()
-        : input.value.toLowerCase();
-      item.style.display = realValue.includes(searchTerm) ? "flex" : "none";
-    }
+  }
+
+  // 重置到第一页
+  currentApiKeyPage = 1;
+  
+  // 重新渲染当前页
+  renderApiKeyPage();
+  updateApiKeyPagination();
+}
+
+/**
+ * 渲染当前页的API密钥
+ */
+function renderApiKeyPage() {
+  const apiKeyContainer = document.getElementById("API_KEYS_container");
+  if (!apiKeyContainer) return;
+
+  // 清空容器
+  apiKeyContainer.innerHTML = "";
+
+  // 计算当前页的数据范围
+  const startIndex = (currentApiKeyPage - 1) * API_KEYS_PER_PAGE;
+  const endIndex = Math.min(startIndex + API_KEYS_PER_PAGE, filteredApiKeys.length);
+  const pageKeys = filteredApiKeys.slice(startIndex, endIndex);
+
+  // 渲染当前页的密钥
+  pageKeys.forEach((key) => {
+    addArrayItemWithValue("API_KEYS", key);
   });
+
+  // 如果没有密钥，显示提示信息
+  if (pageKeys.length === 0) {
+    const emptyMessage = document.createElement("div");
+    emptyMessage.className = "text-gray-500 text-sm italic text-center py-4";
+    emptyMessage.textContent = filteredApiKeys.length === 0 ?
+      (allApiKeys.length === 0 ? "暂无API密钥" : "未找到匹配的密钥") :
+      "当前页无数据";
+    apiKeyContainer.appendChild(emptyMessage);
+  }
+}
+
+/**
+ * 更新分页控件
+ */
+function updateApiKeyPagination() {
+  totalApiKeyPages = Math.max(1, Math.ceil(filteredApiKeys.length / API_KEYS_PER_PAGE));
+  
+  // 确保当前页在有效范围内
+  if (currentApiKeyPage > totalApiKeyPages) {
+    currentApiKeyPage = totalApiKeyPages;
+  }
+
+  const paginationContainer = document.getElementById("apiKeyPagination");
+  if (!paginationContainer) return;
+
+  // 如果只有一页或没有数据，隐藏分页控件
+  if (totalApiKeyPages <= 1) {
+    paginationContainer.style.display = "none";
+    return;
+  }
+
+  paginationContainer.style.display = "flex";
+
+  // 更新页码信息
+  const pageInfo = document.getElementById("apiKeyPageInfo");
+  if (pageInfo) {
+    pageInfo.textContent = `第 ${currentApiKeyPage} 页，共 ${totalApiKeyPages} 页 (${filteredApiKeys.length} 个密钥)`;
+  }
+
+  // 更新按钮状态
+  const prevBtn = document.getElementById("apiKeyPrevBtn");
+  const nextBtn = document.getElementById("apiKeyNextBtn");
+  
+  if (prevBtn) {
+    prevBtn.disabled = currentApiKeyPage <= 1;
+    prevBtn.className = currentApiKeyPage <= 1 ?
+      "px-3 py-1 rounded bg-gray-300 text-gray-500 cursor-not-allowed" :
+      "px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 cursor-pointer";
+  }
+  
+  if (nextBtn) {
+    nextBtn.disabled = currentApiKeyPage >= totalApiKeyPages;
+    nextBtn.className = currentApiKeyPage >= totalApiKeyPages ?
+      "px-3 py-1 rounded bg-gray-300 text-gray-500 cursor-not-allowed" :
+      "px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 cursor-pointer";
+  }
+}
+
+/**
+ * 跳转到指定页
+ */
+function goToApiKeyPage(page) {
+  if (page < 1 || page > totalApiKeyPages) return;
+  
+  currentApiKeyPage = page;
+  renderApiKeyPage();
+  updateApiKeyPagination();
+}
+
+/**
+ * 上一页
+ */
+function prevApiKeyPage() {
+  if (currentApiKeyPage > 1) {
+    goToApiKeyPage(currentApiKeyPage - 1);
+  }
+}
+
+/**
+ * 下一页
+ */
+function nextApiKeyPage() {
+  if (currentApiKeyPage < totalApiKeyPages) {
+    goToApiKeyPage(currentApiKeyPage + 1);
+  }
 }
 
 /**
  * Handles the bulk deletion of API keys based on input from the modal.
  */
 function handleBulkDeleteApiKeys() {
-  const apiKeyContainer = document.getElementById("API_KEYS_container");
-  if (!bulkDeleteApiKeyInput || !apiKeyContainer || !bulkDeleteApiKeyModal)
-    return;
+  if (!bulkDeleteApiKeyInput || !bulkDeleteApiKeyModal) return;
 
   const bulkText = bulkDeleteApiKeyInput.value;
   if (!bulkText.trim()) {
@@ -1151,23 +1274,29 @@ function handleBulkDeleteApiKeys() {
     return;
   }
 
-  const keyItems = apiKeyContainer.querySelectorAll(`.${ARRAY_ITEM_CLASS}`);
+  // 从allApiKeys数组中删除匹配的密钥
   let deleteCount = 0;
-
-  keyItems.forEach((item) => {
-    const input = item.querySelector(
-      `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-    );
-    const realValue =
-      input &&
-      (input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value")
-        : input.value);
-    if (realValue && keysToDelete.has(realValue)) {
-      item.remove();
+  allApiKeys = allApiKeys.filter(key => {
+    if (keysToDelete.has(key)) {
       deleteCount++;
+      return false;
     }
+    return true;
   });
+
+  // 更新过滤后的数组
+  const searchTerm = apiKeySearchInput ? apiKeySearchInput.value.toLowerCase() : "";
+  if (!searchTerm) {
+    filteredApiKeys = [...allApiKeys];
+  } else {
+    filteredApiKeys = allApiKeys.filter(key =>
+      key.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  // 重新渲染当前页
+  renderApiKeyPage();
+  updateApiKeyPagination();
 
   closeModal(bulkDeleteApiKeyModal);
 
@@ -1784,6 +1913,15 @@ function collectFormData() {
   const arrayContainers = document.querySelectorAll(".array-container");
   arrayContainers.forEach((container) => {
     const key = container.id.replace("_container", "");
+    
+    // 特殊处理API_KEYS - 使用全局数组而不是DOM元素
+    if (key === "API_KEYS") {
+      formData[key] = allApiKeys.filter(
+        (value) => value && value.trim() !== "" && value !== MASKED_VALUE
+      );
+      return;
+    }
+    
     const arrayInputs = container.querySelectorAll(`.${ARRAY_INPUT_CLASS}`);
     formData[key] = Array.from(arrayInputs)
       .map((input) => {

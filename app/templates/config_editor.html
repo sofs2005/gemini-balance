@@ -1012,6 +1012,31 @@ endblock %} {% block head_extra_styles %}
           <div class="array-container" id="API_KEYS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
+          <!-- API密钥分页控件 -->
+          <div id="apiKeyPagination" class="flex items-center justify-between mt-2 mb-2" style="display: none;">
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                id="apiKeyPrevBtn"
+                onclick="prevApiKeyPage()"
+                class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
+              >
+                <i class="fas fa-chevron-left"></i> 上一页
+              </button>
+              <span id="apiKeyPageInfo" class="text-sm text-gray-600">第 1 页，共 1 页</span>
+              <button
+                type="button"
+                id="apiKeyNextBtn"
+                onclick="nextApiKeyPage()"
+                class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600 cursor-pointer"
+              >
+                下一页 <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+            <div class="text-xs text-gray-500">
+              每页显示 20 个密钥
+            </div>
+          </div>
           <div class="flex justify-end gap-2">
             <button
               type="button"
