@@ -73,7 +73,7 @@ app/
 *   **多种图床支持**: 支持 SM.MS、PicGo 和 Cloudflare 图床上传生成的图像。
 *   **代理支持**: 支持配置 HTTP/SOCKS5 代理 (`PROXIES`)，方便在特殊网络环境下使用。
 *   **Docker 支持**: 提供 AMD 和 ARM 架构的 Docker 镜像，方便快速部署。
-    *   镜像地址: `ghcr.io/snailyp/gemini-balance:latest`
+    *   镜像地址: `softs2005/gemini-balance:latest`
 
 ---
 
@@ -98,7 +98,7 @@ app/
 
 1.  **拉取镜像**:
     ```bash
-    docker pull ghcr.io/snailyp/gemini-balance:latest
+    docker pull softs2005/gemini-balance:latest
     ```
 2.  **准备 `.env` 文件**:
     从 `.env.example` 复制一份并重命名为 `.env`，然后根据需求修改配置。
@@ -107,7 +107,7 @@ app/
     docker run -d -p 8000:8000 --name gemini-balance \
     -v ./data:/app/data \
     --env-file .env \
-    ghcr.io/snailyp/gemini-balance:latest
+    softs2005/gemini-balance:latest
     ```
     *   `-d`: 后台运行。
     *   `-p 8000:8000`: 将容器的 8000 端口映射到主机。
@@ -118,7 +118,7 @@ app/
 
 1.  **克隆仓库并安装依赖**:
     ```bash
-    git clone https://github.com/snailyp/gemini-balance.git
+    git clone https://github.com/sofs2005/gemini-balance.git
     cd gemini-balance
     pip install -r requirements.txt
     ```

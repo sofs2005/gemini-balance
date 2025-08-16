@@ -262,3 +262,6 @@ default_db
 
 # Memory Bank - Should not be committed
 memory-bank/
+
+# KiloCode directory
+.kilocode/

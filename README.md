@@ -58,8 +58,8 @@ app/
 *   **Dual Protocol API Compatibility**: Supports both Gemini and OpenAI format CHAT API request forwarding.
     *   OpenAI Base URL: `http://localhost:8000(/hf)/v1`
     *   Gemini Base URL: `http://localhost:8000(/gemini)/v1beta`
-*   **Image Chat and Generation**: Supports image conversation and generation through `IMAGE_MODELS` configuration, use `model-image` format when calling.
-*   **Web Search Integration**: Supports web search through `SEARCH_MODELS` configuration, use `model-search` format when calling.
+*   **Image Chat and Generation**: Supports image conversation and generation through `IMAGE_MODELS` configuration, use `model-name-image` format when calling.
+*   **Web Search Integration**: Supports web search through `SEARCH_MODELS` configuration, use `model-name-search` format when calling.
 *   **Real-time Key Status Monitoring**: Web interface at `/keys_status` (authentication required) displays key status and usage statistics in real-time.
 *   **Detailed Logging System**: Provides comprehensive error logs with search and filtering capabilities.
 *   **Flexible Key Addition**: Supports batch key addition through regex `gemini_key` with automatic deduplication.
@@ -73,89 +73,66 @@ app/
 *   **Multiple Image Hosting Support**: Supports SM.MS, PicGo, and Cloudflare image hosting for generated images.
 *   **Proxy Support**: Supports HTTP/SOCKS5 proxy configuration (`PROXIES`) for use in special network environments.
 *   **Docker Support**: Provides Docker images for AMD and ARM architectures for quick deployment.
-    *   Image address: `ghcr.io/snailyp/gemini-balance:latest`
+    *   Image address: `softs2005/gemini-balance:latest`
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Using Docker Compose (Recommended)
 
-1. **Clone Repository**:
-   ```bash
-   git clone https://github.com/snailyp/gemini-balance.git
-   cd gemini-balance
-   ```
+This is the most recommended deployment method, which can start the application and database with a single command.
 
-2. **Configure Environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env file with your settings
-   ```
+1.  **Download `docker-compose.yml`**:
+    Get the `docker-compose.yml` file from the project repository.
+2.  **Prepare `.env` file**:
+    Copy `.env.example` to `.env` and modify the configuration as needed. Pay special attention to setting `DATABASE_TYPE` to `mysql` and filling in the `MYSQL_*` related configurations.
+3.  **Start the service**:
+    In the directory where `docker-compose.yml` and `.env` are located, run the following command:
+    ```bash
+    docker-compose up -d
+    ```
+    This command will start the `gemini-balance` application and the `mysql` database in detached mode.
 
-3. **Start Services**:
-   ```bash
-   docker-compose up -d
-   ```
+### Option 2: Using Docker Command
 
-### Option 2: Local Development
+1.  **Pull the image**:
+    ```bash
+    docker pull softs2005/gemini-balance:latest
+    ```
+2.  **Prepare `.env` file**:
+    Copy `.env.example` to `.env` and modify the configuration as needed.
+3.  **Run the container**:
+    ```bash
+    docker run -d -p 8000:8000 --name gemini-balance \
+    -v ./data:/app/data \
+    --env-file .env \
+    softs2005/gemini-balance:latest
+    ```
+    *   `-d`: Run in detached mode.
+    *   `-p 8000:8000`: Map the container's port 8000 to the host.
+    *   `-v ./data:/app/data`: Mount a data volume to persist SQLite data and logs.
+    *   `--env-file .env`: Load environment variables from the `.env` file.
 
-1. **Clone and Install**:
-   ```bash
-   git clone https://github.com/snailyp/gemini-balance.git
-   cd gemini-balance
-   pip install -r requirements.txt
-   ```
+### Option 3: Local Run (for Development)
 
-2. **Configure Environment**:
-   ```bash
-   cp .env.example .env
-   # Edit .env file with your settings
-   ```
-
-3. **Start Application**:
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-
-Access the application at `http://localhost:8000`.
+1.  **Clone the repository and install dependencies**:
+    ```bash
+    git clone https://github.com/sofs2005/gemini-balance.git
+    cd gemini-balance
+    pip install -r requirements.txt
+    ```
+2.  **Configure environment variables**:
+    Copy `.env.example` to `.env` and modify the configuration as needed.
+3.  **Start the application**:
+    ```bash
+    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    After the application starts, access it at `http://localhost:8000`.
 
 ---
 
-## 📝 Configuration
-
-### Environment Variables
-
-Copy `.env.example` to `.env` and configure your settings. Key configuration items include:
-
-| Configuration Item | Description | Default Value |
-|-------------------|-------------|---------------|
-| **Database Configuration** | | |
-| `DATABASE_TYPE` | Database type: `mysql` or `sqlite` | `mysql` |
-| `MYSQL_HOST` | MySQL host address | `localhost` |
-| `MYSQL_PORT` | MySQL port | `3306` |
-| `MYSQL_USER` | MySQL username | `gemini` |
-| `MYSQL_PASSWORD` | MySQL password | `change_me` |
-| `MYSQL_DATABASE` | MySQL database name | `default_db` |
-| **API Configuration** | | |
-| `API_KEYS` | Gemini API Key list (JSON array format) | `["your-api-key"]` |
-| `ALLOWED_TOKENS` | Allowed access tokens | `["sk-123456"]` |
-| `AUTH_TOKEN` | Admin authentication token | `sk-123456` |
-| `BASE_URL` | Gemini API base URL | `https://generativelanguage.googleapis.com/v1beta` |
-| `MAX_FAILURES` | Maximum failures allowed per key | `3` |
-| `MAX_RETRIES` | Maximum retries for API request failures | `3` |
-| `CHECK_INTERVAL_HOURS` | Disabled key recovery check interval (hours) | `1` |
-| `TIMEZONE` | Application timezone | `Asia/Shanghai` |
-| `TIME_OUT` | Request timeout (seconds) | `300` |
-| `PROXIES` | Proxy server list (e.g., `http://user:pass@host:port`) | `[]` |
-
-### Web Interface Configuration
-
-1. **Access Management Interface**: Visit `http://localhost:8000/keys_status`
-2. **Add API Keys**: Add your Gemini API keys through the web interface
-3. **Monitor Status**: Real-time monitoring of key status and usage statistics
-
-## 🔗 API Endpoints
+## ⚙️ API Endpoints
 
 ### Gemini API Format (`/gemini/v1beta`)
 
@@ -219,8 +196,3 @@ If you find this project helpful, you can support me through the following ways:
 ## 📄 License
 
 This project is licensed under [CC BY-NC 4.0](LICENSE) (Attribution-NonCommercial).
-
-
-
-
-
