@@ -1656,6 +1656,56 @@ async function renderApiChart(period) {
   }
 }
 
+// --- Helpers for Attention Keys panel ---
+// track current active status code tab
+let currentStatus = 429;
+
+function getLimit() {
+  const el = document.getElementById('attentionLimitInput');
+  const v = parseInt(el && el.value, 10);
+  if (isNaN(v)) return 10;
+  // clamp between 1 and 1000 to match input limits
+  return Math.min(1000, Math.max(1, v));
+}
+
+async function fetchAndRenderAttentionKeys(statusCode = 429, limit = 10) {
+  const listEl = document.getElementById('attentionKeysList');
+  if (!listEl) return;
+  try {
+    const data = await fetchAPI(`/api/stats/attention-keys?status_code=${statusCode}&limit=${limit}`);
+    listEl.innerHTML = '';
+    if (!data || (Array.isArray(data) && data.length === 0) || data.error) {
+      listEl.innerHTML = '<li class="text-center text-gray-500 py-2">暂无需要注意的Key</li>';
+      return;
+    }
+    data.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between bg-white rounded border px-3 py-2';
+      const masked = item.key ? `${item.key.substring(0,4)}...${item.key.substring(item.key.length-4)}` : 'N/A';
+      const code = item.status_code ?? statusCode;
+      li.innerHTML = `
+        \u003cdiv class=\"flex items-center gap-3\"\u003e
+          \u003cspan class=\"font-mono text-sm\"\u003e${masked}\u003c/span\u003e
+          \u003cspan class=\"text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded\"\u003e${code}: ${item.count}\u003c/span\u003e
+        \u003c/div\u003e
+        \u003cdiv class=\"flex items-center gap-2\"\u003e
+          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white\" title=\"验证此Key\"\u003e验证\u003c/button\u003e
+          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white\" title=\"查看24小时详情\"\u003e详情\u003c/button\u003e
+          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white\" title=\"复制Key\"\u003e复制\u003c/button\u003e
+          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white\" title=\"删除此Key\"\u003e删除\u003c/button\u003e
+        \u003c/div\u003e`;
+      const [verifyBtn, detailBtn, copyBtn, deleteBtn] = li.querySelectorAll('button');
+      verifyBtn.addEventListener('click', (e) => verifyKey(item.key, e.currentTarget));
+      detailBtn.addEventListener('click', () => window.showKeyUsageDetails(item.key));
+      copyBtn.addEventListener('click', () => copyKey(item.key));
+      deleteBtn.addEventListener('click', (e) => showSingleKeyDeleteConfirmModal(item.key, e.currentTarget));
+      listEl.appendChild(li);
+    });
+  } catch (e) {
+    listEl.innerHTML = `<li class="text-center text-red-500 py-2">加载失败: ${e.message}</li>`;
+  }
+}
+
 function initChartControls() {
   const btn1h = document.getElementById('chartBtn1h');
   const btn8h = document.getElementById('chartBtn8h');
@@ -1682,6 +1732,53 @@ function initChartControls() {
   renderApiChart('1h');
 }
 
+function initAttentionKeysControls() {
+  const btn429 = document.getElementById('attentionErr429');
+  const btn403 = document.getElementById('attentionErr403');
+  const btn400 = document.getElementById('attentionErr400');
+  // 修复：补充获取数量输入框，避免未声明变量导致初始化报错
+  const limitInput = document.getElementById('attentionLimitInput');
+  const setActive = (activeBtn) => {
+    [btn429, btn403, btn400].forEach(btn => {
+      if (!btn) return;
+      if (btn === activeBtn) {
+        btn.classList.remove('bg-gray-200');
+        btn.classList.add('bg-primary-600','text-white');
+      } else {
+        btn.classList.add('bg-gray-200');
+        btn.classList.remove('bg-primary-600','text-white');
+      }
+    });
+  };
+  if (btn429) btn429.addEventListener('click', () => { setActive(btn429); currentStatus = 429; fetchAndRenderAttentionKeys(429, getLimit()); });
+  if (btn403) btn403.addEventListener('click', () => { setActive(btn403); currentStatus = 403; fetchAndRenderAttentionKeys(403, getLimit()); });
+  if (btn400) btn400.addEventListener('click', () => { setActive(btn400); currentStatus = 400; fetchAndRenderAttentionKeys(400, getLimit()); });
+  // 自定义查询
+  const input = document.getElementById('attentionErrCustom');
+  const go = document.getElementById('attentionErrGo');
+  const trigger = () => {
+    if (!input) return;
+    const val = parseInt(input.value, 10);
+    if (!isNaN(val) && val >= 100 && val <= 599) {
+      setActive(null);
+      [btn429, btn403, btn400].forEach(btn=>{ if(btn){ btn.classList.add('bg-gray-200'); btn.classList.remove('bg-primary-600','text-white'); }});
+      currentStatus = val;
+      fetchAndRenderAttentionKeys(val, getLimit());
+    } else {
+      showNotification('请输入100-599之间的HTTP状态码', 'warning');
+    }
+  };
+  if (go) go.addEventListener('click', trigger);
+  if (input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ trigger(); }});
+
+  // limit变化实时刷新当前状态码
+  if (limitInput) limitInput.addEventListener('change', () => {
+    fetchAndRenderAttentionKeys(currentStatus, getLimit());
+  });
+
+  if (btn429) setActive(btn429); // default active
+}
+
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
   initializePageAnimationsAndEffects();
@@ -1694,6 +1791,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeDropdownMenu(); // 初始化下拉菜单
   loadPoolStatus(); // 加载密钥池状态
   initChartControls(); // 初始化图表与时间区间切换
+  initAttentionKeysControls(); // 初始化值得注意的Key错误码切换
+  fetchAndRenderAttentionKeys(429, 10); // 默认渲染429，数量10
 
   // 添加定时检查密钥池状态（仅用于调试）
   console.log("🔍 启动密钥池状态监控（每30秒检查一次）");

@@ -312,6 +312,41 @@ class StatsService:
             )
             raise
 
+    async def get_attention_keys_last_24h(self, include_keys: set[str], limit: int = 20, status_code: int = 429) -> list[dict]:
+        """返回最近24小时内指定状态码(默认429)最多的Key列表，仅包含include_keys中的Key。
+
+        Returns: [{"key": str, "count": int, "status_code": int}, ...] 按次数降序
+        """
+        try:
+            now = datetime.datetime.now()
+            start_time = now - datetime.timedelta(hours=24)
+            if not include_keys:
+                return []
+            query = (
+                select(
+                    RequestLog.api_key.label("key"),
+                    func.count(RequestLog.id).label("count"),
+                )
+                .where(
+                    RequestLog.request_time >= start_time,
+                    RequestLog.status_code == status_code,
+                    RequestLog.api_key.isnot(None),
+                    RequestLog.api_key.in_(list(include_keys)),
+                )
+                .group_by(RequestLog.api_key)
+                .order_by(func.count(RequestLog.id).desc())
+                .limit(limit)
+            )
+            rows = await database.fetch_all(query)
+            return [
+                {"key": row["key"], "count": row["count"], "status_code": status_code}
+                for row in rows
+                if row["key"]
+            ]
+        except Exception as e:
+            logger.error(f"Failed to get attention keys ({status_code}) in last 24h: {e}")
+            return []
+
     async def get_key_usage_details_last_24h(self, key: str) -> Union[dict, None]:
         """
         获取指定 API 密钥在过去 24 小时内按模型统计的调用次数。

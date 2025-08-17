@@ -1115,9 +1115,10 @@ endblock %} {% block head_extra_styles %}
 </style>
 {% endblock %} {% block head_extra_scripts %}
 <!-- Chart.js for time-series chart -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<!-- keys_status.js needs to be loaded in head because it might be used by inline scripts -->
-<script src="/static/js/keys_status.js?v={{ timestamp }}"></script>
+<<<<<<< HEAD
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+<!-- Load page script with defer to guarantee DOM is ready and keep execution order -->
+<script src="/static/js/keys_status.js" defer></script>
 {% endblock %} {% block content %}
 <div class="container max-w-6xl mx-auto px-4">
   <!-- Increased max-width -->
@@ -1291,6 +1292,7 @@ endblock %} {% block head_extra_styles %}
           <canvas id="apiStatsChart"></canvas>
         </div>
       </div>
+<<<<<<< HEAD
       <!-- 密钥池状态卡片 -->
       <div class="stats-card" id="poolStatusCard" style="display: none;">
         <div class="stats-card-header">
@@ -1353,7 +1355,34 @@ endblock %} {% block head_extra_styles %}
           </div>
         </div>
       </div>
-    </div>
+
+      <!-- 值得注意的 Key 卡片（错误码统计，可切换） -->
+      <div class="stats-card chart-wide">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>值得注意的Key（24h内错误码最多）</span>
+          </h3>
+          <div class="flex items-center gap-2 text-xs">
+            <button id="attentionErr429" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700" title="429 Too Many Requests">429</button>
+            <button id="attentionErr403" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700" title="403 Forbidden">403</button>
+            <button id="attentionErr400" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700" title="400 Bad Request">400</button>
+            <div class="flex items-center gap-1 ml-2">
+              <input id="attentionErrCustom" type="number" min="100" max="599" placeholder="自定义" class="form-input h-7 w-20 px-2 py-1 text-xs border rounded focus:ring-primary-500 focus:border-primary-500" />
+              <button id="attentionErrGo" class="px-2 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white" title="查询">查询</button>
+            </div>
+            <div class="flex items-center gap-1 ml-3">
+              <label for="attentionLimitInput" class="text-xs text-gray-600">数量</label>
+              <input id="attentionLimitInput" type="number" min="1" max="1000" value="10" class="form-input h-7 w-20 px-2 py-1 text-xs border rounded focus:ring-primary-500 focus:border-primary-500" />
+            </div>
+          </div>
+        </div>
+        <div class="p-4">
+          <ul id="attentionKeysList" class="space-y-2">
+            <li class="text-center text-gray-500 py-2">加载中...</li>
+          </ul>
+        </div>
+      </div>
   </div>
 
     <!-- 有效密钥区域 -->

@@ -250,6 +250,35 @@ def setup_api_stats_routes(app: FastAPI) -> None:
             logger.error(f"Error loading batch verify page: {str(e)}")
             return RedirectResponse(url="/", status_code=302)
             
+    @app.get("/api/stats/attention-keys")
+    async def api_stats_attention_keys(
+        request: Request, limit: int = 20, status_code: int = 429
+    ):
+        """返回最近24小时指定错误码次数最多的Key（仅包含内存Key列表中的）。默认错误码429。"""
+        try:
+            auth_token = request.cookies.get("auth_token")
+            if not auth_token or not verify_auth_token(auth_token):
+                logger.warning("Unauthorized access attempt to attention-keys")
+                return {"error": "Unauthorized"}, 401
+
+            # 支持所有标准HTTP状态码范围
+            # if not isinstance(status_code, int) or status_code < 100 or status_code > 599:
+            #     return {"error": f"Unsupported status_code: {status_code}"}, 400
+
+            key_manager = await get_key_manager_instance()
+            keys_status = await key_manager.get_keys_by_status()
+            in_memory_keys = set(keys_status.get("valid_keys", [])) | set(
+                keys_status.get("invalid_keys", [])
+            )
+            stats_service = StatsService()
+            data = await stats_service.get_attention_keys_last_24h(
+                in_memory_keys, limit, status_code
+            )
+            return data
+        except Exception as e:
+            logger.error(f"Error fetching attention keys: {e}")
+            return {"error": "Internal server error"}, 500
+
     @app.get("/api/stats/key-details")
     async def api_stats_key_details(request: Request, key: str, period: str):
         """获取指定密钥在指定时间段内的调用详情"""
@@ -259,7 +288,9 @@ def setup_api_stats_routes(app: FastAPI) -> None:
                 logger.warning("Unauthorized access attempt to API key stats details")
                 return {"error": "Unauthorized"}, 401
 
-            logger.info(f"Fetching key call details for key=...{key[-4:] if key else ''}, period: {period}")
+            logger.info(
+                f"Fetching key call details for key=...{key[-4:] if key else ''}, period: {period}"
+            )
             stats_service = StatsService()
             details = await stats_service.get_key_call_details(key, period)
             return details
