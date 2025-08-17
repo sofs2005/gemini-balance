@@ -1109,24 +1109,6 @@ endblock %} {% block head_extra_styles %}
   <!-- Increased max-width -->
   <div class="glass-card rounded-2xl shadow-xl p-6 md:p-8">
     <div class="absolute top-6 right-6 flex items-center gap-3">
-      <!-- 自动刷新开关 -->
-      <div class="flex items-center text-sm select-none font-semibold" style="color: #1f2937 !important;">
-        <span class="mr-2">自动刷新</span>
-        <div
-          class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
-        >
-          <input
-            type="checkbox"
-            name="autoRefreshToggle"
-            id="autoRefreshToggle"
-            class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-          />
-          <label
-            for="autoRefreshToggle"
-            class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
-          ></label>
-        </div>
-      </div>
       <!-- 手动刷新按钮 -->
       <button
         class="bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full w-8 h-8 flex items-center justify-center text-primary-600 transition-all duration-300"

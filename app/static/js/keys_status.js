@@ -1279,48 +1279,6 @@ function initializeKeySelectionListeners() {
   setupEventListenersForList("invalidKeys", "invalid");
 }
 
-function initializeAutoRefreshControls() {
-  const autoRefreshToggle = document.getElementById("autoRefreshToggle");
-  const autoRefreshIntervalTime = 60000; // 60秒
-  let autoRefreshTimer = null;
-
-  function startAutoRefresh() {
-    if (autoRefreshTimer) return;
-    console.log("启动自动刷新...");
-    showNotification("自动刷新已启动", "info", 2000);
-    autoRefreshTimer = setInterval(() => {
-      console.log("自动刷新 keys_status 页面...");
-      location.reload();
-    }, autoRefreshIntervalTime);
-  }
-
-  function stopAutoRefresh() {
-    if (autoRefreshTimer) {
-      console.log("停止自动刷新...");
-      showNotification("自动刷新已停止", "info", 2000);
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
-    }
-  }
-
-  if (autoRefreshToggle) {
-    const isAutoRefreshEnabled =
-      localStorage.getItem("autoRefreshEnabled") === "true";
-    autoRefreshToggle.checked = isAutoRefreshEnabled;
-    if (isAutoRefreshEnabled) {
-      startAutoRefresh();
-    }
-    autoRefreshToggle.addEventListener("change", () => {
-      if (autoRefreshToggle.checked) {
-        localStorage.setItem("autoRefreshEnabled", "true");
-        startAutoRefresh();
-      } else {
-        localStorage.setItem("autoRefreshEnabled", "false");
-        stopAutoRefresh();
-      }
-    });
-  }
-}
 
 // Debounce function
 function debounce(func, delay) {
@@ -1582,7 +1540,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeKeyFilterControls();
   initializeGlobalBatchVerificationHandlers();
   initializeKeySelectionListeners();
-  initializeAutoRefreshControls();
   initializeKeyPaginationAndSearch(); // This will also handle initial display
   registerServiceWorker();
   initializeDropdownMenu(); // 初始化下拉菜单
