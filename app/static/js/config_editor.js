@@ -16,6 +16,13 @@ const PROXY_REGEX =
 const VERTEX_API_KEY_REGEX = /AQ\.[a-zA-Z0-9_\-]{50}/g; // 新增 Vertex Express API Key 正则
 const MASKED_VALUE = "••••••••";
 
+// State for API Keys pagination
+let allApiKeys = [];
+let filteredApiKeys = [];
+let currentApiKeysPage = 1;
+const apiKeysPerPage = 10;
+
+
 // DOM Elements - Global Scope for frequently accessed elements
 const safetySettingsContainer = document.getElementById(
   "SAFETY_SETTINGS_container"
@@ -146,6 +153,22 @@ document.addEventListener("DOMContentLoaded", function () {
     confirmAddApiKeyBtn.addEventListener("click", handleBulkAddApiKeys);
   if (apiKeySearchInput)
     apiKeySearchInput.addEventListener("input", handleApiKeySearch);
+
+  // Add event listener for pagination clicks
+  const paginationContainer = document.getElementById("apiKeyPagination");
+  if (paginationContainer) {
+    paginationContainer.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (button && button.dataset.page) {
+        const page = button.dataset.page;
+        if (page) {
+          currentApiKeysPage = parseInt(page, 10);
+          renderApiKeysPage();
+        }
+      }
+    });
+  }
+
 
   // Bulk Delete API Key Modal Elements and Events
   const bulkDeleteApiKeyBtn = document.getElementById("bulkDeleteApiKeyBtn");
@@ -773,7 +796,13 @@ async function initConfig() {
     }
     // --- 结束：处理假流式配置的默认值 ---
 
+    allApiKeys = [...config.API_KEYS];
+    filteredApiKeys = [...config.API_KEYS];
+    currentApiKeysPage = 1;
+
     populateForm(config);
+    renderApiKeysPage();
+
     // After populateForm, initialize masking for all populated sensitive fields
     if (configForm) {
       // Ensure form exists
@@ -837,7 +866,9 @@ function populateForm(config) {
   // 1. Clear existing dynamic content first
   const arrayContainers = document.querySelectorAll(".array-container");
   arrayContainers.forEach((container) => {
-    container.innerHTML = ""; // Clear all array containers
+    if (container.id !== 'API_KEYS_container') {
+        container.innerHTML = ""; // Clear all array containers except API keys
+    }
   });
   const budgetMapContainer = document.getElementById(
     "THINKING_BUDGET_MAP_container"
@@ -926,9 +957,9 @@ function populateForm(config) {
       '<div class="text-gray-500 text-sm italic">添加自定义请求头，例如 X-Api-Key: your-key</div>';
   }
 
-  // 4. Populate other array fields (excluding THINKING_MODELS)
+  // 4. Populate other array fields (excluding THINKING_MODELS and API_KEYS)
   for (const [key, value] of Object.entries(config)) {
-    if (Array.isArray(value) && key !== "THINKING_MODELS") {
+    if (Array.isArray(value) && key !== "THINKING_MODELS" && key !== "API_KEYS") {
       const container = document.getElementById(`${key}_container`);
       if (container) {
         value.forEach((itemValue) => {
@@ -1070,64 +1101,25 @@ function handleBulkAddApiKeys() {
   const bulkText = apiKeyBulkInput.value;
   const extractedKeys = bulkText.match(API_KEY_REGEX) || [];
 
-  const currentKeyInputs = apiKeyContainer.querySelectorAll(
-    `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-  );
-  let currentKeys = Array.from(currentKeyInputs)
-    .map((input) => {
-      return input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value")
-        : input.value;
-    })
-    .filter((key) => key && key.trim() !== "" && key !== MASKED_VALUE);
-
-  const combinedKeys = new Set([...currentKeys, ...extractedKeys]);
-  const uniqueKeys = Array.from(combinedKeys);
-
-  apiKeyContainer.innerHTML = ""; // Clear existing items more directly
-
-  uniqueKeys.forEach((key) => {
-    addArrayItemWithValue("API_KEYS", key);
-  });
-
-  const newKeyInputs = apiKeyContainer.querySelectorAll(
-    `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-  );
-  newKeyInputs.forEach((input) => {
-    if (configForm && typeof initializeSensitiveFields === "function") {
-      const focusoutEvent = new Event("focusout", {
-        bubbles: true,
-        cancelable: true,
-      });
-      input.dispatchEvent(focusoutEvent);
-    }
-  });
+  const combinedKeys = new Set([...allApiKeys, ...extractedKeys]);
+  allApiKeys = Array.from(combinedKeys);
+  filteredApiKeys = allApiKeys.filter(key => key.toLowerCase().includes(apiKeySearchInput.value.toLowerCase()));
+  currentApiKeysPage = 1;
+  renderApiKeysPage();
 
   closeModal(apiKeyModal);
-  showNotification(`添加/更新了 ${uniqueKeys.length} 个唯一密钥`, "success");
+  showNotification(`添加/更新了 ${extractedKeys.length} 个密钥，总计 ${allApiKeys.length} 个唯一密钥`, "success");
 }
 
 /**
  * Handles searching/filtering of API keys in the list.
  */
 function handleApiKeySearch() {
-  const apiKeyContainer = document.getElementById("API_KEYS_container");
-  if (!apiKeySearchInput || !apiKeyContainer) return;
-
+  if (!apiKeySearchInput) return;
   const searchTerm = apiKeySearchInput.value.toLowerCase();
-  const keyItems = apiKeyContainer.querySelectorAll(`.${ARRAY_ITEM_CLASS}`);
-
-  keyItems.forEach((item) => {
-    const input = item.querySelector(
-      `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-    );
-    if (input) {
-      const realValue = input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value").toLowerCase()
-        : input.value.toLowerCase();
-      item.style.display = realValue.includes(searchTerm) ? "flex" : "none";
-    }
-  });
+  filteredApiKeys = allApiKeys.filter(key => key.toLowerCase().includes(searchTerm));
+  currentApiKeysPage = 1;
+  renderApiKeysPage();
 }
 
 /**
@@ -1151,25 +1143,26 @@ function handleBulkDeleteApiKeys() {
     return;
   }
 
-  const keyItems = apiKeyContainer.querySelectorAll(`.${ARRAY_ITEM_CLASS}`);
   let deleteCount = 0;
+  const originalKeyCount = allApiKeys.length;
 
-  keyItems.forEach((item) => {
-    const input = item.querySelector(
-      `.${ARRAY_INPUT_CLASS}.${SENSITIVE_INPUT_CLASS}`
-    );
-    const realValue =
-      input &&
-      (input.hasAttribute("data-real-value")
-        ? input.getAttribute("data-real-value")
-        : input.value);
-    if (realValue && keysToDelete.has(realValue)) {
-      item.remove();
-      deleteCount++;
-    }
+  allApiKeys = allApiKeys.filter(key => {
+      if (keysToDelete.has(key)) {
+          deleteCount++;
+          return false;
+      }
+      return true;
   });
 
+  filteredApiKeys = allApiKeys.filter(key => key.toLowerCase().includes(apiKeySearchInput.value.toLowerCase()));
+  
+  if (currentApiKeysPage > Math.ceil(filteredApiKeys.length / apiKeysPerPage)) {
+    currentApiKeysPage = Math.max(1, Math.ceil(filteredApiKeys.length / apiKeysPerPage));
+  }
+
+  renderApiKeysPage();
   closeModal(bulkDeleteApiKeyModal);
+
 
   if (deleteCount > 0) {
     showNotification(`成功删除了 ${deleteCount} 个匹配的密钥`, "success");
@@ -1781,9 +1774,14 @@ function collectFormData() {
     formData[checkbox.name] = checkbox.checked;
   });
 
+  // Handle API_KEYS from state array
+  formData["API_KEYS"] = allApiKeys.filter(key => key && key.trim() !== "");
+
   const arrayContainers = document.querySelectorAll(".array-container");
   arrayContainers.forEach((container) => {
     const key = container.id.replace("_container", "");
+    if (key === 'API_KEYS') return; // Already handled
+
     const arrayInputs = container.querySelectorAll(`.${ARRAY_INPUT_CLASS}`);
     formData[key] = Array.from(arrayInputs)
       .map((input) => {
@@ -1797,7 +1795,7 @@ function collectFormData() {
       })
       .filter(
         (value) => value && value.trim() !== "" && value !== MASKED_VALUE
-      ); // Ensure MASKED_VALUE is also filtered if not handled
+      );
   });
 
   const budgetMapContainer = document.getElementById(
@@ -2612,3 +2610,121 @@ function updateProxyStatusInList(results) {
 }
 
 // -- End Proxy Check Functions --
+
+/**
+ * Renders the current page of API keys and the pagination controls.
+ */
+function renderApiKeysPage() {
+  renderApiKeys();
+  renderApiKeyPagination();
+}
+
+/**
+ * Renders the API keys for the current page into the container.
+ */
+function renderApiKeys() {
+  const apiKeyContainer = document.getElementById("API_KEYS_container");
+  if (!apiKeyContainer) return;
+
+  apiKeyContainer.innerHTML = ""; // Clear existing items
+
+  const start = (currentApiKeysPage - 1) * apiKeysPerPage;
+  const end = start + apiKeysPerPage;
+  const keysToRender = filteredApiKeys.slice(start, end);
+
+  if (keysToRender.length === 0 && allApiKeys.length > 0) {
+      apiKeyContainer.innerHTML = `<div class="text-gray-500 text-sm italic p-4">未找到匹配的密钥。</div>`;
+  } else {
+      keysToRender.forEach(key => {
+        addArrayItemWithValue("API_KEYS", key);
+      });
+  }
+}
+
+/**
+ * Renders the pagination controls for the API keys.
+ */
+function renderApiKeyPagination() {
+  const paginationContainer = document.getElementById("apiKeyPagination");
+  if (!paginationContainer) return;
+
+  const totalPages = Math.ceil(filteredApiKeys.length / apiKeysPerPage);
+  paginationContainer.innerHTML = "";
+
+  if (totalPages <= 1) {
+    if (filteredApiKeys.length > 0) {
+        paginationContainer.innerHTML = `<span>总共 ${filteredApiKeys.length} 个密钥</span>`;
+    }
+    return;
+  }
+  
+  const startKey = (currentApiKeysPage - 1) * apiKeysPerPage + 1;
+  const endKey = Math.min(startKey + apiKeysPerPage - 1, filteredApiKeys.length);
+
+  const keyCountSpan = document.createElement("span");
+  keyCountSpan.textContent = `显示 ${startKey}-${endKey} / ${filteredApiKeys.length} 个密钥`;
+  paginationContainer.appendChild(keyCountSpan);
+
+  const buttonsContainer = document.createElement("div");
+  buttonsContainer.className = "flex items-center gap-1";
+
+  // Previous Button
+  const prevButton = document.createElement("button");
+  prevButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
+  prevButton.dataset.page = currentApiKeysPage - 1;
+  prevButton.disabled = currentApiKeysPage === 1;
+  prevButton.className = "px-2 py-1 rounded-md text-sm font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed";
+  buttonsContainer.appendChild(prevButton);
+
+  // Page numbers logic (simplified to show a few pages around current)
+    const pageRange = 2;
+    let startPage = Math.max(1, currentApiKeysPage - pageRange);
+    let endPage = Math.min(totalPages, currentApiKeysPage + pageRange);
+
+    if (startPage > 1) {
+        const firstButton = document.createElement("button");
+        firstButton.textContent = "1";
+        firstButton.dataset.page = 1;
+        firstButton.className = "px-2 py-1 rounded-md text-sm font-medium hover:bg-gray-200";
+        buttonsContainer.appendChild(firstButton);
+        if (startPage > 2) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            ellipsis.className = "px-2 py-1 text-sm";
+            buttonsContainer.appendChild(ellipsis);
+        }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        const pageButton = document.createElement("button");
+        pageButton.textContent = i;
+        pageButton.dataset.page = i;
+        pageButton.className = `px-2 py-1 rounded-md text-sm font-medium hover:bg-gray-200 ${i === currentApiKeysPage ? 'bg-blue-600 text-white' : ''}`;
+        buttonsContainer.appendChild(pageButton);
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            const ellipsis = document.createElement("span");
+            ellipsis.textContent = "...";
+            ellipsis.className = "px-2 py-1 text-sm";
+            buttonsContainer.appendChild(ellipsis);
+        }
+        const lastButton = document.createElement("button");
+        lastButton.textContent = totalPages;
+        lastButton.dataset.page = totalPages;
+        lastButton.className = "px-2 py-1 rounded-md text-sm font-medium hover:bg-gray-200";
+        buttonsContainer.appendChild(lastButton);
+    }
+
+
+  // Next Button
+  const nextButton = document.createElement("button");
+  nextButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
+  nextButton.dataset.page = currentApiKeysPage + 1;
+  nextButton.disabled = currentApiKeysPage === totalPages;
+  nextButton.className = "px-2 py-1 rounded-md text-sm font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed";
+  buttonsContainer.appendChild(nextButton);
+
+  paginationContainer.appendChild(buttonsContainer);
+}
