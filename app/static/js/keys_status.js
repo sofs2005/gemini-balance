@@ -2394,21 +2394,23 @@ async function loadPoolStatus() {
       poolStatusKeys: data?.pool_status ? Object.keys(data.pool_status) : null
     });
 
-    if (data && data.pool_enabled && data.pool_status) {
-      console.log("✅ 密钥池状态正常，显示卡片");
-      updatePoolStatusDisplay(data.pool_status);
+    if (data && data.pool_enabled) {
+      console.log("✅ 密钥池已启用，显示卡片");
       showPoolStatusCard();
+      if (data.pool_status) {
+        console.log("📊 更新密钥池状态显示");
+        updatePoolStatusDisplay(data.pool_status);
+      } else {
+        console.warn("⚠️ 未获取到密钥池状态数据，但保持卡片可见");
+      }
     } else {
-      console.warn("❌ 密钥池状态异常，隐藏卡片:", {
-        data: !!data,
-        pool_enabled: data?.pool_enabled,
-        pool_status: !!data?.pool_status
-      });
+      console.log("🔴 密钥池未启用，隐藏卡片");
       hidePoolStatusCard();
     }
   } catch (error) {
     console.error("❌ 加载密钥池状态时出错:", error);
-    hidePoolStatusCard();
+    // On API error, we don't hide the card to prevent UI flickering on transient network errors.
+    console.warn("⚠️ API请求失败，但保持密钥池卡片可见以避免闪烁");
   }
 }
 

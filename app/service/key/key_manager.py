@@ -728,6 +728,15 @@ async def get_key_manager_instance(
                     logger.error(f"Error restoring ValidKeyPool state: {e}")
             _preserved_valid_key_pool_keys = None
 
+            # 5. 恢复有效密钥池统计信息
+            if _preserved_valid_key_pool_stats and _singleton_instance.valid_key_pool:
+                try:
+                    _singleton_instance.valid_key_pool.stats = _preserved_valid_key_pool_stats
+                    logger.info("Restored ValidKeyPool statistics after config update")
+                except Exception as e:
+                    logger.error(f"Error restoring ValidKeyPool statistics: {e}")
+            _preserved_valid_key_pool_stats = None
+
             # 清理所有保存的状态
             _preserved_vertex_old_api_keys_for_reset = None
             _preserved_vertex_next_key_in_cycle = None
@@ -792,14 +801,20 @@ async def reset_key_manager_instance():
 
             # 5. 保存有效密钥池状态
             try:
-                if _singleton_instance.valid_key_pool and _singleton_instance.valid_key_pool.valid_keys:
-                    _preserved_valid_key_pool_keys = list(_singleton_instance.valid_key_pool.valid_keys)
-                    logger.info(f"Preserved {len(_preserved_valid_key_pool_keys)} keys from ValidKeyPool")
+                if _singleton_instance.valid_key_pool:
+                    _preserved_valid_key_pool_stats = _singleton_instance.valid_key_pool.stats.copy()
+                    if _singleton_instance.valid_key_pool.valid_keys:
+                        _preserved_valid_key_pool_keys = list(_singleton_instance.valid_key_pool.valid_keys)
+                        logger.info(f"Preserved {len(_preserved_valid_key_pool_keys)} keys and stats from ValidKeyPool")
+                    else:
+                        _preserved_valid_key_pool_keys = None
                 else:
                     _preserved_valid_key_pool_keys = None
+                    _preserved_valid_key_pool_stats = None
             except Exception as e:
                 logger.error(f"Error preserving ValidKeyPool state during reset: {e}")
                 _preserved_valid_key_pool_keys = None
+                _preserved_valid_key_pool_stats = None
 
             _singleton_instance = None
             logger.info(
