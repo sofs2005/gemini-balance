@@ -968,7 +968,7 @@ function populateForm(config) {
     filteredApiKeys = [...allApiKeys];
     currentApiKeyPage = 1;
     renderApiKeyPage();
-    updateApiKeyPagination();
+    setTimeout(updateApiKeyPagination, 100);
   }
 
   // 5. Populate non-array/non-budget fields
