@@ -1533,6 +1533,148 @@ function initializeDropdownMenu() {
   }
 }
 
+// --- Chart: API success/failure over time ---
+let apiStatsChart = null;
+
+function buildChartConfig(labels, successData, failureData) {
+  return {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '成功',
+          data: successData,
+          borderColor: 'rgba(16,185,129,1)', // emerald-500
+          backgroundColor: 'rgba(16,185,129,0.15)',
+          tension: 0.3,
+          fill: true,
+          pointRadius: 2,
+        },
+        {
+          label: '失败',
+          data: failureData,
+          borderColor: 'rgba(239,68,68,1)', // red-500
+          backgroundColor: 'rgba(239,68,68,0.15)',
+          tension: 0.3,
+          fill: true,
+          pointRadius: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      scales: {
+        x: { title: { display: true, text: '时间' } },
+        y: { title: { display: true, text: '调用次数' }, beginAtZero: true, ticks: { precision: 0 } },
+      },
+    },
+  };
+}
+
+async function fetchPeriodDetails(period) {
+  // Uses backend endpoint /api/stats/details?period={period}
+  return await fetchAPI(`/api/stats/details?period=${period}`);
+}
+
+function bucketizeDetails(period, details) {
+  // details is expected to be an array of call records with fields: timestamp, status
+  // Build buckets depending on period
+  const buckets = new Map();
+  const addToBucket = (key, isSuccess) => {
+    if (!buckets.has(key)) buckets.set(key, { success: 0, failure: 0 });
+    const obj = buckets.get(key);
+    if (isSuccess) obj.success += 1; else obj.failure += 1;
+  };
+
+  const toKey = (ts) => {
+    const d = new Date(ts);
+    if (period === '1m') {
+      // bucket by second within last minute
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      const ss = String(d.getSeconds()).padStart(2,'0');
+      return `${mm}:${ss}`;
+    } else if (period === '1h') {
+      // bucket by minute
+      const HH = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      return `${HH}:${mm}`;
+    } else {
+      // 24h: bucket by hour
+      const MM = String(d.getMonth()+1).padStart(2,'0');
+      const DD = String(d.getDate()).padStart(2,'0');
+      const HH = String(d.getHours()).padStart(2,'0');
+      return `${MM}-${DD} ${HH}:00`;
+    }
+  };
+
+  (details || []).forEach((call) => {
+    const key = toKey(call.timestamp);
+    const isSuccess = call.status === 'success';
+    addToBucket(key, isSuccess);
+  });
+
+  // sort labels chronologically by parsing back to date when possible
+  const labels = Array.from(buckets.keys()).sort((a,b)=>{
+    // Try to create date objects relative to today for ordering; fallback to string compare
+    const da = Date.parse(a) || 0;
+    const db = Date.parse(b) || 0;
+    if (da && db) return da - db;
+    return a.localeCompare(b);
+  });
+  const successData = labels.map(l => buckets.get(l).success);
+  const failureData = labels.map(l => buckets.get(l).failure);
+  return { labels, successData, failureData };
+}
+
+async function renderApiChart(period) {
+  const canvas = document.getElementById('apiStatsChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  try {
+    const details = await fetchPeriodDetails(period);
+    const { labels, successData, failureData } = bucketizeDetails(period, details || []);
+    const cfg = buildChartConfig(labels, successData, failureData);
+    if (apiStatsChart) {
+      apiStatsChart.destroy();
+    }
+    apiStatsChart = new Chart(canvas.getContext('2d'), cfg);
+  } catch (e) {
+    console.error('Failed to render chart:', e);
+  }
+}
+
+function initChartControls() {
+  const btn1m = document.getElementById('chartBtn1m');
+  const btn1h = document.getElementById('chartBtn1h');
+  const btn24h = document.getElementById('chartBtn24h');
+  const setActive = (activeBtn) => {
+    [btn1m, btn1h, btn24h].forEach(btn => {
+      if (!btn) return;
+      if (btn === activeBtn) {
+        btn.classList.remove('bg-gray-200');
+        btn.classList.add('bg-primary-600','text-white');
+      } else {
+        btn.classList.add('bg-gray-200');
+        btn.classList.remove('bg-primary-600','text-white');
+      }
+    });
+  };
+
+  if (btn1m) btn1m.addEventListener('click', async () => { setActive(btn1m); await renderApiChart('1m'); });
+  if (btn1h) btn1h.addEventListener('click', async () => { setActive(btn1h); await renderApiChart('1h'); });
+  if (btn24h) btn24h.addEventListener('click', async () => { setActive(btn24h); await renderApiChart('24h'); });
+
+  // default period
+  if (btn1h) setActive(btn1h);
+  renderApiChart('1h');
+}
+
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
   initializePageAnimationsAndEffects();
@@ -1544,6 +1686,7 @@ document.addEventListener("DOMContentLoaded", () => {
   registerServiceWorker();
   initializeDropdownMenu(); // 初始化下拉菜单
   loadPoolStatus(); // 加载密钥池状态
+  initChartControls(); // 初始化图表与时间区间切换
 
   // 添加定时检查密钥池状态（仅用于调试）
   console.log("🔍 启动密钥池状态监控（每30秒检查一次）");

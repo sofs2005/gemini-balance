@@ -38,10 +38,22 @@ endblock %} {% block head_extra_styles %}
     }
   }
 
+<<<<<<< HEAD
   @media (min-width: 1024px) {
     .stats-dashboard {
       grid-template-columns: 1fr 1fr 1fr;
     }
+  }
+  /* 让图表卡片在网格中占满整行 */
+  .stats-card.chart-wide {
+    grid-column: 1 / -1;
+  }
+  /* 图表容器固定高度，配合 Chart.js maintainAspectRatio:false */
+  .chart-container {
+    height: 300px;
+  }
+  @media (max-width: 640px) {
+    .chart-container { height: 220px; }
   }
 
   /* 统计卡片样式 */
@@ -1102,6 +1114,8 @@ endblock %} {% block head_extra_styles %}
   }
 </style>
 {% endblock %} {% block head_extra_scripts %}
+<!-- Chart.js for time-series chart -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <!-- keys_status.js needs to be loaded in head because it might be used by inline scripts -->
 <script src="/static/js/keys_status.js?v={{ timestamp }}"></script>
 {% endblock %} {% block content %}
@@ -1259,6 +1273,24 @@ endblock %} {% block head_extra_styles %}
         </div>
       </div>
 
+<<<<<<< HEAD
+      <!-- 可切换时间区间的成功/失败图表卡片 -->
+      <div class="stats-card chart-wide">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-chart-bar"></i>
+            <span>调用趋势图</span>
+          </h3>
+          <div class="flex items-center gap-2 text-xs">
+            <button id="chartBtn1m" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1分钟</button>
+            <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
+            <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
+          </div>
+        </div>
+        <div class="p-4 chart-container">
+          <canvas id="apiStatsChart"></canvas>
+        </div>
+      </div>
       <!-- 密钥池状态卡片 -->
       <div class="stats-card" id="poolStatusCard" style="display: none;">
         <div class="stats-card-header">
@@ -1322,6 +1354,7 @@ endblock %} {% block head_extra_styles %}
         </div>
       </div>
     </div>
+  </div>
 
     <!-- 有效密钥区域 -->
     <div class="stats-card mb-6 animate-fade-in" style="animation-delay: 0.2s">
