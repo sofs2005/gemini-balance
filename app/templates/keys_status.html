@@ -1282,8 +1282,8 @@ endblock %} {% block head_extra_styles %}
             <span>调用趋势图</span>
           </h3>
           <div class="flex items-center gap-2 text-xs">
-            <button id="chartBtn1m" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1分钟</button>
             <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
+            <button id="chartBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">8小时</button>
             <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
           </div>
         </div>
@@ -1964,7 +1964,8 @@ endblock %} {% block head_extra_styles %}
 <!-- 操作结果模态框 -->
 <div
   id="resultModal"
-  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden"
+  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden"
+  style="z-index: 1001;"
 >
   <div
     class="bg-white rounded-2xl p-0 shadow-2xl max-w-lg w-full animate-fade-in border border-gray-200"

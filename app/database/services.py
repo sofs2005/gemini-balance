@@ -3,7 +3,7 @@
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import asc, delete, desc, func, insert, select, update
@@ -107,6 +107,7 @@ async def add_error_log(
     error_log: Optional[str] = None,
     error_code: Optional[int] = None,
     request_msg: Optional[Union[Dict[str, Any], str]] = None,
+    request_datetime: Optional[datetime] = None,
 ) -> bool:
     """
     添加错误日志
@@ -147,7 +148,9 @@ async def add_error_log(
             model_name=model_name,
             error_code=error_code,
             request_msg=request_msg_json,
-            request_time=datetime.now(),
+            request_time=(
+                request_datetime if request_datetime else datetime.now(timezone.utc)
+            ),
         )
         result = await database.execute(query)
         logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}, result: {result}")
@@ -311,6 +314,78 @@ async def get_error_log_details(log_id: int) -> Optional[Dict[str, Any]]:
             return None
     except Exception as e:
         logger.exception(f"Failed to get error log details for ID {log_id}: {str(e)}")
+        raise
+
+
+# 新增函数：通过 gemini_key / error_code / 时间窗口 查找最接近的错误日志
+async def find_error_log_by_info(
+    gemini_key: str,
+    timestamp: datetime,
+    status_code: Optional[int] = None,
+    window_seconds: int = 1,
+) -> Optional[Dict[str, Any]]:
+    """
+    在给定时间窗口内，根据 gemini_key（精确匹配）及可选的 status_code 查找最接近 timestamp 的错误日志。
+
+    假设错误日志的 error_code 存储的是 HTTP 状态码或等价错误码。
+
+    Args:
+        gemini_key: 完整的 Gemini key 字符串。
+        timestamp: 目标时间（UTC 或本地，与存储一致）。
+        status_code: 可选的错误码，若提供则优先匹配该错误码。
+        window_seconds: 允许的时间偏差窗口，单位秒，默认为 1 秒。
+
+    Returns:
+        Optional[Dict[str, Any]]: 最匹配的一条错误日志的完整详情（字段与 get_error_log_details 一致），若未找到则返回 None。
+    """
+    try:
+        start_time = timestamp - timedelta(seconds=window_seconds)
+        end_time = timestamp + timedelta(seconds=window_seconds)
+
+        base_query = select(ErrorLog).where(
+            ErrorLog.gemini_key == gemini_key,
+            ErrorLog.request_time >= start_time,
+            ErrorLog.request_time <= end_time,
+        )
+
+        # 若提供了状态码，先尝试按状态码过滤
+        if status_code is not None:
+            query = base_query.where(ErrorLog.error_code == status_code).order_by(
+                ErrorLog.request_time.desc()
+            )
+            candidates = await database.fetch_all(query)
+            if not candidates:
+                # 回退：不按状态码，仅按时间窗口
+                query2 = base_query.order_by(ErrorLog.request_time.desc())
+                candidates = await database.fetch_all(query2)
+        else:
+            query = base_query.order_by(ErrorLog.request_time.desc())
+            candidates = await database.fetch_all(query)
+
+        if not candidates:
+            return None
+
+        # 在 Python 中选择与 timestamp 最接近的一条
+        def _to_dict(row: Any) -> Dict[str, Any]:
+            d = dict(row)
+            if "request_msg" in d and d["request_msg"] is not None:
+                try:
+                    d["request_msg"] = json.dumps(
+                        d["request_msg"], ensure_ascii=False, indent=2
+                    )
+                except TypeError:
+                    d["request_msg"] = str(d["request_msg"])
+            return d
+
+        best = min(
+            candidates,
+            key=lambda r: abs((r["request_time"] - timestamp).total_seconds()),
+        )
+        return _to_dict(best)
+    except Exception as e:
+        logger.exception(
+            f"Failed to find error log by info (key=***{gemini_key[-4:] if gemini_key else ''}, code={status_code}, ts={timestamp}, window={window_seconds}s): {str(e)}"
+        )
         raise
 
 

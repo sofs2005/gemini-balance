@@ -121,6 +121,30 @@ async def process_get_error_log_details(log_id: int) -> Optional[Dict[str, Any]]
         raise
 
 
+async def process_find_error_log_by_info(
+    gemini_key: str,
+    timestamp: datetime,
+    status_code: Optional[int] = None,
+    window_seconds: int = 100,
+) -> Optional[Dict[str, Any]]:
+    """
+    根据 key/状态码/时间窗口 查询最匹配的一条错误日志，未找到则返回 None。
+    """
+    try:
+        return await db_services.find_error_log_by_info(
+            gemini_key=gemini_key,
+            timestamp=timestamp,
+            status_code=status_code,
+            window_seconds=window_seconds,
+        )
+    except Exception as e:
+        logger.error(
+            f"Service error in process_find_error_log_by_info: {e}",
+            exc_info=True,
+        )
+        raise
+
+
 async def process_delete_error_logs_by_ids(log_ids: List[int]) -> int:
     """
     按 ID 批量删除错误日志。

@@ -120,6 +120,7 @@ class ErrorLogDetailResponse(BaseModel):
     request_msg: Optional[str] = None
     model_name: Optional[str] = None
     request_time: Optional[datetime] = None
+    error_code: Optional[int] = None
 
 
 @router.get("/errors/{log_id}/details", response_model=ErrorLogDetailResponse)
@@ -149,6 +150,43 @@ async def get_error_log_detail_api(request: Request, log_id: int = Path(..., ge=
         raise HTTPException(
             status_code=500, detail=f"Failed to get error log details: {str(e)}"
         )
+
+
+@router.get("/errors/lookup", response_model=ErrorLogDetailResponse)
+async def lookup_error_log_by_info(
+    request: Request,
+    gemini_key: str = Query(..., description="完整的 Gemini key"),
+    timestamp: datetime = Query(..., description="请求时间 (ISO8601)"),
+    status_code: Optional[int] = Query(None, description="错误码 (可选)"),
+    window_seconds: int = Query(
+        100, ge=1, le=300, description="时间窗口(秒), 默认100秒"
+    ),
+):
+    """
+    通过 key / 错误码 / 时间窗口 查找最匹配的一条错误日志详情。
+    """
+    auth_token = request.cookies.get("auth_token")
+    if not auth_token or not verify_auth_token(auth_token):
+        logger.warning("Unauthorized access attempt to lookup error log by info")
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        detail = await error_log_service.process_find_error_log_by_info(
+            gemini_key=gemini_key,
+            timestamp=timestamp,
+            status_code=status_code,
+            window_seconds=window_seconds,
+        )
+        if not detail:
+            raise HTTPException(status_code=404, detail="No matching error log found")
+        return ErrorLogDetailResponse(**detail)
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        logger.exception(
+            f"Failed to lookup error log by info for key=***{gemini_key[-4:] if gemini_key else ''}: {str(e)}"
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete("/errors", status_code=status.HTTP_204_NO_CONTENT)

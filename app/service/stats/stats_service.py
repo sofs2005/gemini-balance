@@ -146,7 +146,7 @@ class StatsService:
             period: 时间段标识 ('1m', '1h', '24h')
 
         Returns:
-            包含调用详情的字典列表，每个字典包含 timestamp, key, model, status
+            包含调用详情的字典列表，每个字典包含 timestamp, key, model, status, status_code, latency_ms, error_log_id(可选)
 
         Raises:
             ValueError: 如果 period 无效
@@ -156,6 +156,8 @@ class StatsService:
             start_time = now - datetime.timedelta(minutes=1)
         elif period == "1h":
             start_time = now - datetime.timedelta(hours=1)
+        elif period == "8h":
+            start_time = now - datetime.timedelta(hours=8)
         elif period == "24h":
             start_time = now - datetime.timedelta(hours=24)
         else:
@@ -167,7 +169,8 @@ class StatsService:
                     RequestLog.request_time.label("timestamp"),
                     RequestLog.api_key.label("key"),
                     RequestLog.model_name.label("model"),
-                    RequestLog.status_code,
+                    RequestLog.status_code.label("status_code"),
+                    RequestLog.latency_ms.label("latency_ms"),
                 )
                 .where(RequestLog.request_time >= start_time)
                 .order_by(RequestLog.request_time.desc())
@@ -175,29 +178,138 @@ class StatsService:
 
             results = await database.fetch_all(query)
 
-            details = []
+            # 为失败调用尝试查找匹配的错误日志ID（时间窗口 +/- 5 分钟）
+            from app.database.models import ErrorLog  # 延迟导入避免循环依赖
+
+            details: list[dict] = []
             for row in results:
                 status = "failure"
                 if row["status_code"] is not None:
                     status = "success" if 200 <= row["status_code"] < 300 else "failure"
-                details.append(
-                    {
-                        "timestamp": row[
-                            "timestamp"
-                        ].isoformat(),
-                        "key": row["key"],
-                        "model": row["model"],
-                        "status": status,
-                    }
-                )
+
+                record = {
+                    "timestamp": row["timestamp"].isoformat(),
+                    "key": row["key"],
+                    "model": row["model"],
+                    "status": status,
+                    "status_code": row["status_code"],
+                    "latency_ms": row["latency_ms"],
+                }
+
+                # 如果失败，尝试附带一个相关的错误日志ID，便于前端拉取详情
+                if status == "failure" and row["key"]:
+                    try:
+                        ts = row["timestamp"]
+                        start_win = ts - datetime.timedelta(minutes=5)
+                        end_win = ts + datetime.timedelta(minutes=5)
+                        err_query = (
+                            select(ErrorLog.id)
+                            .where(
+                                ErrorLog.gemini_key == row["key"],
+                                ErrorLog.request_time >= start_win,
+                                ErrorLog.request_time <= end_win,
+                            )
+                            .order_by(ErrorLog.request_time.desc())
+                            .limit(1)
+                        )
+                        err = await database.fetch_one(err_query)
+                        if err:
+                            record["error_log_id"] = err["id"]
+                    except Exception as _e:
+                        logger.debug(
+                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
+                        )
+
+                details.append(record)
+
             logger.info(
                 f"Retrieved {len(details)} API call details for period '{period}'"
             )
             return details
 
         except Exception as e:
+            logger.error(f"Failed to get API call details for period '{period}': {e}")
+            raise
+
+    async def get_key_call_details(self, key: str, period: str) -> list[dict]:
+        """获取指定密钥在指定时间段内的调用详情 (与 get_api_call_details 结构一致)"""
+        now = datetime.datetime.now()
+        if period == "1m":
+            start_time = now - datetime.timedelta(minutes=1)
+        elif period == "1h":
+            start_time = now - datetime.timedelta(hours=1)
+        elif period == "8h":
+            start_time = now - datetime.timedelta(hours=8)
+        elif period == "24h":
+            start_time = now - datetime.timedelta(hours=24)
+        else:
+            raise ValueError(f"无效的时间段标识: {period}")
+
+        try:
+            query = (
+                select(
+                    RequestLog.request_time.label("timestamp"),
+                    RequestLog.api_key.label("key"),
+                    RequestLog.model_name.label("model"),
+                    RequestLog.status_code.label("status_code"),
+                    RequestLog.latency_ms.label("latency_ms"),
+                )
+                .where(RequestLog.request_time >= start_time, RequestLog.api_key == key)
+                .order_by(RequestLog.request_time.desc())
+            )
+
+            results = await database.fetch_all(query)
+
+            from app.database.models import ErrorLog
+
+            details: list[dict] = []
+            for row in results:
+                status = "failure"
+                if row["status_code"] is not None:
+                    status = "success" if 200 <= row["status_code"] < 300 else "failure"
+
+                record = {
+                    "timestamp": row["timestamp"].isoformat(),
+                    "key": row["key"],
+                    "model": row["model"],
+                    "status": status,
+                    "status_code": row["status_code"],
+                    "latency_ms": row["latency_ms"],
+                }
+
+                if status == "failure" and row["key"]:
+                    try:
+                        ts = row["timestamp"]
+                        start_win = ts - datetime.timedelta(minutes=5)
+                        end_win = ts + datetime.timedelta(minutes=5)
+                        err_query = (
+                            select(ErrorLog.id)
+                            .where(
+                                ErrorLog.gemini_key == row["key"],
+                                ErrorLog.request_time >= start_win,
+                                ErrorLog.request_time < end_win,
+                            )
+                            .order_by(ErrorLog.request_time.desc())
+                            .limit(1)
+                        )
+                        err = await database.fetch_one(err_query)
+                        if err:
+                            record["error_log_id"] = err["id"]
+                    except Exception as _e:
+                        logger.debug(
+                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
+                        )
+
+                details.append(record)
+
+            logger.info(
+                f"Retrieved {len(details)} key call details for key=...{key[-4:] if key else ''} period '{period}'"
+            )
+            return details
+        except Exception as e:
             logger.error(
-                f"Failed to get API call details for period '{period}': {e}")
+                f"Failed to get key call details for key=...{key[-4:] if key else ''} period '{period}': {e}"
+            )
             raise
 
     async def get_key_usage_details_last_24h(self, key: str) -> Union[dict, None]:
@@ -220,8 +332,7 @@ class StatsService:
         try:
             query = (
                 select(
-                    RequestLog.model_name, func.count(
-                        RequestLog.id).label("call_count")
+                    RequestLog.model_name, func.count(RequestLog.id).label("call_count")
                 )
                 .where(
                     RequestLog.api_key == key,
@@ -240,8 +351,7 @@ class StatsService:
                 )
                 return {}
 
-            usage_details = {row["model_name"]: row["call_count"]
-                             for row in results}
+            usage_details = {row["model_name"]: row["call_count"] for row in results}
             logger.info(
                 f"Successfully fetched usage details for key ending in ...{key[-4:]}: {usage_details}"
             )
