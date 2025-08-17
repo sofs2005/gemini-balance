@@ -684,18 +684,16 @@ async function initConfig() {
     // 确保数组字段有默认值
     if (
       !config.API_KEYS ||
-      !Array.isArray(config.API_KEYS) ||
-      config.API_KEYS.length === 0
+      !Array.isArray(config.API_KEYS)
     ) {
-      config.API_KEYS = ["请在此处输入 API 密钥"];
+      config.API_KEYS = [];
     }
 
     if (
       !config.ALLOWED_TOKENS ||
-      !Array.isArray(config.ALLOWED_TOKENS) ||
-      config.ALLOWED_TOKENS.length === 0
+      !Array.isArray(config.ALLOWED_TOKENS)
     ) {
-      config.ALLOWED_TOKENS = [""];
+      config.ALLOWED_TOKENS = [];
     }
 
     if (
