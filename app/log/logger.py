@@ -284,6 +284,10 @@ def get_vertex_express_logger():
     return Logger.setup_logger("vertex_express")
 
 
+def get_gemini_embedding_logger():
+    return Logger.setup_logger("gemini_embedding")
+
+
 def setup_access_logging():
     """
     Configure uvicorn access logging with API key redaction
@@ -322,4 +326,3 @@ def setup_access_logging():
     access_logger.propagate = False
 
     return access_logger
-

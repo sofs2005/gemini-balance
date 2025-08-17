@@ -265,3 +265,6 @@ memory-bank/
 
 # KiloCode directory
 .kilocode/
+
+# Claude Code directory
+.claude
