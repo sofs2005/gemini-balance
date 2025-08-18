@@ -235,7 +235,6 @@ def setup_api_stats_routes(app: FastAPI) -> None:
             )
             return {"error": "Internal server error"}, 500
 
-<<<<<<< HEAD
     @app.get("/batch-verify", response_class=HTMLResponse)
     async def batch_verify_page(request: Request):
         """批量密钥检测页面"""
