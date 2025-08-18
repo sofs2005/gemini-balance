@@ -38,8 +38,7 @@ endblock %} {% block head_extra_styles %}
     }
   }
 
-<<<<<<< HEAD
-  @media (min-width: 1024px) {
+@media (min-width: 1024px) {
     .stats-dashboard {
       grid-template-columns: 1fr 1fr 1fr;
     }
@@ -1274,25 +1273,6 @@ endblock %} {% block head_extra_styles %}
         </div>
       </div>
 
-<<<<<<< HEAD
-      <!-- 可切换时间区间的成功/失败图表卡片 -->
-      <div class="stats-card chart-wide">
-        <div class="stats-card-header">
-          <h3 class="stats-card-title">
-            <i class="fas fa-chart-bar"></i>
-            <span>调用趋势图</span>
-          </h3>
-          <div class="flex items-center gap-2 text-xs">
-            <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
-            <button id="chartBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">8小时</button>
-            <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
-          </div>
-        </div>
-        <div class="p-4 chart-container">
-          <canvas id="apiStatsChart"></canvas>
-        </div>
-      </div>
-<<<<<<< HEAD
       <!-- 密钥池状态卡片 -->
       <div class="stats-card" id="poolStatusCard" style="display: none;">
         <div class="stats-card-header">
@@ -1353,6 +1333,24 @@ endblock %} {% block head_extra_styles %}
               <span>立即维护</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- 可切换时间区间的成功/失败图表卡片 -->
+      <div class="stats-card chart-wide">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-chart-bar"></i>
+            <span>调用趋势图</span>
+          </h3>
+          <div class="flex items-center gap-2 text-xs">
+            <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
+            <button id="chartBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">8小时</button>
+            <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
+          </div>
+        </div>
+        <div class="p-4 chart-container">
+          <canvas id="apiStatsChart"></canvas>
         </div>
       </div>
 
