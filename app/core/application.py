@@ -38,8 +38,8 @@ def update_template_globals(app: FastAPI, update_info: dict):
 
 
 # --- Helper functions for lifespan ---
-async def _setup_database_and_config(app_settings):
-    """Initializes database, syncs settings, and initializes KeyManager."""
+async def _setup_database_and_config(app_settings, app: FastAPI):
+    """Initializes database, syncs settings, initializes KeyManager, and sets up ChatService."""
     initialize_database()
     logger.info("Database initialized successfully")
     await connect_to_db()
@@ -47,6 +47,7 @@ async def _setup_database_and_config(app_settings):
 
     # 初始化KeyManager
     key_manager = await get_key_manager_instance(app_settings.API_KEYS, app_settings.VERTEX_API_KEYS)
+    app.state.key_manager = key_manager  # 将key_manager存储在app.state中
 
     # 为ValidKeyPool设置聊天服务
     if key_manager and key_manager.valid_key_pool:
@@ -55,21 +56,20 @@ async def _setup_database_and_config(app_settings):
         key_manager.set_chat_service(chat_service)
         logger.info("Chat service set for ValidKeyPool")
 
-        # 异步预加载密钥池（不阻塞启动）
-        import asyncio
-        async def background_preload():
-            try:
-                await asyncio.sleep(5)  # 等待应用完全启动
-                loaded_count = await key_manager.preload_valid_key_pool()
-                logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
-            except Exception as e:
-                logger.error(f"Failed to background preload ValidKeyPool: {e}", exc_info=True)
-
-        # 创建后台任务，不等待完成
-        asyncio.create_task(background_preload())
-        logger.info("ValidKeyPool background preload task started")
-
     logger.info("Database, config sync, and KeyManager initialized successfully")
+
+async def _background_preload_keys(app: FastAPI):
+    """Asynchronously preloads the key pool after a short delay."""
+    await asyncio.sleep(5)  # 等待应用完全启动
+    key_manager = getattr(app.state, 'key_manager', None)
+    if key_manager and key_manager.valid_key_pool:
+        try:
+            loaded_count = await key_manager.preload_valid_key_pool()
+            logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
+        except Exception as e:
+            logger.error(f"Failed to background preload ValidKeyPool: {e}", exc_info=True)
+    else:
+        logger.info("KeyManager or ValidKeyPool not available, skipping background preload.")
 
 
 async def _shutdown_database():
@@ -120,9 +120,13 @@ async def lifespan(app: FastAPI):
     logger.info("Application starting up...")
     try:
         initialize_api_client()
-        await _setup_database_and_config(settings)
+        await _setup_database_and_config(settings, app)
         await _perform_update_check(app)
         _start_scheduler()
+        
+        # 启动后台密钥预加载任务
+        import asyncio
+        asyncio.create_task(_background_preload_keys(app))
 
     except Exception as e:
         logger.critical(
