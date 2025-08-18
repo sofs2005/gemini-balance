@@ -134,3 +134,76 @@ async def handle_api_error_and_get_next_key(
         )
 
     return new_key
+
+
+async def log_api_error(
+    api_key: str, 
+    error: Exception, 
+    model_name: str = None, 
+    error_type: str = "unknown",
+    request_msg: Dict[str, Any] = None
+) -> bool:
+    """
+    统一记录API错误日志，不涉及密钥切换逻辑
+    
+    Args:
+        api_key: 使用的API密钥
+        error: 异常对象
+        model_name: 模型名称
+        error_type: 错误类型
+        request_msg: 请求消息
+        
+    Returns:
+        bool: 是否记录成功
+    """
+    error_str = str(error)
+    
+    # 提取错误代码
+    error_code = None
+    match = re.search(r"status code (\d+)", error_str)
+    if match:
+        error_code = int(match.group(1))
+    
+    # 根据错误类型分类
+    if error_type == "unknown":
+        is_429_error = "429" in error_str
+        is_auth_error = "401" in error_str or "403" in error_str
+        is_client_error = "400" in error_str or "404" in error_str or "422" in error_str
+        is_server_error = "500" in error_str or "502" in error_str or "504" in error_str
+        is_service_unavailable = "503" in error_str
+        is_timeout_error = "408" in error_str
+        
+        if is_429_error:
+            error_type = "RATE_LIMIT"
+        elif is_auth_error:
+            error_type = "AUTH_ERROR"
+        elif is_client_error:
+            error_type = "CLIENT_ERROR"
+        elif is_server_error:
+            error_type = "SERVER_ERROR"
+        elif is_service_unavailable:
+            error_type = "SERVICE_UNAVAILABLE"
+        elif is_timeout_error:
+            error_type = "TIMEOUT_ERROR"
+        else:
+            error_type = "UNKNOWN_ERROR"
+    
+    # 记录错误日志
+    try:
+        logger.info(f"Recording error log for key {api_key[:8]}... with error type {error_type}")
+        result = await add_error_log(
+            gemini_key=api_key,
+            model_name=model_name,
+            error_type=error_type,
+            error_log=error_str,
+            error_code=error_code,
+            request_msg=request_msg or {"source": "service_layer"}
+        )
+        if result:
+            logger.info(f"Error log recorded successfully for key {api_key[:8]}... with error type {error_type}")
+        else:
+            logger.warning(f"Error log recording returned False for key {api_key[:8]}... with error type {error_type}")
+        return result
+    except Exception as log_error:
+        logger.error(f"Failed to record error log for key {api_key[:8]}...: {str(log_error)}", exc_info=True)
+        return False

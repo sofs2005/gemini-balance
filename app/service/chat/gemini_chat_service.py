@@ -9,7 +9,7 @@ from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
-from app.handler.error_processor import handle_api_error_and_get_next_key
+from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
@@ -348,6 +348,16 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
+            
+            # 记录错误日志
+            asyncio.create_task(log_api_error(
+                api_key=final_api_key,
+                error=e,
+                model_name=model,
+                error_type="gemini-chat-non-stream",
+                request_msg=payload
+            ))
+            
             raise e
         finally:
             # 记录请求日志
@@ -395,6 +405,16 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
+            
+            # 记录错误日志
+            asyncio.create_task(log_api_error(
+                api_key=api_key,
+                error=e,
+                model_name=f"{model}-count-tokens",
+                error_type="gemini-count-tokens",
+                request_msg=payload
+            ))
+            
             raise e
         finally:
             # 记录请求日志
