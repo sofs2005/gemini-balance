@@ -12,7 +12,7 @@ from app.service.embedding.gemini_embedding_service import GeminiEmbeddingServic
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.service.tts.native.tts_routes import get_tts_chat_service
 from app.service.model.model_service import ModelService
-from app.handler.error_processor import handle_api_error_and_get_next_key
+from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
 from app.handler.error_handler import handle_route_errors
 from app.core.constants import API_VERSION
@@ -364,6 +364,13 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
         await handle_api_error_and_get_next_key(
             key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
         )
+        # Also log the error to the database
+        await log_api_error(
+            api_key=api_key,
+            error=e,
+            model_name=settings.TEST_MODEL,
+            error_type="key-verification-single"
+        )
         return JSONResponse({"status": "invalid", "error": str(e)})
 
 
@@ -407,6 +414,13 @@ async def verify_selected_keys(
             # Use the centralized error handler to update key status
             await handle_api_error_and_get_next_key(
                 key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
+            )
+            # Also log the error to the database
+            await log_api_error(
+                api_key=api_key,
+                error=e,
+                model_name=settings.TEST_MODEL,
+                error_type="key-verification-batch"
             )
             failed_keys[api_key] = error_message
             return api_key, "invalid", error_message
