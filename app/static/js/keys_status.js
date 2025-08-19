@@ -1971,34 +1971,37 @@ async function executeDeleteSelectedKeys(type) {
     });
 
     if (response.success) {
-      // 批量删除成功后，从DOM中移除对应的行
-      const listElement = document.getElementById(`${type}Keys`);
-      if (listElement) {
-          selectedKeys.forEach(key => {
-            const listItem = listElement.querySelector(`li[data-key="${key}"]`);
-            if (listItem) {
-              listItem.style.transition = "opacity 0.3s, transform 0.3s";
-              listItem.style.opacity = "0";
-              listItem.style.transform = "scale(0.9)";
-               setTimeout(() => {
-                  listItem.remove();
-               }, 300);
-            }
-          });
-      }
-      
       const message = response.message || `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
       showNotification(message, "success");
 
-      // 更新卡片头部的计数
-      updateCardHeaderCount(type, -selectedKeys.length);
+      if (type === 'attention') {
+        // 对于 "attention" 列表，直接重新获取数据以刷新
+        fetchAndRenderAttentionKeys(currentStatus, getLimit());
+      } else {
+        // 对于 "valid" 和 "invalid" 列表，使用现有的 DOM 操作逻辑
+        const listElement = document.getElementById(`${type}Keys`);
+        if (listElement) {
+            selectedKeys.forEach(key => {
+              const listItem = listElement.querySelector(`li[data-key="${key}"]`);
+              if (listItem) {
+                listItem.style.transition = "opacity 0.3s, transform 0.3s";
+                listItem.style.opacity = "0";
+                listItem.style.transform = "scale(0.9)";
+                 setTimeout(() => {
+                    listItem.remove();
+                 }, 300);
+              }
+            });
+        }
+        // 更新卡片头部的计数
+        updateCardHeaderCount(type, -selectedKeys.length);
+      }
       
       // 短暂延迟后更新批量操作UI，确保移除动画有机会开始
       setTimeout(() => {
           updateBatchActions(type);
       }, 350);
       
-      // 不再调用会刷新的 showResultModal
     } else {
       showResultModal(false, response.message || "批量删除密钥失败", false); // false 表示失败，message，false 表示关闭后不刷新
     }
