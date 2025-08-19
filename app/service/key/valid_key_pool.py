@@ -332,7 +332,7 @@ class ValidKeyPool:
         logger.warning("Starting non-blocking emergency refill process")
 
         # 尝试立即获取一个候选密钥返回，避免阻塞请求
-        candidate_key = await self.key_manager.get_next_working_key(model_name)
+        candidate_key = await self.key_manager._original_get_next_working_key(model_name)
         logger.info(f"Immediately returning candidate key {redact_key_for_logging(candidate_key)} for the current request.")
 
         # 检查紧急补充锁，如果未锁定，则创建后台任务
