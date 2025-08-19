@@ -138,11 +138,12 @@ async def handle_api_error_and_get_next_key(
 
 
 async def log_api_error(
-    api_key: str, 
-    error: Exception, 
-    model_name: str = None, 
+    api_key: str,
+    error: Exception,
+    model_name: str = None,
     error_type: str = "unknown",
-    request_msg: Dict[str, Any] = None
+    request_msg: Dict[str, Any] = None,
+    request_datetime: datetime = None
 ) -> bool:
     """
     统一记录API错误日志，不涉及密钥切换逻辑
@@ -198,7 +199,8 @@ async def log_api_error(
             error_type=error_type,
             error_log=error_str,
             error_code=error_code,
-            request_msg=request_msg or {"source": "service_layer"}
+            request_msg=request_msg or {"source": "service_layer"},
+            request_datetime=request_datetime
         )
         if result:
             logger.info(f"Error log recorded successfully for key {api_key[:8]}... with error type {error_type}")

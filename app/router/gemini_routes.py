@@ -369,7 +369,8 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
             api_key=api_key,
             error=e,
             model_name=settings.TEST_MODEL,
-            error_type="key-verification-single"
+            error_type="key-verification-single",
+            request_datetime=datetime.datetime.now()
         )
         return JSONResponse({"status": "invalid", "error": str(e)})
 
@@ -420,7 +421,8 @@ async def verify_selected_keys(
                 api_key=api_key,
                 error=e,
                 model_name=settings.TEST_MODEL,
-                error_type="key-verification-batch"
+                error_type="key-verification-batch",
+                request_datetime=datetime.datetime.now()
             )
             failed_keys[api_key] = error_message
             return api_key, "invalid", error_message
