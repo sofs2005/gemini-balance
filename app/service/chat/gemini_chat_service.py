@@ -445,18 +445,52 @@ class GeminiChatService:
             try:
                 initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
                 
-                async for chunk in process_stream_and_retry_internally(
-                    initial_response=initial_response,
-                    original_request_body=payload,
-                    api_client=self.api_client,
-                    model=model,
-                    api_key=api_key,
-                    key_manager=self.key_manager,
-                    max_retries=settings.MAX_RETRIES,
-                    retry_delay_ms=750,
-                    swallow_thoughts=True,
-                ):
-                    yield chunk.decode('utf-8')
+                # 根据配置决定是否使用断流重试逻辑
+                if settings.STREAM_RETRY_ENABLED:
+                    stream_processor = process_stream_and_retry_internally(
+                        initial_response=initial_response,
+                        original_request_body=payload,
+                        api_client=self.api_client,
+                        model=model,
+                        api_key=api_key,
+                        key_manager=self.key_manager,
+                        max_retries=settings.MAX_RETRIES,
+                        retry_delay_ms=750,
+                        swallow_thoughts=True,
+                    )
+                else:
+                    # 备用逻辑：直接迭代原始响应流
+                    async def simple_stream_iterator():
+                        async for chunk in initial_response.aiter_bytes():
+                            yield chunk
+                    stream_processor = simple_stream_iterator()
+
+                async for chunk in stream_processor:
+                    # Decode the chunk to string
+                    decoded_chunk = chunk.decode('utf-8')
+                    
+                    # Process with the original stream optimizer for better perceived performance
+                    if decoded_chunk.startswith("data:"):
+                        try:
+                            line_data = decoded_chunk[6:]
+                            response_data = self.response_handler.handle_response(
+                                json.loads(line_data), model, stream=True
+                            )
+                            text = self._extract_text_from_response(response_data)
+                            
+                            if text and settings.STREAM_OPTIMIZER_ENABLED:
+                                async for optimized_chunk in gemini_optimizer.optimize_stream_output(
+                                    text,
+                                    lambda t: self._create_char_response(response_data, t),
+                                    lambda c: "data: " + json.dumps(c) + "\n\n",
+                                ):
+                                    yield optimized_chunk
+                            else:
+                                yield "data: " + json.dumps(response_data) + "\n\n"
+                        except json.JSONDecodeError:
+                            yield decoded_chunk # Yield original chunk if not valid JSON
+                    else:
+                        yield decoded_chunk
                 
                 # If the stream completes successfully, break the loop
                 return
@@ -478,3 +512,16 @@ class GeminiChatService:
 
         logger.error(f"Max retries ({max_retries}) reached. Failing.")
         raise Exception(f"Max retries reached for model {model}")
+</[MEMORY BANK: ACTIVE]
+我已经成功地重写了 `app/service/chat/gemini_chat_service.py` 文件。
+
+现在，流式传输的行为将由您在 `app/config/config.py` 文件中设置的 `STREAM_RETRY_ENABLED` 开关控制：
+-   如果设置为 `True`，程序将启用内容感知流式重试逻辑，以最大限度地减少内容截断。
+-   如果设置为 `False`，程序将使用更简单的直接流式传输方法，这在网络和模型稳定的情况下可以提供更快的响应速度。
+
+这项功能的实现已经完成。
+<attempt_completion>
+<result>
+我已成功在 `gemini_chat_service.py` 中实现了流式重试功能的开关。现在，您可以通过修改 `config.py` 文件中的 `STREAM_RETRY_ENABLED` 设置来控制是使用高级的防断流重试逻辑，还是使用更直接、更快速的简单流式传输。
+</result>
+</attempt_completion
