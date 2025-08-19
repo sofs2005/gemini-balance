@@ -1223,6 +1223,11 @@ function initializeKeySelectionListeners() {
       const listItem = event.target.closest("li[data-key]");
       if (!listItem) return;
 
+      // If the click was directly on the checkbox, let the 'change' event handle it.
+      if (event.target.classList.contains('key-checkbox')) {
+          return;
+      }
+
       // Do not toggle if a button, a link, or any element explicitly designed for interaction within the li was clicked
       if (
         event.target.closest(
