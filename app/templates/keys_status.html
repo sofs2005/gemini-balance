@@ -327,15 +327,17 @@ endblock %} {% block head_extra_styles %}
     border-color: rgba(59, 130, 246, 0.3);
   }
 
-  /* 隐藏原生复选框（仅隐藏有效/无效列表中的复选框，保留值得注意的Key列表中的复选框可见） */
+  /* 隐藏所有列表中的原生复选框 */
   #validKeys .key-checkbox,
-  #invalidKeys .key-checkbox {
+  #invalidKeys .key-checkbox,
+  #attentionKeysList .key-checkbox {
     display: none;
   }
 
-  /* 自定义复选框样式（仅针对有效/无效列表） */
+  /* 为所有列表应用自定义复选框样式 */
   #validKeys li::before,
-  #invalidKeys li::before {
+  #invalidKeys li::before,
+  #attentionKeysList li::before {
     content: "";
     position: absolute;
     left: 0.75rem;
@@ -350,14 +352,16 @@ endblock %} {% block head_extra_styles %}
   }
 
   #validKeys li.selected::before,
-  #invalidKeys li.selected::before {
+  #invalidKeys li.selected::before,
+  #attentionKeysList li.selected::before {
     background-color: #3b82f6; /* blue-500 */
     border-color: #2563eb; /* blue-600 */
   }
 
-  /* 自定义复选框对勾样式 */
+  /* 为所有列表应用自定义复选框对勾样式 */
   #validKeys li.selected::after,
-  #invalidKeys li.selected::after {
+  #invalidKeys li.selected::after,
+  #attentionKeysList li.selected::after {
     content: "\f00c"; /* Font Awesome check icon */
     font-family: "Font Awesome 5 Free";
     font-weight: 900;
@@ -369,7 +373,7 @@ endblock %} {% block head_extra_styles %}
     font-size: 0.8rem;
   }
 
-  /* 值得注意的Key列表样式与选中态（保留原生复选框可见） */
+  /* 值得注意的Key列表样式与选中态 */
   #attentionKeysList li {
     display: flex;
     align-items: center;
@@ -380,6 +384,8 @@ endblock %} {% block head_extra_styles %}
     padding: 0.5rem 0.75rem;
     transition: all 0.2s ease;
     cursor: pointer;
+    position: relative;
+    padding-left: 2.5rem; /* 为自定义复选框留出空间 */
   }
   #attentionKeysList li:hover {
     border-color: rgba(0, 0, 0, 0.12);
@@ -389,9 +395,6 @@ endblock %} {% block head_extra_styles %}
   #attentionKeysList li.selected {
     background-color: rgba(239, 246, 255, 0.95); /* light blue */
     border-color: rgba(59, 130, 246, 0.35);
-  }
-  #attentionKeysList .key-checkbox {
-    margin-right: 0.25rem;
   }
 
   .key-text {
