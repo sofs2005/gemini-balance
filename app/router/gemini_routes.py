@@ -113,12 +113,10 @@ async def list_models(
 
 @router.post("/models/{model_name}:generateContent")
 @router_v1beta.post("/models/{model_name}:generateContent")
-@RetryHandler(key_arg="api_key")
 async def generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):
@@ -142,6 +140,7 @@ async def generate_content(
                 logger.info(f"TTS responseModalities: {response_modalities}")
                 logger.info(f"TTS speechConfig: {speech_config}")
 
+        api_key = await key_manager.get_next_working_key(model_name=model_name)
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
@@ -172,12 +171,10 @@ async def generate_content(
 
 @router.post("/models/{model_name}:streamGenerateContent")
 @router_v1beta.post("/models/{model_name}:streamGenerateContent")
-@RetryHandler(key_arg="api_key")
 async def stream_generate_content(
     model_name: str,
     request: GeminiRequest,
     _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service)
 ):
@@ -186,6 +183,7 @@ async def stream_generate_content(
     async with handle_route_errors(logger, operation_name, failure_message="Streaming request initiation failed"):
         logger.info(f"Handling Gemini streaming content generation for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        api_key = await key_manager.get_next_working_key(model_name=model_name)
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):

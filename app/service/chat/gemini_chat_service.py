@@ -433,32 +433,48 @@ class GeminiChatService:
             file_api_key = await get_file_api_key(file_names[0])
             if file_api_key:
                 logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
-                api_key = file_api_key  # 使用文件的 API key
+                api_key = file_api_key
             else:
                 logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
 
         payload = _build_payload(model, request)
-        
-        try:
-            # 发起初次请求
-            initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
-            
-            # 使用新的处理器来处理流和重试
-            async for chunk in process_stream_and_retry_internally(
-                initial_response=initial_response,
-                original_request_body=payload,
-                api_client=self.api_client,
-                model=model,
-                api_key=api_key,
-                key_manager=self.key_manager,
-                max_retries=settings.MAX_RETRIES,
-                retry_delay_ms=750, # Can be configured
-                swallow_thoughts=True, # Can be configured
-            ):
-                yield chunk.decode('utf-8')
+        retries = 0
+        max_retries = settings.MAX_RETRIES
 
-        except Exception as e:
-            logger.error(f"Initial stream request failed: {e}", exc_info=True)
-            # 可以在这里添加失败时的日志记录
-            # 注意：新的处理器内部已经有详细的日志，这里可能只需要记录初始失败
-            raise e
+        while retries < max_retries:
+            try:
+                initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
+                
+                async for chunk in process_stream_and_retry_internally(
+                    initial_response=initial_response,
+                    original_request_body=payload,
+                    api_client=self.api_client,
+                    model=model,
+                    api_key=api_key,
+                    key_manager=self.key_manager,
+                    max_retries=settings.MAX_RETRIES,
+                    retry_delay_ms=750,
+                    swallow_thoughts=True,
+                ):
+                    yield chunk.decode('utf-8')
+                
+                # If the stream completes successfully, break the loop
+                return
+
+            except Exception as e:
+                retries += 1
+                logger.error(f"Stream attempt {retries} failed: {e}", exc_info=True)
+                
+                new_key = await handle_api_error_and_get_next_key(
+                    self.key_manager, e, api_key, model, retries
+                )
+
+                if not new_key or new_key == api_key:
+                    logger.error("No new valid keys available. Aborting after multiple retries.")
+                    raise e
+                
+                api_key = new_key
+                logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
+
+        logger.error(f"Max retries ({max_retries}) reached. Failing.")
+        raise Exception(f"Max retries reached for model {model}")
