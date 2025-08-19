@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Set
 
 import httpx
+from app.handler.error_processor import handle_api_error_and_get_next_key
 
 # --- Constants ---
 NON_RETRYABLE_STATUSES: Set[int] = {400, 401, 403, 404, 429}
@@ -252,10 +253,16 @@ async def process_stream_and_retry_internally(
         try:
             retry_body = build_retry_request_body(original_request_body, accumulated_text)
             
-            # Here we need to integrate with our existing KeyManager
-            # Mark the current key as failed for this model before getting a new one
-            await key_manager.mark_key_model_as_cooling(api_key, model)
-            api_key = await key_manager.get_next_working_key(model_name=model)
+            # Use the correct error handler to get the next key
+            new_key = await handle_api_error_and_get_next_key(
+                key_manager, Exception(interruption_reason), api_key, model, consecutive_retry_count
+            )
+
+            if not new_key or new_key == api_key:
+                logger.error("No new valid keys available. Aborting retry.")
+                return
+            
+            api_key = new_key
             if not api_key:
                 logger.error("No more valid keys available. Aborting retry.")
                 return
