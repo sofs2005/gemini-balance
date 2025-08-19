@@ -59,11 +59,11 @@ async def _setup_database_and_config(app_settings, app: FastAPI):
     logger.info("Database, config sync, and KeyManager initialized successfully")
 
 async def _background_preload_keys(app: FastAPI):
-    """Asynchronously preloads the key pool after a short delay."""
-    await asyncio.sleep(5)  # 等待应用完全启动
+    """Asynchronously preloads the key pool."""
     key_manager = getattr(app.state, 'key_manager', None)
     if key_manager and key_manager.valid_key_pool:
         try:
+            logger.info("Starting background key pool preload...")
             loaded_count = await key_manager.preload_valid_key_pool()
             logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
         except Exception as e:
@@ -124,9 +124,10 @@ async def lifespan(app: FastAPI):
         await _perform_update_check(app)
         _start_scheduler()
         
-        # 启动后台密钥预加载任务
+        # Create a background task to preload keys without blocking startup
         import asyncio
         asyncio.create_task(_background_preload_keys(app))
+        logger.info("Background key preloading task scheduled.")
 
     except Exception as e:
         logger.critical(
