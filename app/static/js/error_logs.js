@@ -11,6 +11,11 @@ function scrollToBottom() {
 
 // API 调用辅助函数
 async function fetchAPI(url, options = {}) {
+  // Ensure GET requests are not cached by the browser
+  if (!options.method || options.method.toUpperCase() === 'GET') {
+    options.cache = 'no-store';
+  }
+
   try {
     const response = await fetch(url, options);
 
