@@ -94,6 +94,7 @@ class OpenAICompatiableService:
                 error_log=error_log_msg,
                 error_code=status_code,
                 request_msg=request,
+                request_datetime=request_datetime,
             )
             raise e
         finally:
@@ -154,6 +155,7 @@ class OpenAICompatiableService:
                     error_log=error_log_msg,
                     error_code=status_code,
                     request_msg=payload,
+                    request_datetime=request_datetime,
                 )
 
                 if self.key_manager:

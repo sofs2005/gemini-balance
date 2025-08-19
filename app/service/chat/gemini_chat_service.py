@@ -355,7 +355,8 @@ class GeminiChatService:
                 error=e,
                 model_name=model,
                 error_type="gemini-chat-non-stream",
-                request_msg=payload
+                request_msg=payload,
+                request_datetime=request_datetime
             ))
             
             raise e

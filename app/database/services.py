@@ -149,7 +149,7 @@ async def add_error_log(
             error_code=error_code,
             request_msg=request_msg_json,
             request_time=(
-                request_datetime if request_datetime else datetime.now(timezone.utc)
+                request_datetime if request_datetime else datetime.now()
             ),
         )
         result = await database.execute(query)

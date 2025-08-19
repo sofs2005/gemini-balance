@@ -84,6 +84,7 @@ class GeminiEmbeddingService:
                 error_log=error_log_msg,
                 error_code=status_code,
                 request_msg=payload,
+                request_datetime=request_datetime,
             )
             raise e
         finally:
@@ -133,6 +134,7 @@ class GeminiEmbeddingService:
                 error_log=error_log_msg,
                 error_code=status_code,
                 request_msg=payload,
+                request_datetime=request_datetime,
             )
             raise e
         finally:

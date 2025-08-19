@@ -115,8 +115,14 @@ function initStatItemAnimations() {
 
 // 获取指定类型区域内选中的密钥
 function getSelectedKeys(type) {
+  let selectorRoot;
+  if (type === 'attention') {
+    selectorRoot = '#attentionKeysList';
+  } else {
+    selectorRoot = `#${type}Keys`;
+  }
   const checkboxes = document.querySelectorAll(
-    `#${type}Keys .key-checkbox:checked`
+    `${selectorRoot} .key-checkbox:checked`
   );
   return Array.from(checkboxes).map((cb) => cb.value);
 }
@@ -126,27 +132,27 @@ function updateBatchActions(type) {
   const selectedKeys = getSelectedKeys(type);
   const count = selectedKeys.length;
   const batchActionsDiv = document.getElementById(`${type}BatchActions`);
+  if (!batchActionsDiv) return;
   const selectedCountSpan = document.getElementById(`${type}SelectedCount`);
   const buttons = batchActionsDiv.querySelectorAll("button");
 
   if (count > 0) {
     batchActionsDiv.classList.remove("hidden");
-    selectedCountSpan.textContent = count;
+    if (selectedCountSpan) selectedCountSpan.textContent = count;
     buttons.forEach((button) => (button.disabled = false));
   } else {
     batchActionsDiv.classList.add("hidden");
-    selectedCountSpan.textContent = "0";
+    if (selectedCountSpan) selectedCountSpan.textContent = "0";
     buttons.forEach((button) => (button.disabled = true));
   }
 
   // 更新全选复选框状态
-  const selectAllCheckbox = document.getElementById(
-    `selectAll${type.charAt(0).toUpperCase() + type.slice(1)}`
-  );
-  const allCheckboxes = document.querySelectorAll(`#${type}Keys .key-checkbox`);
+  const selectAllId = `selectAll${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  const selectAllCheckbox = document.getElementById(selectAllId);
+  const rootId = type === 'attention' ? 'attentionKeysList' : `${type}Keys`;
   // 只有在有可见的 key 时才考虑全选状态
   const visibleCheckboxes = document.querySelectorAll(
-    `#${type}Keys li:not([style*="display: none"]) .key-checkbox`
+    `#${rootId} li:not([style*="display: none"]) .key-checkbox`
   );
   if (selectAllCheckbox && visibleCheckboxes.length > 0) {
     selectAllCheckbox.checked = count === visibleCheckboxes.length;
@@ -175,7 +181,9 @@ function updateCardHeaderCount(type, delta) {
 
 // 全选/取消全选指定类型的密钥
 function toggleSelectAll(type, isChecked) {
-  const listElement = document.getElementById(`${type}Keys`);
+  const rootId = type === 'attention' ? 'attentionKeysList' : `${type}Keys`;
+  const listElement = document.getElementById(rootId);
+  if (!listElement) return;
   // Select checkboxes within LI elements that are NOT styled with display:none
   // This targets currently visible items based on filtering.
   const visibleCheckboxes = listElement.querySelectorAll(
@@ -184,20 +192,21 @@ function toggleSelectAll(type, isChecked) {
 
   visibleCheckboxes.forEach((checkbox) => {
     checkbox.checked = isChecked;
-    const listItem = checkbox.closest("li[data-key]"); // Get the LI from the current DOM
+    const listItem = checkbox.closest("li[data-key]");
     if (listItem) {
       listItem.classList.toggle("selected", isChecked);
-
-      // Sync with master array
-      const key = listItem.dataset.key;
-      const masterList = type === "valid" ? allValidKeys : allInvalidKeys;
-      if (masterList) {
-        // Ensure masterList is defined
-        const masterListItem = masterList.find((li) => li.dataset.key === key);
-        if (masterListItem) {
-          const masterCheckbox = masterListItem.querySelector(".key-checkbox");
-          if (masterCheckbox) {
-            masterCheckbox.checked = isChecked;
+      if (type !== 'attention') {
+        // Sync with master array
+        const key = listItem.dataset.key;
+        const masterList = type === "valid" ? allValidKeys : allInvalidKeys;
+        if (masterList) {
+          // Ensure masterList is defined
+          const masterListItem = masterList.find((li) => li.dataset.key === key);
+          if (masterListItem) {
+            const masterCheckbox = masterListItem.querySelector(".key-checkbox");
+            if (masterCheckbox) {
+              masterCheckbox.checked = isChecked;
+            }
           }
         }
       }
@@ -1253,20 +1262,21 @@ function initializeKeySelectionListeners() {
         if (listItem) {
           listItem.classList.toggle("selected", checkbox.checked);
 
-          // Sync with master array
-          const key = listItem.dataset.key;
-          const masterList =
-            keyType === "valid" ? allValidKeys : allInvalidKeys;
-          if (masterList) {
-            // Ensure masterList is defined
-            const masterListItem = masterList.find(
-              (li) => li.dataset.key === key
-            );
-            if (masterListItem) {
-              const masterCheckbox =
-                masterListItem.querySelector(".key-checkbox");
-              if (masterCheckbox) {
-                masterCheckbox.checked = checkbox.checked;
+          // Sync with master array (only for valid/invalid lists)
+          if (keyType !== 'attention') {
+            const key = listItem.dataset.key;
+            const masterList =
+              keyType === "valid" ? allValidKeys : allInvalidKeys;
+            if (masterList) {
+              const masterListItem = masterList.find(
+                (li) => li.dataset.key === key
+              );
+              if (masterListItem) {
+                const masterCheckbox =
+                  masterListItem.querySelector(".key-checkbox");
+                if (masterCheckbox) {
+                  masterCheckbox.checked = checkbox.checked;
+                }
               }
             }
           }
@@ -1278,6 +1288,7 @@ function initializeKeySelectionListeners() {
 
   setupEventListenersForList("validKeys", "valid");
   setupEventListenersForList("invalidKeys", "invalid");
+  setupEventListenersForList("attentionKeysList", "attention");
 }
 
 
@@ -1676,33 +1687,43 @@ async function fetchAndRenderAttentionKeys(statusCode = 429, limit = 10) {
     listEl.innerHTML = '';
     if (!data || (Array.isArray(data) && data.length === 0) || data.error) {
       listEl.innerHTML = '<li class="text-center text-gray-500 py-2">暂无需要注意的Key</li>';
+      updateBatchActions('attention');
       return;
     }
     data.forEach(item => {
       const li = document.createElement('li');
       li.className = 'flex items-center justify-between bg-white rounded border px-3 py-2';
+      li.dataset.key = item.key || '';
       const masked = item.key ? `${item.key.substring(0,4)}...${item.key.substring(item.key.length-4)}` : 'N/A';
       const code = item.status_code ?? statusCode;
       li.innerHTML = `
-        \u003cdiv class=\"flex items-center gap-3\"\u003e
-          \u003cspan class=\"font-mono text-sm\"\u003e${masked}\u003c/span\u003e
-          \u003cspan class=\"text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded\"\u003e${code}: ${item.count}\u003c/span\u003e
-        \u003c/div\u003e
-        \u003cdiv class=\"flex items-center gap-2\"\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white\" title=\"验证此Key\"\u003e验证\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white\" title=\"查看24小时详情\"\u003e详情\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white\" title=\"复制Key\"\u003e复制\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white\" title=\"删除此Key\"\u003e删除\u003c/button\u003e
-        \u003c/div\u003e`;
+        <div class="flex items-center gap-3">
+          <input type="checkbox" class="form-checkbox h-4 w-4 text-primary-600 border-gray-300 rounded key-checkbox" value="${item.key || ''}">
+          <span class="font-mono text-sm">${masked}</span>
+          <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">${code}: ${item.count}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white" title="验证此Key">验 证</button>
+          <button class="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white" title="查看24小时详情">详情</button>
+          <button class="px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white" title="复制Key">复制</button>
+          <button class="px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white" title="删除此Key">删除</button>
+        </div>`;
       const [verifyBtn, detailBtn, copyBtn, deleteBtn] = li.querySelectorAll('button');
-      verifyBtn.addEventListener('click', (e) => verifyKey(item.key, e.currentTarget));
-      detailBtn.addEventListener('click', () => window.showKeyUsageDetails(item.key));
-      copyBtn.addEventListener('click', () => copyKey(item.key));
-      deleteBtn.addEventListener('click', (e) => showSingleKeyDeleteConfirmModal(item.key, e.currentTarget));
+      verifyBtn.addEventListener('click', (e) => { e.stopPropagation(); verifyKey(item.key, e.currentTarget); });
+      detailBtn.addEventListener('click', (e) => { e.stopPropagation(); window.showKeyUsageDetails(item.key); });
+      copyBtn.addEventListener('click', (e) => { e.stopPropagation(); copyKey(item.key); });
+      deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); showSingleKeyDeleteConfirmModal(item.key, e.currentTarget); });
+      // Checkbox change updates batch actions
+      const checkbox = li.querySelector('.key-checkbox');
+      if (checkbox) {
+        checkbox.addEventListener('change', () => updateBatchActions('attention'));
+      }
       listEl.appendChild(li);
     });
+    updateBatchActions('attention');
   } catch (e) {
     listEl.innerHTML = `<li class="text-center text-red-500 py-2">加载失败: ${e.message}</li>`;
+    updateBatchActions('attention');
   }
 }
 
