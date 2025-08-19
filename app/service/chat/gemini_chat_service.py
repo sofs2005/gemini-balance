@@ -17,6 +17,7 @@ from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
 import asyncio
 from app.database.services import add_error_log, add_request_log, get_file_api_key
+from app.handler.stream_retry_handler import process_stream_and_retry_internally
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
@@ -435,85 +436,29 @@ class GeminiChatService:
                 api_key = file_api_key  # 使用文件的 API key
             else:
                 logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-                
-        retries = 0
-        max_retries = settings.MAX_RETRIES
+
         payload = _build_payload(model, request)
-        is_success = False
-        status_code = None
-        final_api_key = api_key
+        
+        try:
+            # 发起初次请求
+            initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
+            
+            # 使用新的处理器来处理流和重试
+            async for chunk in process_stream_and_retry_internally(
+                initial_response=initial_response,
+                original_request_body=payload,
+                api_client=self.api_client,
+                model=model,
+                api_key=api_key,
+                key_manager=self.key_manager,
+                max_retries=settings.MAX_RETRIES,
+                retry_delay_ms=750, # Can be configured
+                swallow_thoughts=True, # Can be configured
+            ):
+                yield chunk.decode('utf-8')
 
-        while retries < max_retries:
-            request_datetime = datetime.datetime.now()
-            start_time = time.perf_counter()
-            current_attempt_key = api_key
-            final_api_key = current_attempt_key
-            try:
-                async for line in self.api_client.stream_generate_content(
-                    payload, model, current_attempt_key
-                ):
-                    # print(line)
-                    if line.startswith("data:"):
-                        line = line[6:]
-                        response_data = self.response_handler.handle_response(
-                            json.loads(line), model, stream=True
-                        )
-                        text = self._extract_text_from_response(response_data)
-                        # 如果有文本内容，且开启了流式输出优化器，则使用流式输出优化器处理
-                        if text and settings.STREAM_OPTIMIZER_ENABLED:
-                            # 使用流式输出优化器处理文本输出
-                            async for (
-                                optimized_chunk
-                            ) in gemini_optimizer.optimize_stream_output(
-                                text,
-                                lambda t: self._create_char_response(response_data, t),
-                                lambda c: "data: " + json.dumps(c) + "\n\n",
-                            ):
-                                yield optimized_chunk
-                        else:
-                            # 如果没有文本内容（如工具调用等），整块输出
-                            yield "data: " + json.dumps(response_data) + "\n\n"
-                logger.info("Streaming completed successfully")
-                is_success = True
-                status_code = 200
-                break
-            except Exception as e:
-                retries += 1
-                is_success = False
-                error_log_msg = str(e)
-                logger.warning(
-                    f"Streaming API call failed with error: {error_log_msg}. Attempt {retries} of {max_retries}"
-                )
-                match = re.search(r"status code (\d+)", error_log_msg)
-                if match:
-                    status_code = int(match.group(1))
-                else:
-                    status_code = 500
-
-                new_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, current_attempt_key, model, retries
-                )
-
-                if new_key and new_key != current_attempt_key:
-                    api_key = new_key
-                    logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
-                else:
-                    logger.error(f"No valid API key available after {retries} retries.")
-                    break
-
-                if retries >= max_retries:
-                    logger.error(
-                        f"Max retries ({max_retries}) reached for streaming."
-                    )
-                    break
-            finally:
-                end_time = time.perf_counter()
-                latency_ms = int((end_time - start_time) * 1000)
-                asyncio.create_task(add_request_log(
-                    model_name=model,
-                    api_key=final_api_key,
-                    is_success=is_success,
-                    status_code=status_code,
-                    latency_ms=latency_ms,
-                    request_time=request_datetime
-                ))
+        except Exception as e:
+            logger.error(f"Initial stream request failed: {e}", exc_info=True)
+            # 可以在这里添加失败时的日志记录
+            # 注意：新的处理器内部已经有详细的日志，这里可能只需要记录初始失败
+            raise e

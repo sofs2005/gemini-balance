@@ -114,7 +114,7 @@ class KeyManager:
             return self.valid_key_pool.get_pool_stats()
         return None
 
-    async def get_next_key(self) -> Optional[str]:
+    async def _get_next_key_in_cycle(self) -> Optional[str]:
         """获取下一个有效的API key，使用索引循环"""
         async with self.failure_count_lock: # Re-using lock for simplicity
             if not self.valid_api_keys:
@@ -127,6 +127,21 @@ class KeyManager:
             key = self.valid_api_keys[self.key_index]
             self.key_index = (self.key_index + 1) % len(self.valid_api_keys)
             return key
+
+    async def get_next_key(self, current_key: str) -> Optional[str]:
+        """
+        获取当前密钥之后的下一个有效密钥
+        """
+        async with self.failure_count_lock:
+            if not self.valid_api_keys:
+                return None
+            try:
+                current_index = self.valid_api_keys.index(current_key)
+                next_index = (current_index + 1) % len(self.valid_api_keys)
+                return self.valid_api_keys[next_index]
+            except ValueError:
+                # If current_key is not in the list, return the first one
+                return self.valid_api_keys[0]
 
     async def get_next_vertex_key(self) -> str:
         """获取下一个 Vertex Express API key"""
