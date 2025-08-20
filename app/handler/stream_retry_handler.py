@@ -225,6 +225,15 @@ async def process_stream_and_retry_internally(
             logger.debug(f"  Text generated this stream: {len(text_in_this_stream)} chars")
             logger.debug(f"  Total accumulated text: {len(accumulated_text)} chars")
 
+        # Final check for completeness, even on a clean exit
+        if clean_exit and accumulated_text:
+            trimmed_text = accumulated_text.strip()
+            last_char = trimmed_text[-1:] if trimmed_text else ""
+            if last_char not in FINAL_PUNCTUATION:
+                logger.error(f"Stream considered incomplete despite clean exit. Last char: '{last_char}'. Triggering retry.")
+                clean_exit = False
+                interruption_reason = "FINISH_INCOMPLETE"
+
         if clean_exit:
             session_duration = (datetime.now() - session_start_time).total_seconds()
             logger.info("=== STREAM COMPLETED SUCCESSFULLY ===")
