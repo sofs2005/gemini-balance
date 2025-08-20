@@ -13,7 +13,6 @@ from app.service.embedding.gemini_embedding_service import GeminiEmbeddingServic
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
 from app.service.tts.native.tts_routes import get_tts_chat_service
 from app.service.model.model_service import ModelService
-from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
 from app.handler.error_handler import handle_route_errors
 from app.core.constants import API_VERSION
@@ -359,18 +358,8 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
             return JSONResponse({"status": "valid"})
     except Exception as e:
         logger.error(f"Key verification failed: {str(e)}")
-        # Use the centralized error handler to update key status, but ignore the returned new_key
-        await handle_api_error_and_get_next_key(
-            key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
-        )
-        # Also log the error to the database
-        await log_api_error(
-            api_key=api_key,
-            error=e,
-            model_name=settings.TEST_MODEL,
-            error_type="key-verification-single",
-            request_datetime=datetime.datetime.now()
-        )
+        # The error is already handled by the chat_service, which uses the ErrorProcessor.
+        # The router's responsibility is just to return the final status.
         return JSONResponse({"status": "invalid", "error": str(e)})
 
 
@@ -411,18 +400,8 @@ async def verify_selected_keys(
         except Exception as e:
             error_message = str(e)
             logger.warning(f"Key verification failed for {redact_key_for_logging(api_key)}: {error_message}")
-            # Use the centralized error handler to update key status
-            await handle_api_error_and_get_next_key(
-                key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
-            )
-            # Also log the error to the database
-            await log_api_error(
-                api_key=api_key,
-                error=e,
-                model_name=settings.TEST_MODEL,
-                error_type="key-verification-batch",
-                request_datetime=datetime.datetime.now()
-            )
+            # The error is already handled by the chat_service, which uses the ErrorProcessor.
+            # The router's responsibility is just to record the failure for this batch verification.
             failed_keys[api_key] = error_message
             return api_key, "invalid", error_message
 

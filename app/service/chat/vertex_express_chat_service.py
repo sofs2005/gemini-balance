@@ -10,7 +10,6 @@ from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
 from app.handler.stream_optimizer import gemini_optimizer
-from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
@@ -354,9 +353,8 @@ class GeminiChatService:
                     request_msg=payload
                 )
 
-                api_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, current_attempt_key, model, retries
-                )
+                await self.key_manager.error_processor.process_error(current_attempt_key, e)
+                api_key = await self.key_manager.get_next_working_key(model)
                 if api_key:
                     logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
                 else:
