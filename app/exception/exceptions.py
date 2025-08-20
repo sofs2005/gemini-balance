@@ -76,6 +76,15 @@ class ServiceUnavailableError(APIError):
         )
 
 
+class MaxRetriesExceededError(APIError):
+    """超过最大重试次数错误"""
+
+    def __init__(self, detail: str = "Max retries reached for the request"):
+        super().__init__(
+            status_code=500, detail=detail, error_code="max_retries_exceeded"
+        )
+
+
 def setup_exception_handlers(app: FastAPI) -> None:
     """
     设置应用程序的异常处理器

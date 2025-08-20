@@ -19,6 +19,7 @@ import asyncio
 from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.handler.stream_retry_handler import process_stream_and_retry_internally
 from app.utils.helpers import redact_key_for_logging
+from app.exception.exceptions import MaxRetriesExceededError
 
 logger = get_gemini_logger()
 
@@ -501,4 +502,4 @@ class GeminiChatService:
                 logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
 
         logger.error(f"Max retries ({max_retries}) reached. Failing.")
-        raise Exception(f"Max retries reached for model {model}")
+        raise MaxRetriesExceededError(f"Max retries reached for model {model}")
