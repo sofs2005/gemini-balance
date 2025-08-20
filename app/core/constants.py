@@ -5,7 +5,7 @@
 # API相关常量
 API_VERSION = "v1beta"
 DEFAULT_TIMEOUT = 300  # 秒
-MAX_RETRIES = 3  # 最大重试次数
+MAX_RETRIES = 5  # 最大重试次数
 
 # 模型相关常量
 SUPPORTED_ROLES = ["user", "model", "system"]

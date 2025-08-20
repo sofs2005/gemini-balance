@@ -474,14 +474,24 @@ class GeminiChatService:
             except Exception as e:
                 retries += 1
                 error_str = str(e)
-                if "429" in error_str:
-                    simplified_message = "API call failed with status code 429 (Quota exceeded)"
+                # General pattern to find status codes
+                status_code_match = re.search(r"status code (\d+)", error_str, re.IGNORECASE)
+                
+                if status_code_match:
+                    status_code = status_code_match.group(1)
+                    simplified_message = f"API call failed with status code {status_code}"
+                    
+                    # Try to extract a more specific message from JSON if present
                     try:
-                        # Try to parse the detailed message
-                        details = json.loads(error_str.split(',', 1)[1].strip())
-                        simplified_message = details.get("error", {}).get("message", simplified_message)
-                    except Exception:
-                        pass # Keep the basic message if parsing fails
+                        json_part_match = re.search(r"(\{.*\})", error_str)
+                        if json_part_match:
+                            details = json.loads(json_part_match.group(1))
+                            message = details.get("error", {}).get("message")
+                            if message:
+                                simplified_message = f"{simplified_message}: {message}"
+                    except (json.JSONDecodeError, IndexError):
+                        pass # Fallback to the basic message
+                        
                     logger.error(f"Stream attempt {retries} failed: {simplified_message}")
                 else:
                     logger.error(f"Stream attempt {retries} failed: {e}", exc_info=True)
