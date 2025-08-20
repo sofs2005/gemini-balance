@@ -285,7 +285,20 @@ class ValidKeyPool:
             total_keys = len(self.key_manager.api_keys)
             for key in self.key_manager.api_keys:
                 # 检查密钥是否被标记为失效
-                if await self.key_manager.is_key_valid(key):
+                if not await self.key_manager.is_key_valid(key):
+                    continue
+
+                # 检查密钥是否处于冷却状态
+                is_in_cooldown = False
+                key_statuses = self.key_manager.key_model_status.get(key)
+                if key_statuses:
+                    now = datetime.now(pytz.utc)
+                    for model, expiry_time in key_statuses.items():
+                        if now < expiry_time:
+                            is_in_cooldown = True
+                            break
+                
+                if not is_in_cooldown:
                     available_keys.append(key)
 
             logger.info(f"Key availability check: {len(available_keys)}/{total_keys} keys are valid")
