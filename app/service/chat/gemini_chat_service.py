@@ -487,4 +487,11 @@ class GeminiChatService:
                 logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
 
         logger.error(f"Max retries ({max_retries}) reached. Failing.")
-        raise MaxRetriesExceededError(f"Max retries reached for model {model}")
+        error_payload = {
+            "error": {
+                "code": 500,
+                "message": f"Max retries reached for model {model}. The service may be unstable.",
+                "status": "INTERNAL_SERVER_ERROR"
+            }
+        }
+        yield f"data: {json.dumps(error_payload)}\n\n"
