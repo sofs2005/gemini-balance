@@ -9,7 +9,6 @@ from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
-from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
@@ -356,9 +355,8 @@ class GeminiChatService:
                     else:
                         logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
-                    new_key = await handle_api_error_and_get_next_key(
-                        self.key_manager, e, api_key, model, retries
-                    )
+                    await self.key_manager.error_processor.process_error(api_key, e)
+                    new_key = await self.key_manager.get_next_working_key(model)
 
                     if not new_key or new_key == api_key:
                         logger.error("No new valid keys available. Aborting after multiple retries.")
@@ -427,13 +425,7 @@ class GeminiChatService:
                 status_code = 500
             
             # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=api_key,
-                error=e,
-                model_name=f"{model}-count-tokens",
-                error_type="gemini-count-tokens",
-                request_msg=payload
-            ))
+            await self.key_manager.error_processor.process_error(api_key, e)
             
             raise e
         finally:
@@ -508,9 +500,8 @@ class GeminiChatService:
                 else:
                     logger.error(f"Stream attempt {retries} failed.", exc_info=True)
                 
-                new_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, api_key, model, retries
-                )
+                await self.key_manager.error_processor.process_error(api_key, e)
+                new_key = await self.key_manager.get_next_working_key(model)
 
                 if not new_key or new_key == api_key:
                     logger.error("No new valid keys available. Aborting after multiple retries.")
