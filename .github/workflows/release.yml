@@ -21,7 +21,7 @@ jobs:
       # Step 2: 自动生成 Release Notes
       - name: Generate release notes
         id: changelog
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
