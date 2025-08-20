@@ -581,14 +581,9 @@ class ValidKeyPool:
         except Exception as e:
             logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(e)}")
 
-            # 调用通用错误处理器
-            await handle_api_error_and_get_next_key(
-                key_manager=self.key_manager,
-                error=e,
-                old_key=key,
-                model_name=settings.TEST_MODEL,
-                retries=self.key_manager.MAX_FAILURES
-            )
+            # 使用handle_api_failure来处理失败计数，但不使用返回的key
+            # 设置retries为MAX_RETRIES确保不会返回新key
+            await self.key_manager.handle_api_failure(key, settings.MAX_RETRIES, settings.TEST_MODEL)
             return False
     
     async def _verify_key_for_emergency(self, key: str) -> Optional[str]:
@@ -631,15 +626,12 @@ class ValidKeyPool:
             logger.debug(f"Emergency key verification cancelled for {redact_key_for_logging(key)}")
             raise
         except Exception as e:
-            # 调用通用错误处理器来记录日志和处理密钥状态
+            # 验证失败，记录失败计数但不获取新密钥避免影响池内密钥
             logger.debug(f"Emergency key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-            await handle_api_error_and_get_next_key(
-                key_manager=self.key_manager,
-                error=e,
-                old_key=key,
-                model_name=settings.TEST_MODEL,
-                retries=self.key_manager.MAX_FAILURES  # 传递高重试次数以确保必要时标记为失败
-            )
+            
+            # 使用handle_api_failure来处理失败计数，但不使用返回的key
+            # 设置retries为MAX_RETRIES确保不会返回新key
+            await self.key_manager.handle_api_failure(key, settings.MAX_RETRIES, settings.TEST_MODEL)
             return None
 
     def _remove_expired_keys(self) -> int:
