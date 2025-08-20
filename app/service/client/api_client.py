@@ -134,13 +134,10 @@ class GeminiApiClient(ApiClient):
                     try:
                         error_json = response.json()
                         error_message = error_json.get("error", {}).get("message", "Quota exceeded")
-                        logger.error(f"API call failed - Status: 429 (Quota exceeded), Message: {error_message}")
                         raise Exception(f"API call failed with status code 429, {error_message}")
                     except (ValueError, KeyError):
-                        logger.error(f"API call failed - Status: 429 (Quota exceeded), Raw response: {error_content[:200]}...")
                         raise Exception(f"API call failed with status code 429, Quota exceeded")
                 else:
-                    logger.error(f"API call failed - Status: {response.status_code}, Content: {error_content}")
                     raise Exception(f"API call failed with status code {response.status_code}, {error_content}")
             
             response_data = response.json()
@@ -159,7 +156,6 @@ class GeminiApiClient(ApiClient):
         except Exception as e:
             # 避免重复记录429错误（已在上面处理过）
             if "status code 429" not in str(e):
-                logger.error(f"Unexpected error: {e}")
             raise
 
     async def embed_content(self, payload: Dict[str, Any], model: str, api_key: str) -> Dict[str, Any]:
