@@ -255,7 +255,7 @@ async def process_stream_and_retry_internally(
             
             # Use the correct error handler to get the next key
             new_key = await handle_api_error_and_get_next_key(
-                key_manager, Exception(interruption_reason), api_key, model, consecutive_retry_count
+                key_manager, Exception(f"Stream interrupted: {interruption_reason}"), api_key, model, consecutive_retry_count
             )
 
             if not new_key or new_key == api_key:
