@@ -390,7 +390,6 @@ class GeminiChatService:
                 request_time=request_datetime
             ))
 
-    @RetryHandler()
     async def count_tokens(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
@@ -403,19 +402,41 @@ class GeminiChatService:
         request_datetime = datetime.datetime.now()
         is_success = False
         status_code = None
+        final_api_key = api_key
+
+        retries = 0
+        max_retries = settings.MAX_RETRIES
 
         try:
-            # countTokens API只需要contents
             payload = {"contents": _filter_empty_parts(request.model_dump().get("contents", []))}
-            response = await self.api_client.count_tokens(payload, model, api_key)
+            
+            while retries < max_retries:
+                try:
+                    final_api_key = api_key
+                    response = await self.api_client.count_tokens(payload, model, api_key)
+                    is_success = True
+                    status_code = 200
+                    return response
 
-            # 如果到达这里，说明请求成功
-            is_success = True
-            status_code = 200
+                except Exception as e:
+                    retries += 1
+                    error_msg = str(e)
+                    logger.error(f"Count tokens attempt {retries} failed: {error_msg}")
+                    
+                    await self.key_manager.error_processor.process_error(api_key, e)
+                    new_key = await self.key_manager.get_next_working_key(model)
 
-            return response
+                    if not new_key or new_key == api_key:
+                        logger.error("No new valid keys available for count_tokens. Aborting.")
+                        raise e
+                    
+                    api_key = new_key
+                    logger.info(f"Switched to new API key for count_tokens retry: ...{api_key[-4:]}")
+
+            logger.error(f"Max retries ({max_retries}) reached for count_tokens. Failing.")
+            raise MaxRetriesExceededError(f"Max retries reached for count_tokens on model {model}.")
+
         except Exception as e:
-            # 记录失败状态
             is_success = False
             error_log_msg = str(e)
             match = re.search(r"status code (\d+)", error_log_msg)
@@ -423,18 +444,14 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
-            
-            # 记录错误日志
-            await self.key_manager.error_processor.process_error(api_key, e)
-            
             raise e
         finally:
             # 记录请求日志
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
             asyncio.create_task(add_request_log(
-                model_name=f"{model}-count-tokens",  # 区分计数请求
-                api_key=api_key,
+                model_name=f"{model}-count-tokens",
+                api_key=final_api_key,
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
