@@ -156,6 +156,7 @@ class GeminiApiClient(ApiClient):
         except Exception as e:
             # 避免重复记录429错误（已在上面处理过）
             if "status code 429" not in str(e):
+                logger.error(f"Unexpected error: {e}")
             raise
 
     async def embed_content(self, payload: Dict[str, Any], model: str, api_key: str) -> Dict[str, Any]:
