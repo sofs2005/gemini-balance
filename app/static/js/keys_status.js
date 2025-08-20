@@ -1805,56 +1805,6 @@ function initAttentionKeysControls() {
   if (btn429) setActive(btn429); // default active
 }
 
-// --- Stream Retry Toggle ---
-
-function initializeStreamRetryToggle() {
-  const toggle = document.getElementById('streamRetryToggle');
-  if (!toggle) {
-    console.warn("Stream retry toggle element not found.");
-    return;
-  }
-
-  // 1. Fetch initial state
-  fetchAPI('/api/config/stream_retry')
-    .then(data => {
-      if (data && typeof data.STREAM_RETRY_ENABLED === 'boolean') {
-        toggle.checked = data.STREAM_RETRY_ENABLED;
-      }
-    })
-    .catch(error => {
-      console.error('Failed to fetch stream retry status:', error);
-      showNotification('无法加载流式重试开关状态', 'error');
-    });
-
-  // 2. Add event listener for changes
-  toggle.addEventListener('change', () => {
-    const isEnabled = toggle.checked;
-    
-    fetchAPI('/api/config/stream_retry', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ enabled: isEnabled }),
-    })
-    .then(data => {
-      if (data && data.success) {
-        showNotification(data.message || '设置已更新', 'success');
-      } else {
-        // Revert the toggle on failure
-        toggle.checked = !isEnabled;
-        showNotification(data.message || '更新失败', 'error');
-      }
-    })
-    .catch(error => {
-      // Revert the toggle on failure
-      toggle.checked = !isEnabled;
-      console.error('Failed to update stream retry status:', error);
-      showNotification(`更新失败: ${error.message}`, 'error');
-    });
-  });
-}
-
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
   initializePageAnimationsAndEffects();
@@ -1868,7 +1818,6 @@ document.addEventListener("DOMContentLoaded", () => {
   loadPoolStatus(); // 加载密钥池状态
   initChartControls(); // 初始化图表与时间区间切换
   initAttentionKeysControls(); // 初始化值得注意的Key错误码切换
-  initializeStreamRetryToggle(); // 初始化流式重试开关
   fetchAndRenderAttentionKeys(429, 10); // 默认渲染429，数量10
 
   // 添加定时检查密钥池状态（仅用于调试）

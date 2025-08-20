@@ -241,31 +241,3 @@ async def clear_proxy_cache(request: Request):
     except Exception as e:
         logger.error(f"Clear proxy cache failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Clear cache failed: {str(e)}")
-
-
-class StreamRetryUpdateRequest(BaseModel):
-    enabled: bool
-
-@router.get("/stream_retry", response_model=Dict[str, bool])
-async def get_stream_retry_status(request: Request):
-    auth_token = request.cookies.get("auth_token")
-    if not auth_token or not verify_auth_token(auth_token):
-        logger.warning("Unauthorized access attempt to get stream_retry status")
-        return RedirectResponse(url="/", status_code=302)
-    
-    config = await ConfigService.get_config()
-    return {"STREAM_RETRY_ENABLED": config.get("STREAM_RETRY_ENABLED", False)}
-
-@router.post("/stream_retry", response_model=Dict[str, Any])
-async def update_stream_retry_status(update_request: StreamRetryUpdateRequest, request: Request):
-    auth_token = request.cookies.get("auth_token")
-    if not auth_token or not verify_auth_token(auth_token):
-        logger.warning("Unauthorized access attempt to update stream_retry status")
-        return RedirectResponse(url="/", status_code=302)
-    
-    try:
-        await ConfigService.update_config({"STREAM_RETRY_ENABLED": update_request.enabled})
-        return {"success": True, "message": f"Stream retry functionality has been {'enabled' if update_request.enabled else 'disabled'}."}
-    except Exception as e:
-        logger.error(f"Error updating stream_retry status: {e}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(e))
