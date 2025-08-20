@@ -288,6 +288,7 @@ class KeyManager:
         reset_hour = settings.GEMINI_QUOTA_RESET_HOUR
         
         # 计算下一个重置时间
+        reset_hour = int(reset_hour)
         reset_time_today = now.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
         if now >= reset_time_today:
             # 如果当前时间已经超过今天的重置时间，则下一个重置点是明天
