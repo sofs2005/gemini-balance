@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional
 
 from app.config.config import settings
@@ -9,6 +9,22 @@ logger = get_model_logger()
 
 
 class ModelService:
+    def __init__(self):
+        self.model_cooldowns: Dict[str, datetime] = {}
+
+    async def cool_down_model(self, model_name: str):
+        cooldown_period = timedelta(minutes=1)
+        self.model_cooldowns[model_name] = datetime.now(timezone.utc) + cooldown_period
+        logger.info(f"Model {model_name} is in cooldown for 1 minute.")
+
+    async def is_model_in_cooldown(self, model_name: str) -> bool:
+        if model_name in self.model_cooldowns:
+            if datetime.now(timezone.utc) < self.model_cooldowns[model_name]:
+                return True
+            else:
+                del self.model_cooldowns[model_name]
+        return False
+
     async def get_gemini_models(self, api_key: str) -> Optional[Dict[str, Any]]:
         api_client = GeminiApiClient(base_url=settings.BASE_URL)
         gemini_models = await api_client.get_models(api_key)

@@ -36,6 +36,8 @@ class KeyManager:
             try:
                 # 延迟导入避免循环依赖
                 from app.service.key.valid_key_pool import ValidKeyPool
+                from app.handler.error_processor import ErrorProcessor
+                from app.service.model.model_service import ModelService
 
                 # 确保配置值为整数类型（修复Pydantic警告）
                 pool_size = int(settings.VALID_KEY_POOL_SIZE)
@@ -48,10 +50,13 @@ class KeyManager:
                 settings.EMERGENCY_REFILL_COUNT = int(settings.EMERGENCY_REFILL_COUNT)
                 settings.POOL_MAINTENANCE_INTERVAL_MINUTES = int(settings.POOL_MAINTENANCE_INTERVAL_MINUTES)
 
+                model_service = ModelService()
+                self.error_processor = ErrorProcessor(self, model_service)
                 self.valid_key_pool = ValidKeyPool(
                     pool_size=pool_size,
                     ttl_hours=ttl_hours,
-                    key_manager=self
+                    key_manager=self,
+                    error_processor=self.error_processor
                 )
                 logger.info(f"ValidKeyPool initialized successfully with pool_size={pool_size}, ttl_hours={ttl_hours}")
             except Exception as e:
@@ -314,16 +319,19 @@ class KeyManager:
                 logger.warning(f"API key {redact_key_for_logging(api_key)} has been marked as failed immediately due to a critical error (e.g., 403).")
 
     async def handle_api_failure(self, api_key: str, retries: int, model_name: str = None) -> str:
-        """处理API调用失败"""
+        """
+        重构API失败处理方法，确保与统一错误处理逻辑一致
+        """
         async with self.failure_count_lock:
             self.key_failure_counts[api_key] += 1
+            
+            # 如果超过最大失败次数，标记密钥失效
             if self.key_failure_counts[api_key] >= self.MAX_FAILURES:
-                logger.warning(
-                    f"API key {redact_key_for_logging(api_key)} has failed {self.MAX_FAILURES} times and is being removed from the valid pool."
-                )
-                # Remove from valid list
+                logger.warning(f"API key {redact_key_for_logging(api_key)} exceeded max failures, marking as failed.")
                 if api_key in self.valid_api_keys:
                     self.valid_api_keys.remove(api_key)
+        
+        # 根据重试次数决定是否返回新密钥
         if retries < settings.MAX_RETRIES:
             return await self.get_next_working_key(model_name=model_name)
         else:
@@ -496,14 +504,13 @@ class KeyManager:
 
     async def remove_key_from_pool(self, key_to_remove: str):
         """
-        仅从 ValidKeyPool 中移除一个密钥，不影响其在主列表中的状态。
-        用于密钥因临时问题（如速率限制）需要暂时移出活跃池的场景。
+        优化池中密钥移除逻辑，确保线程安全和一致性
         """
         if self.valid_key_pool and self.valid_key_pool.valid_keys:
-            async with self.failure_count_lock: # Use a lock to protect pool access
+            async with self.failure_count_lock:
                 initial_pool_size = len(self.valid_key_pool.valid_keys)
                 
-                from collections import deque
+                # 使用线程安全的方式移除密钥
                 filtered_keys = deque(
                     key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
                 )
@@ -511,13 +518,30 @@ class KeyManager:
                 if len(filtered_keys) < initial_pool_size:
                     self.valid_key_pool.valid_keys = filtered_keys
                     
+                    # 同时从集合中移除
                     if hasattr(self.valid_key_pool, '_pool_keys_set') and key_to_remove in self.valid_key_pool._pool_keys_set:
                         self.valid_key_pool._pool_keys_set.remove(key_to_remove)
                     
-                    logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' temporarily removed from ValidKeyPool.")
+                    logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' removed from pool due to error.")
                     return True
         return False
 
+
+    async def validate_gemini_key(self, key: str) -> bool:
+        """
+        验证单个Gemini密钥的有效性
+        """
+        try:
+            # 确保聊天服务已设置
+            self._ensure_chat_service_set()
+            # 此处直接调用底层的验证方法，不通过key_pool
+            is_valid = await self.valid_key_pool._verify_key(key)
+            if not is_valid:
+                await self.error_processor.process_error(key, Exception("Manual validation failed"))
+            return is_valid
+        except Exception as e:
+            await self.error_processor.process_error(key, e)
+            return False
 
 _singleton_instance = None
 _singleton_lock = asyncio.Lock()

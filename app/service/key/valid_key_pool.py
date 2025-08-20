@@ -14,7 +14,7 @@ from app.config.config import settings
 from app.log.logger import get_key_manager_logger
 from app.service.key.valid_key_models import ValidKeyWithTTL
 from app.domain.gemini_models import GeminiRequest, GeminiContent
-from app.handler.error_processor import handle_api_error_and_get_next_key
+from app.handler.error_processor import ErrorProcessor
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_key_manager_logger()
@@ -31,7 +31,7 @@ class ValidKeyPool:
     - 统计监控和日志记录
     """
     
-    def __init__(self, pool_size: int, ttl_hours: int, key_manager):
+    def __init__(self, pool_size: int, ttl_hours: int, key_manager, error_processor: ErrorProcessor):
         """
         初始化有效密钥池
         
@@ -39,10 +39,12 @@ class ValidKeyPool:
             pool_size: 密钥池大小
             ttl_hours: 密钥TTL时间（小时）
             key_manager: 密钥管理器实例
+            error_processor: 错误处理器实例
         """
         self.pool_size = pool_size
         self.ttl_hours = ttl_hours
         self.key_manager = key_manager
+        self.error_processor = error_processor
         self.valid_keys: deque[ValidKeyWithTTL] = deque(maxlen=pool_size)
         self._pool_keys_set: set[str] = set()
         concurrent_verifications = getattr(settings, 'CONCURRENT_VERIFICATIONS', 1)
@@ -132,17 +134,10 @@ class ValidKeyPool:
     
     async def get_valid_key(self, model_name: str = None, increment_usage: bool = True) -> str:
         """
-        获取有效密钥，同时触发异步补充
-
-        Args:
-            model_name: 模型名称（可选）
-            increment_usage: 是否增加使用次数，默认为True
-
-        Returns:
-            str: 有效的API密钥
+        优化密钥获取逻辑，增加冷却状态检查和错误处理集成
         """
         self.performance_stats["total_get_key_calls"] += 1
-
+        
         # 记录模型请求统计
         if model_name:
             if self._is_pro_model(model_name):
@@ -153,80 +148,88 @@ class ValidKeyPool:
         # 清理过期密钥
         expired_count = self._remove_expired_keys()
 
-        # 使用锁保护整个密钥获取过程，防止并发竞态条件
+        # 使用锁保护整个密钥获取过程
         async with self.get_key_lock:
-            # 尝试从池中获取有效密钥
-            while self.valid_keys:
-                key_obj = self.valid_keys.popleft()
-                self._pool_keys_set.discard(key_obj.key)
+            return await self._get_key_from_pool_with_checks(model_name, increment_usage)
 
-                # 检查密钥是否可以使用（未过期）
-                # 检查密钥是否处于冷却状态 (不区分模型)
-                is_in_cooldown = False
-                key_statuses = self.key_manager.key_model_status.get(key_obj.key)
-                if key_statuses:
-                    now = datetime.now(pytz.utc)
-                    for model, expiry_time in key_statuses.items():
-                        if now < expiry_time:
-                            is_in_cooldown = True
-                            logger.info(f"Key {redact_key_for_logging(key_obj.key)} is in cooldown (model: {model}). Skipping.")
-                            break  # 只要有一个模型在冷却，就跳过该key
 
-                if not key_obj.is_expired() and not is_in_cooldown:
-                    # 先检查当前模型的使用次数限制，确定是否可以使用这个key
-                    max_usage_for_model = self._get_max_usage_for_model(model_name) if model_name else getattr(settings, 'NON_PRO_MODEL_MAX_USAGE', 20)
-                    usage_limit_reached = max_usage_for_model > 0 and key_obj.usage_count >= max_usage_for_model
-                    
-                    if usage_limit_reached:
-                        # 使用次数已达到当前模型限制，移除key并触发补充
-                        self.stats["usage_exhausted_keys_removed"] += 1
-                        hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-                        usage_limit_str = str(max_usage_for_model)
-                        logger.info(f"Pool hit: key {redact_key_for_logging(key_obj.key)} usage limit reached, "
-                                   f"usage: {key_obj.usage_count}/{usage_limit_str}, "
-                                   f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%} - REMOVED (usage limit reached)")
-                        
-                        # 触发补充（不增加使用次数）
-                        self._trigger_refill_on_key_removal(model_name)
-                        continue  # 继续尝试下一个key
-                    
-                    # 确定可以使用这个key，根据参数决定是否增加使用次数
+    async def _get_key_from_pool_with_checks(self, model_name: str = None, increment_usage: bool = True) -> str:
+        """
+        内部方法：从池中获取密钥并进行检查
+        """
+        while self.valid_keys:
+            key_obj = self.valid_keys.popleft()
+            self._pool_keys_set.discard(key_obj.key)
+            
+            # 检查密钥状态
+            if await self._is_key_usable(key_obj, model_name):
+                # 密钥可用，进行使用次数检查
+                max_usage = self._get_max_usage_for_model(model_name)
+                usage_limit_reached = max_usage > 0 and key_obj.usage_count >= max_usage
+                
+                if not usage_limit_reached:
+                    # 密钥可以使用
                     if increment_usage:
                         key_obj.increment_usage()
                     
-                    self.stats["hit_count"] += 1
-                    self.performance_stats["last_hit_time"] = datetime.now()
-
-                    # 将key放回池中
+                    # 放回池中
                     self.valid_keys.append(key_obj)
                     self._pool_keys_set.add(key_obj.key)
-
-                    # 记录详细的命中日志
-                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-                    usage_limit_str = str(max_usage_for_model)
-                    logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
-                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
-                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
-
+                    
+                    # 记录命中
+                    self._record_key_hit(key_obj, max_usage)
                     return key_obj.key
                 else:
-                    # 密钥已过期
-                    self.stats["expired_keys_removed"] += 1
-                    logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
-
-                    # 过期密钥被移除时也触发补充
+                    # 使用次数耗尽
+                    self.stats["usage_exhausted_keys_removed"] += 1
                     self._trigger_refill_on_key_removal(model_name)
-                    continue  # 继续尝试下一个key
-
-        # 池为空或严重不足，记录miss并进入紧急恢复模式
-        self.stats["miss_count"] += 1
-        self.performance_stats["last_miss_time"] = datetime.now()
-
-        miss_rate = self.stats["miss_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-        logger.warning(f"ValidKeyPool miss: pool size {len(self.valid_keys)}, entering emergency refill mode, "
-                      f"miss rate: {miss_rate:.2%}, expired removed: {expired_count}")
-
+                    continue
+            else:
+                # 密钥不可用（过期或冷却中）
+                if key_obj.is_expired():
+                    self.stats["expired_keys_removed"] += 1
+                self._trigger_refill_on_key_removal(model_name)
+                continue
+        
+        # 池为空，进入紧急恢复模式
         return await self.emergency_refill(model_name)
+
+
+    async def _is_key_usable(self, key_obj: ValidKeyWithTTL, model_name: str = None) -> bool:
+        """
+        检查密钥是否可用（未过期且未冷却）
+        """
+        if key_obj.is_expired():
+            return False
+        
+        # 检查冷却状态
+        is_in_cooldown = False
+        key_statuses = self.key_manager.key_model_status.get(key_obj.key)
+        if key_statuses:
+            now = datetime.now(pytz.utc)
+            for model, expiry_time in key_statuses.items():
+                if now < expiry_time:
+                    is_in_cooldown = True
+                    logger.debug(f"Key {redact_key_for_logging(key_obj.key)} in cooldown for model {model}")
+                    break
+        
+        return not is_in_cooldown
+
+
+    def _record_key_hit(self, key_obj: ValidKeyWithTTL, max_usage: int):
+        """
+        记录密钥命中信息
+        """
+        self.stats["hit_count"] += 1
+        self.performance_stats["last_hit_time"] = datetime.now()
+        
+        # 计算命中率和记录日志
+        hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+        usage_limit_str = str(max_usage) if max_usage > 0 else "unlimited"
+        
+        logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
+                   f"usage: {key_obj.usage_count}/{usage_limit_str}, "
+                   f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
 
     def _trigger_refill_on_key_removal(self, model_name: str = None) -> None:
         """
@@ -580,10 +583,7 @@ class ValidKeyPool:
             raise  # 重新抛出CancelledError
         except Exception as e:
             logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-
-            # 使用handle_api_failure来处理失败计数，但不使用返回的key
-            # 设置retries为MAX_RETRIES确保不会返回新key
-            await self.key_manager.handle_api_failure(key, settings.MAX_RETRIES, settings.TEST_MODEL)
+            await self.error_processor.process_error(key, e)
             return False
     
     async def _verify_key_for_emergency(self, key: str) -> Optional[str]:
@@ -628,10 +628,7 @@ class ValidKeyPool:
         except Exception as e:
             # 验证失败，记录失败计数但不获取新密钥避免影响池内密钥
             logger.debug(f"Emergency key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-            
-            # 使用handle_api_failure来处理失败计数，但不使用返回的key
-            # 设置retries为MAX_RETRIES确保不会返回新key
-            await self.key_manager.handle_api_failure(key, settings.MAX_RETRIES, settings.TEST_MODEL)
+            await self.error_processor.process_error(key, e)
             return None
 
     def _remove_expired_keys(self) -> int:
