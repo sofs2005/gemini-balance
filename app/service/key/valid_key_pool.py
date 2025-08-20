@@ -519,14 +519,9 @@ class ValidKeyPool:
                     logger.debug(f"Removed expired key {redact_key_for_logging(key_obj.key)}")
                     continue
 
-                # 验证密钥是否仍然有效
-                is_valid = await self._verify_key(key_obj.key)
-                if not is_valid:
-                    # This is slow, but keys_to_validate is small.
-                    self.valid_keys.remove(key_obj)
-                    self._pool_keys_set.discard(key_obj.key)
-                    removed_count += 1
-                    logger.info(f"Removed invalid key {redact_key_for_logging(key_obj.key)} from pool")
+                # 池内密钥本来就已经验证过有效，只需要检查TTL过期
+                # 不需要重复验证，避免消耗使用次数
+                continue
 
             except Exception as e:
                 logger.warning(f"Error validating key {redact_key_for_logging(key_obj.key)}: {e}")
