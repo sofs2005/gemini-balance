@@ -6,7 +6,6 @@ from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Set
 
 import httpx
-from app.handler.error_processor import handle_api_error_and_get_next_key
 
 # --- Constants ---
 NON_RETRYABLE_STATUSES: Set[int] = {400, 401, 403, 404, 429}
@@ -121,7 +120,6 @@ async def process_stream_and_retry_internally(
     api_client: Any, # GeminiApiClient
     model: str,
     api_key: str,
-    key_manager: Any, # KeyManager
     max_retries: int,
     retry_delay_ms: int,
     swallow_thoughts: bool,
@@ -262,22 +260,10 @@ async def process_stream_and_retry_internally(
         try:
             retry_body = build_retry_request_body(original_request_body, accumulated_text)
             
-            # Use the correct error handler to get the next key
-            new_key = await handle_api_error_and_get_next_key(
-                key_manager, Exception(f"Stream interrupted: {interruption_reason}"), api_key, model, consecutive_retry_count
-            )
-
-            if not new_key or new_key == api_key:
-                logger.error("No new valid keys available. Aborting retry.")
-                return
-            
-            api_key = new_key
-            if not api_key:
-                logger.error("No more valid keys available. Aborting retry.")
-                return
-
             logger.debug(f"Making retry request with key: ...{api_key[-4:]}")
 
+            # In this decoupled version, we always retry with the same key.
+            # The key switching logic is now handled by the caller (e.g., GeminiChatService).
             retry_response = await api_client.stream_generate_content(retry_body, model, api_key)
             
             logger.info(f"Retry request completed.")
