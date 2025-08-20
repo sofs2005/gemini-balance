@@ -16,9 +16,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Database
 - **Fix settings table**: `python fix_settings_table.py` (use if database schema needs updates)
 
+### Docker Build
+- **Build Docker image**: `./build-docker.sh` (Linux/macOS) or `build-docker.bat` (Windows)
+- **Multi-architecture builds available**: AMD and ARM support via `softs2005/gemini-balance:latest`
+
 ## Architecture Overview
 
-This is a FastAPI-based Gemini API proxy and load balancer that manages multiple API keys with intelligent routing and monitoring.
+This is a FastAPI-based Gemini API proxy and load balancer that manages multiple API keys with intelligent routing and monitoring. It supports multiple API formats (Gemini, OpenAI, Vertex AI) and provides comprehensive key management, monitoring, and load balancing capabilities.
 
 ### Core Components
 
@@ -51,6 +55,11 @@ This is a FastAPI-based Gemini API proxy and load balancer that manages multiple
 - Stream response optimization and retry logic
 - Error processing and message conversion
 - Response handling for different API formats
+
+**Utility Systems** (`app/utils/`):
+- `ttl_cache.py`: Time-based cache with automatic expiration
+- `helpers.py`: Common utility functions
+- `uploader.py`: File upload handling
 
 ### Database Models
 
@@ -90,6 +99,11 @@ This is a FastAPI-based Gemini API proxy and load balancer that manages multiple
 - Automatic cleanup of expired files
 - User isolation when enabled
 
+**TTS Support**:
+- Native text-to-speech service implementation
+- Multiple TTS model support
+- Streaming response handling
+
 ### Configuration Notes
 
 **Environment Variables**: Copy `.env.example` to `.env` and configure:
@@ -116,3 +130,4 @@ This is a FastAPI-based Gemini API proxy and load balancer that manages multiple
 **Configuration Changes**: Most configuration changes take effect immediately without restart
 **Testing**: Focus on key management and cache functionality in `tests/` directory
 **Logging**: Multi-level logging with automatic retention policies
+**Middleware**: Smart routing and request logging middleware for performance monitoring

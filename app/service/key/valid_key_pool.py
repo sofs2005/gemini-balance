@@ -169,41 +169,39 @@ class ValidKeyPool:
                         break  # 只要有一个模型在冷却，就跳过该key
 
             if not key_obj.is_expired() and not is_in_cooldown:
-                # 增加使用计数
+                # 先检查当前模型的使用次数限制，确定是否可以使用这个key
+                max_usage_for_model = self._get_max_usage_for_model(model_name) if model_name else getattr(settings, 'NON_PRO_MODEL_MAX_USAGE', 20)
+                usage_limit_reached = max_usage_for_model > 0 and key_obj.usage_count >= max_usage_for_model
+                
+                if usage_limit_reached:
+                    # 使用次数已达到当前模型限制，移除key并触发补充
+                    self.stats["usage_exhausted_keys_removed"] += 1
+                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+                    usage_limit_str = str(max_usage_for_model)
+                    logger.info(f"Pool hit: key {redact_key_for_logging(key_obj.key)} usage limit reached, "
+                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
+                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%} - REMOVED (usage limit reached)")
+                    
+                    # 触发补充（不增加使用次数）
+                    self._trigger_refill_on_key_removal(model_name)
+                    continue  # 继续尝试下一个key
+                
+                # 确定可以使用这个key，现在才增加使用次数
                 key_obj.increment_usage()
-
+                
                 self.stats["hit_count"] += 1
                 self.performance_stats["last_hit_time"] = datetime.now()
 
-                # 检查当前模型的使用次数限制
-                max_usage_for_model = self._get_max_usage_for_model(model_name) if model_name else getattr(settings, 'NON_PRO_MODEL_MAX_USAGE', 20)
-                usage_limit_reached = False
+                # 将key放回池中
+                self.valid_keys.append(key_obj)
+                self._pool_keys_set.add(key_obj.key)
 
-                if max_usage_for_model > 0 and key_obj.usage_count >= max_usage_for_model:
-                    usage_limit_reached = True
-                    self.stats["usage_exhausted_keys_removed"] += 1
-
-                # 如果密钥未达到当前模型的使用限制，放回池中
-                if not usage_limit_reached:
-                    self.valid_keys.append(key_obj)
-                    self._pool_keys_set.add(key_obj.key)
-
-                    # 记录详细的命中日志（密钥放回池中后）
-                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-                    usage_limit_str = str(max_usage_for_model)
-                    logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
-                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
-                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
-                else:
-                    # 使用次数已达到当前模型限制，不放回池中
-                    hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
-                    usage_limit_str = str(max_usage_for_model)
-                    logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
-                               f"usage: {key_obj.usage_count}/{usage_limit_str}, "
-                               f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%} - REMOVED (usage limit reached)")
-
-                    # 只有在key被移出池子时才触发补充
-                    self._trigger_refill_on_key_removal(model_name)
+                # 记录详细的命中日志
+                hit_rate = self.stats["hit_count"] / (self.stats["hit_count"] + self.stats["miss_count"]) if (self.stats["hit_count"] + self.stats["miss_count"]) > 0 else 0
+                usage_limit_str = str(max_usage_for_model)
+                logger.info(f"Pool hit: returned key {redact_key_for_logging(key_obj.key)}, "
+                           f"usage: {key_obj.usage_count}/{usage_limit_str}, "
+                           f"pool size: {len(self.valid_keys)}, hit rate: {hit_rate:.2%}")
 
                 return key_obj.key
             else:
@@ -235,28 +233,40 @@ class ValidKeyPool:
             logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
             asyncio.create_task(self.emergency_refill_async())
         elif current_size < self.pool_size:  # 未达到最大容量时继续补充
-            # 循序式补充策略：每次只补充1个密钥
+            # 降低触发频率，避免过度验证
             import random
-
+            import time
+            
+            # 记录最后补充时间，避免短时间内频繁补充
+            last_refill_time = getattr(self, '_last_refill_time', 0)
+            current_time = time.time()
+            min_refill_interval = 5  # 最小补充间隔5秒
+            
+            if current_time - last_refill_time < min_refill_interval:
+                logger.debug(f"Skipping refill due to interval limit: {current_time - last_refill_time:.1f}s < {min_refill_interval}s")
+                return
+            
+            # 循序式补充策略：每次只补充1个密钥
             if current_size < min_threshold:
-                # 低于阈值时，高概率补充1个
-                refill_chance = 0.9  # 90%概率补充
-                logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering sequential refill (90% chance)")
+                # 低于阈值时，降低补充概率到60%
+                refill_chance = 0.6
+                logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering sequential refill (60% chance)")
             elif current_size < self.pool_size * 0.8:  # 低于80%容量时
                 # 根据池大小动态调整补充概率
                 if current_size < min_threshold * 1.5:  # 低于30个时
-                    refill_chance = 0.7  # 70%概率补充
+                    refill_chance = 0.4  # 40%概率补充
                 elif current_size < min_threshold * 2:  # 低于40个时
-                    refill_chance = 0.5  # 50%概率补充
-                else:  # 40个以上时
                     refill_chance = 0.3  # 30%概率补充
+                else:  # 40个以上时
+                    refill_chance = 0.2  # 20%概率补充
                 logger.debug(f"Pool size {current_size} below 80% capacity, refill chance: {refill_chance*100:.0f}%")
             else:
                 # 接近满容量时，低概率补充
-                refill_chance = 0.1  # 10%概率补充
+                refill_chance = 0.05  # 5%概率补充
                 logger.debug(f"Pool size {current_size} near capacity, refill chance: {refill_chance*100:.0f}%")
 
             if random.random() < refill_chance:
+                self._last_refill_time = current_time
                 logger.info(f"Key removed from pool, current size {current_size}, triggering sequential async refill")
                 asyncio.create_task(self.async_verify_and_add(model_name))
             else:
@@ -357,6 +367,7 @@ class ValidKeyPool:
         logger.warning("Starting non-blocking emergency refill process")
 
         # 尝试立即获取一个候选密钥返回，避免阻塞请求
+        # 使用fallback逻辑，但不触发池的验证（避免重复验证）
         candidate_key = await self.key_manager._original_get_next_working_key(model_name)
         logger.info(f"Immediately returning candidate key {redact_key_for_logging(candidate_key)} for the current request.")
 
@@ -735,19 +746,19 @@ class ValidKeyPool:
         if current_size < self.pool_size:
             # 温和的循序补充策略：根据池大小决定补充数量
             if current_size < min_threshold:
-                # 低于阈值时，补充3-5个密钥
-                refill_target = min(5, self.pool_size - current_size)
-            elif current_size < self.pool_size * 0.7:
-                # 低于70%容量时，补充2-3个密钥
+                # 低于阈值时，补充2-3个密钥（降低补充数量）
                 refill_target = min(3, self.pool_size - current_size)
-            else:
-                # 接近满容量时，只补充1-2个密钥
+            elif current_size < self.pool_size * 0.7:
+                # 低于70%容量时，补充1-2个密钥
                 refill_target = min(2, self.pool_size - current_size)
+            else:
+                # 接近满容量时，只补充1个密钥
+                refill_target = min(1, self.pool_size - current_size)
 
             logger.info(f"Pool maintenance: current {current_size}/{self.pool_size}, will add {refill_target} keys (sequential)")
 
             refill_attempt = 0
-            max_refill_attempts = refill_target * 3  # 允许一些失败重试
+            max_refill_attempts = refill_target * 2  # 降低重试次数
 
             while refilled_count < refill_target and refill_attempt < max_refill_attempts:
                 try:
@@ -761,7 +772,7 @@ class ValidKeyPool:
 
                     refill_attempt += 1
                     # 增加延迟，避免过于频繁的验证
-                    await asyncio.sleep(0.5)  # 从0.1秒增加到0.5秒
+                    await asyncio.sleep(1.0)  # 增加到1秒延迟
 
                 except asyncio.CancelledError:
                     logger.info(f"Pool maintenance cancelled during refill attempt {refill_attempt}")
@@ -772,9 +783,14 @@ class ValidKeyPool:
         else:
             logger.info(f"Pool size ({current_size}) at capacity ({self.pool_size}), no refill needed")
 
-        # 定期验证池内密钥，清理失效的密钥
-        await self._validate_pool_keys()
-                    # 继续尝试下一个密钥
+        # 减少池内密钥验证频率，只在维护间隔较长时执行
+        # 只在池中密钥数量较少时才进行验证，避免过度验证
+        if current_size > 0 and current_size < min_threshold:
+            await self._validate_pool_keys()
+        elif self.stats["maintenance_count"] % 5 == 0:  # 每5次维护才验证一次
+            await self._validate_pool_keys()
+        else:
+            logger.debug("Skipping pool validation to avoid excessive verification")
 
         maintenance_time = time.time() - maintenance_start
         final_size = len(self.valid_keys)
