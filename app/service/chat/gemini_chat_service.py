@@ -78,7 +78,7 @@ class GeminiChatService:
                         yield chunk
 
                 if settings.STREAM_RETRY_ENABLED and stream_retry_handler.is_stream_incomplete():
-                    request.contents = stream_retry_handler.prepare_retry_request()
+                    request.contents = stream_retry_handler.prepare_retry_request(request.to_dict())
                     continue
 
                 yield response_handler.create_done_chunk()

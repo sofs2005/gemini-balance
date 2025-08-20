@@ -281,3 +281,49 @@ async def process_stream_and_retry_internally(
             if 'retry_response' in locals() and hasattr(retry_response, 'aclose'):
                 await retry_response.aclose()
             await asyncio.sleep(retry_delay_ms / 1000)
+
+class StreamRetryHandler:
+    """
+    A class to handle stream interruption and prepare for retries.
+    This is a compatibility layer for gemini_chat_service to use the functional
+    stream retry logic available in this file.
+    """
+    def __init__(self):
+        self.full_content = ""
+        self.chunks = []
+        self.last_finish_reason = None
+
+    def add_chunks(self, json_chunks: list):
+        """Adds JSON chunks from the stream and processes them."""
+        self.chunks.extend(json_chunks)
+        for chunk in json_chunks:
+            if not chunk:
+                continue
+            candidates = chunk.get("candidates", [])
+            if candidates:
+                # Extract text
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    self.full_content += parts[0].get("text", "")
+                # Store last finish reason
+                finish_reason = candidates[0].get("finishReason")
+                if finish_reason:
+                    self.last_finish_reason = finish_reason
+
+    def is_stream_incomplete(self) -> bool:
+        """
+        Checks if the stream ended in an incomplete state based on the last
+        finish reason and content.
+        """
+        # If no finish reason, stream was cut off
+        if self.last_finish_reason is None:
+            return True
+        
+        # If STOP, check for final punctuation
+        if self.last_finish_reason == "STOP":
+            trimmed_text = self.full_content.strip()
+            if not trimmed_text or trimmed_text[-1] in FINAL_PUNCTUATION:
+                return False  # Looks complete
+            return True  # Does not end with punctuation, likely incomplete
+
+        # MAX
