@@ -103,7 +103,9 @@ async def handle_api_error_and_get_next_key(
         if model_name:
             logger.info(f"Detected 429 error for model '{model_name}' with key '{redact_key_for_logging(old_key)}'. Marking key for model-specific cooldown and removing from active pool.")
             await key_manager.mark_key_model_as_cooling(old_key, model_name)
-            await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
+            # 仅当密钥在池中时才移除
+            if key_manager.valid_key_pool and key_manager.valid_key_pool._is_key_in_pool(old_key):
+                await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
         else:
             # This case is less likely with model-specific logic, but as a fallback:
             logger.info(f"Detected 429 error with key '{redact_key_for_logging(old_key)}'. Marking key as failed due to rate limit.")
