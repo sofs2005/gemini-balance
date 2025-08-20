@@ -444,22 +444,7 @@ class GeminiChatService:
 
         while retries < max_retries:
             try:
-                initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
-                
-                async for chunk in process_stream_and_retry_internally(
-                    initial_response=initial_response,
-                    original_request_body=payload,
-                    api_client=self.api_client,
-                    model=model,
-                    api_key=api_key,
-                    key_manager=self.key_manager,
-                    max_retries=settings.MAX_RETRIES,
-                    retry_delay_ms=750,
-                    swallow_thoughts=True,
-                ):
-                    # Decode the chunk to string
-                    decoded_chunk = chunk.decode('utf-8')
-                    
+                async for decoded_chunk in self.api_client.stream_generate_content(payload, model, api_key):
                     # Process with the original stream optimizer for better perceived performance
                     if decoded_chunk.startswith("data:"):
                         try:
@@ -483,7 +468,7 @@ class GeminiChatService:
                     else:
                         yield decoded_chunk
                 
-                # If the stream completes successfully, break the loop
+                # If thestream completes successfully, break the loop
                 return
 
             except Exception as e:

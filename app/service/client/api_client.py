@@ -242,7 +242,7 @@ class GeminiApiClient(ApiClient):
             logger.error(f"Unexpected batch embedding error: {e}")
             raise
 
-    async def stream_generate_content(self, payload: Dict[str, Any], model: str, api_key: str) -> httpx.Response:
+    async def stream_generate_content(self, payload: Dict[str, Any], model: str, api_key: str) -> AsyncGenerator[str, None]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
         model = self._get_real_model(model)
         
@@ -258,15 +258,23 @@ class GeminiApiClient(ApiClient):
         client = get_api_client()
         url = f"{self.base_url}/models/{model}:streamGenerateContent?alt=sse&key={api_key}"
         
-        request = client.build_request("POST", url, json=payload, headers=headers, timeout=timeout)
-        response = await client.send(request, stream=True)
-
-        if response.status_code != 200:
-            error_content = await response.aread()
-            error_msg = error_content.decode("utf-8")
-            response.raise_for_status()
-
-        return response
+        if proxy_to_use:
+            async with httpx.AsyncClient(timeout=timeout, proxy=proxy_to_use) as proxy_client:
+                async with proxy_client.stream(method="POST", url=url, json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        error_content = await response.aread()
+                        error_msg = error_content.decode("utf-8")
+                        raise Exception(f"API call failed with status code {response.status_code}, {error_msg}")
+                    async for line in response.aiter_lines():
+                        yield line
+        else:
+            async with client.stream(method="POST", url=url, json=payload, headers=headers) as response:
+                if response.status_code != 200:
+                    error_content = await response.aread()
+                    error_msg = error_content.decode("utf-8")
+                    raise Exception(f"API call failed with status code {response.status_code}, {error_msg}")
+                async for line in response.aiter_lines():
+                    yield line
 
     async def count_tokens(self, payload: Dict[str, Any], model: str, api_key: str) -> Dict[str, Any]:
         timeout = httpx.Timeout(self.timeout, read=self.timeout)
