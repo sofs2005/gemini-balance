@@ -9,7 +9,7 @@ from app.handler.error_processor import (handle_api_error_and_get_next_key,
                                          log_api_error)
 from app.handler.response_handler import GeminiResponseHandler
 from app.handler.retry_handler import RetryHandler
-from app.handler.stream_optimizer import gemini_stream_optimizer
+from app.handler.stream_optimizer import gemini_optimizer
 from app.handler.stream_retry_handler import StreamRetryHandler
 from app.service.client.api_client import GeminiAPIClient
 from app.service.key.key_manager import key_manager
@@ -22,6 +22,24 @@ from app.utils.ttl_cache import ttl_cache
 class GeminiChatService:
     def __init__(self, request_log_service: RequestLogService):
         self.request_log_service = request_log_service
+
+    async def _optimize_and_yield_chunks(self, json_chunks, optimizer, response_handler):
+        text_content = "".join(
+            part["text"]
+            for chunk in json_chunks
+            if chunk
+            for candidate in chunk.get("candidates", [])
+            if candidate
+            for part in candidate.get("content", {}).get("parts", [])
+            if part and "text" in part
+        )
+        if text_content:
+            async for optimized_chunk in optimizer.optimize_stream_output(
+                text=text_content,
+                create_response_chunk=response_handler.create_regular_chunk,
+                format_chunk=lambda chunk: chunk,
+            ):
+                yield optimized_chunk
 
     async def _create_chat_completion_stream(
             self,
@@ -49,15 +67,15 @@ class GeminiChatService:
                         json_chunks = convert_sse_to_json(buffer)
                         buffer = ""
                         stream_retry_handler.add_chunks(json_chunks)
-                        async for optimized_chunk in gemini_stream_optimizer(json_chunks):
-                            yield optimized_chunk
+                        async for chunk in self._optimize_and_yield_chunks(json_chunks, gemini_optimizer, response_handler):
+                            yield chunk
                         last_chunk_time = time.time()
 
                 if buffer:
                     json_chunks = convert_sse_to_json(buffer)
                     stream_retry_handler.add_chunks(json_chunks)
-                    async for optimized_chunk in gemini_stream_optimizer(json_chunks):
-                        yield optimized_chunk
+                    async for chunk in self._optimize_and_yield_chunks(json_chunks, gemini_optimizer, response_handler):
+                        yield chunk
 
                 if settings.STREAM_RETRY_ENABLED and stream_retry_handler.is_stream_incomplete():
                     request.contents = stream_retry_handler.prepare_retry_request()
