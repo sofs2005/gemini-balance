@@ -869,13 +869,13 @@ class ValidKeyPool:
 
         logger.info(f"Starting pool preload, target size: {target_size}")
 
-        # 使用信号量控制并发验证
-        async with self.verification_semaphore:
-            # 使用并发验证提高预加载效率
-            batch_size = min(10, target_size)  # 每批验证10个
-            total_loaded = 0
+        # 使用并发验证提高预加载效率
+        batch_size = min(10, target_size)  # 每批验证10个
+        total_loaded = 0
 
-            while len(self.valid_keys) < target_size and total_loaded < target_size * 2:
+        while len(self.valid_keys) < target_size and total_loaded < target_size * 2:
+            # 使用信号量控制每个批次的并发验证
+            async with self.verification_semaphore:
                 # 获取可用密钥
                 available_keys = []
                 for key in self.key_manager.api_keys:

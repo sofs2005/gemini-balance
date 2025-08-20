@@ -18,7 +18,11 @@ from app.service.update.update_service import check_for_updates
 from app.utils.helpers import get_current_version
 from app.service.client.api_client import initialize_api_client, close_api_client
 
+import asyncio
+
 logger = get_application_logger()
+
+_preload_lock = asyncio.Lock()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = PROJECT_ROOT / "app" / "static"
@@ -59,17 +63,26 @@ async def _setup_database_and_config(app_settings, app: FastAPI):
     logger.info("Database, config sync, and KeyManager initialized successfully")
 
 async def _background_preload_keys(app: FastAPI):
-    """Asynchronously preloads the key pool."""
-    key_manager = getattr(app.state, 'key_manager', None)
-    if key_manager and key_manager.valid_key_pool:
-        try:
-            logger.info("Starting background key pool preload...")
-            loaded_count = await key_manager.preload_valid_key_pool()
-            logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
-        except Exception as e:
-            logger.error(f"Failed to background preload ValidKeyPool: {e}", exc_info=True)
-    else:
-        logger.info("KeyManager or ValidKeyPool not available, skipping background preload.")
+    """Asynchronously preloads the key pool, ensuring it only runs once."""
+    async with _preload_lock:
+        key_manager = getattr(app.state, 'key_manager', None)
+        if key_manager and getattr(key_manager, '_preload_started', False):
+            logger.info("Key preload has already been started. Skipping.")
+            return
+
+        if key_manager:
+            key_manager._preload_started = True
+            if key_manager.valid_key_pool:
+                try:
+                    logger.info("Starting background key pool preload...")
+                    loaded_count = await key_manager.preload_valid_key_pool()
+                    logger.info(f"ValidKeyPool background preloaded with {loaded_count} keys")
+                except Exception as e:
+                    logger.error(f"Failed to background preload ValidKeyPool: {e}", exc_info=True)
+            else:
+                logger.info("ValidKeyPool not available, skipping background preload.")
+        else:
+            logger.info("KeyManager not available, skipping background preload.")
 
 
 async def _shutdown_database():
