@@ -347,7 +347,14 @@ class GeminiChatService:
 
                 except Exception as e:
                     retries += 1
-                    logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
+                    # 检查是否为已知HTTP错误，以决定是否打印完整堆栈
+                    error_msg = str(e)
+                    is_known_http_error = "API call failed with status code" in error_msg
+                    
+                    if is_known_http_error:
+                        logger.error(f"Content generation attempt {retries} failed: {error_msg}")
+                    else:
+                        logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
                     new_key = await handle_api_error_and_get_next_key(
                         self.key_manager, e, api_key, model, retries
