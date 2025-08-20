@@ -142,7 +142,7 @@ async def add_error_log(
 
         # 插入错误日志
         query = insert(ErrorLog).values(
-            gemini_key=gemini_key,
+            gemini_key=redact_key_for_logging(gemini_key),
             error_type=error_type,
             error_log=error_log,
             model_name=model_name,
@@ -508,7 +508,7 @@ async def add_request_log(
         query = insert(RequestLog).values(
             request_time=log_time,
             model_name=model_name,
-            api_key=api_key,
+            api_key=redact_key_for_logging(api_key),
             is_success=is_success,
             status_code=status_code,
             latency_ms=latency_ms,

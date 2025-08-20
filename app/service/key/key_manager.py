@@ -182,7 +182,7 @@ class KeyManager:
                 logger.info(f"Reset failure count for key: {redact_key_for_logging(key)}")
                 return True
             logger.warning(
-                f"Attempt to reset failure count for non-existent key: {key}"
+                f"Attempt to reset failure count for non-existent key: {redact_key_for_logging(key)}"
             )
             return False
 
@@ -194,7 +194,7 @@ class KeyManager:
                 logger.info(f"Reset failure count for Vertex key: {redact_key_for_logging(key)}")
                 return True
             logger.warning(
-                f"Attempt to reset failure count for non-existent Vertex key: {key}"
+                f"Attempt to reset failure count for non-existent Vertex key: {redact_key_for_logging(key)}"
             )
             return False
 
@@ -301,7 +301,7 @@ class KeyManager:
             self.key_model_status[api_key] = {}
         
         self.key_model_status[api_key][model_name] = next_reset_time.astimezone(pytz.utc)
-        logger.info(f"Key {api_key} for model {model_name} has been put into cooldown until {next_reset_time} ({settings.TIMEZONE}).")
+        logger.info(f"Key {redact_key_for_logging(api_key)} for model {model_name} has been put into cooldown until {next_reset_time} ({settings.TIMEZONE}).")
 
     async def mark_key_as_failed(self, api_key: str):
         """立即将一个key标记为失败状态"""
