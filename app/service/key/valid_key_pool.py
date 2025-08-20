@@ -156,7 +156,20 @@ class ValidKeyPool:
             self._pool_keys_set.discard(key_obj.key)
 
             # 检查密钥是否可以使用（未过期）
-            if not key_obj.is_expired():
+            # 检查密钥是否处于冷却状态 (不区分模型)
+            is_in_cooldown = False
+            key_statuses = self.key_manager.key_model_status.get(key_obj.key)
+            if key_statuses:
+                import pytz
+                from datetime import datetime
+                now = datetime.now(pytz.utc)
+                for model, expiry_time in key_statuses.items():
+                    if now < expiry_time:
+                        is_in_cooldown = True
+                        logger.info(f"Key {redact_key_for_logging(key_obj.key)} is in cooldown (model: {model}). Skipping.")
+                        break  # 只要有一个模型在冷却，就跳过该key
+
+            if not key_obj.is_expired() and not is_in_cooldown:
                 # 增加使用计数
                 key_obj.increment_usage()
 
