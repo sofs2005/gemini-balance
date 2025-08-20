@@ -6,7 +6,8 @@ import asyncio
 import random
 from collections import deque
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
 import time
 
 from app.config.config import settings
@@ -160,7 +161,7 @@ class ValidKeyPool:
             is_in_cooldown = False
             key_statuses = self.key_manager.key_model_status.get(key_obj.key)
             if key_statuses:
-                now = self.key_manager.get_utc_now()
+                now = datetime.now(pytz.utc)
                 for model, expiry_time in key_statuses.items():
                     if now < expiry_time:
                         is_in_cooldown = True
