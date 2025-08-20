@@ -320,6 +320,9 @@ class GeminiChatService:
         status_code = None
         final_api_key = api_key
 
+        retries = 0
+        max_retries = settings.MAX_RETRIES
+
         try:
             # 檢查並獲取文件專用的 API key（如果有文件）
             file_names = _extract_file_references(request.model_dump().get("contents", []))
@@ -329,20 +332,38 @@ class GeminiChatService:
                 if file_api_key:
                     logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
                     api_key = file_api_key  # 使用文件的 API key
-                    final_api_key = file_api_key
                 else:
                     logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
 
             payload = _build_payload(model, request)
-            response = await self.api_client.generate_content(payload, model, api_key)
 
-            # 如果到达这里，说明请求成功
-            is_success = True
-            status_code = 200
+            while retries < max_retries:
+                try:
+                    final_api_key = api_key
+                    response = await self.api_client.generate_content(payload, model, api_key)
+                    is_success = True
+                    status_code = 200
+                    return self.response_handler.handle_response(response, model, stream=False)
 
-            return self.response_handler.handle_response(response, model, stream=False)
+                except Exception as e:
+                    retries += 1
+                    logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
+                    
+                    new_key = await handle_api_error_and_get_next_key(
+                        self.key_manager, e, api_key, model, retries
+                    )
+
+                    if not new_key or new_key == api_key:
+                        logger.error("No new valid keys available. Aborting after multiple retries.")
+                        raise e
+                    
+                    api_key = new_key
+                    logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
+
+            logger.error(f"Max retries ({max_retries}) reached. Failing.")
+            raise MaxRetriesExceededError(f"Max retries reached for model {model}. The service may be unstable.")
+
         except Exception as e:
-            # 记录失败状态
             is_success = False
             error_log_msg = str(e)
             match = re.search(r"status code (\d+)", error_log_msg)
@@ -350,8 +371,6 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
-            
-            
             raise e
         finally:
             # 记录请求日志
