@@ -101,7 +101,6 @@ class Settings(BaseSettings):
     # 流式输出优化器配置
     STREAM_OPTIMIZER_ENABLED: bool = False
     STREAM_RETRY_ENABLED: bool = True  # 是否启用流式断流重试功能
-    STREAM_RETRY_ENABLED: bool = True  # 是否启用流式断流重试功能
     STREAM_MIN_DELAY: float = DEFAULT_STREAM_MIN_DELAY
     STREAM_MAX_DELAY: float = DEFAULT_STREAM_MAX_DELAY
     STREAM_SHORT_TEXT_THRESHOLD: int = DEFAULT_STREAM_SHORT_TEXT_THRESHOLD

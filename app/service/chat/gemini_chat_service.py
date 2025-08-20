@@ -1,527 +1,129 @@
-# app/services/chat_service.py
-
 import json
 import re
-import datetime
 import time
 from typing import Any, AsyncGenerator, Dict, List
+
 from app.config.config import settings
-from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
 from app.domain.gemini_models import GeminiRequest
+from app.handler.error_processor import (handle_api_error_and_get_next_key,
+                                         log_api_error)
 from app.handler.response_handler import GeminiResponseHandler
-from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
-from app.handler.stream_optimizer import gemini_optimizer
-from app.log.logger import get_gemini_logger
-from app.service.client.api_client import GeminiApiClient
-from app.service.key.key_manager import KeyManager
-import asyncio
-from app.database.services import add_error_log, add_request_log, get_file_api_key
-from app.handler.stream_retry_handler import process_stream_and_retry_internally
-from app.utils.helpers import redact_key_for_logging
-
-logger = get_gemini_logger()
-
-
-def _has_image_parts(contents: List[Dict[str, Any]]) -> bool:
-    """判断消息是否包含图片部分"""
-    for content in contents:
-        if "parts" in content:
-            for part in content["parts"]:
-                if "image_url" in part or "inline_data" in part:
-                    return True
-    return False
-
-def _extract_file_references(contents: List[Dict[str, Any]]) -> List[str]:
-    """從內容中提取文件引用"""
-    file_names = []
-    for content in contents:
-        if "parts" in content:
-            for part in content["parts"]:
-                if not isinstance(part, dict) or "fileData" not in part:
-                    continue
-                file_data = part["fileData"]
-                if "fileUri" not in file_data:
-                    continue
-                file_uri = file_data["fileUri"]
-                # 從 URI 中提取文件名
-                # 1. https://generativelanguage.googleapis.com/v1beta/files/{file_id}
-                match = re.match(rf"{re.escape(settings.BASE_URL)}/(files/.*)", file_uri)
-                if not match:
-                    logger.warning(f"Invalid file URI: {file_uri}")
-                    continue
-                file_id = match.group(1)
-                file_names.append(file_id)
-                logger.info(f"Found file reference: {file_id}")
-    return file_names
-
-def _clean_json_schema_properties(obj: Any) -> Any:
-    """清理JSON Schema中Gemini API不支持的字段"""
-    if not isinstance(obj, dict):
-        return obj
-    
-    # Gemini API不支持的JSON Schema字段
-    unsupported_fields = {
-        "exclusiveMaximum", "exclusiveMinimum", "const", "examples", 
-        "contentEncoding", "contentMediaType", "if", "then", "else",
-        "allOf", "anyOf", "oneOf", "not", "definitions", "$schema",
-        "$id", "$ref", "$comment", "readOnly", "writeOnly"
-    }
-    
-    cleaned = {}
-    for key, value in obj.items():
-        if key in unsupported_fields:
-            continue
-        if isinstance(value, dict):
-            cleaned[key] = _clean_json_schema_properties(value)
-        elif isinstance(value, list):
-            cleaned[key] = [_clean_json_schema_properties(item) for item in value]
-        else:
-            cleaned[key] = value
-    
-    return cleaned
-
-
-def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """构建工具"""
-    
-    def _has_function_call(contents: List[Dict[str, Any]]) -> bool:
-        """检查内容中是否包含 functionCall"""
-        if not contents or not isinstance(contents, list):
-            return False
-        for content in contents:
-            if not content or not isinstance(content, dict) or "parts" not in content:
-                continue
-            parts = content.get("parts", [])
-            if not parts or not isinstance(parts, list):
-                continue
-            for part in parts:
-                if isinstance(part, dict) and "functionCall" in part:
-                    return True
-        return False
-    
-    def _merge_tools(tools: List[Dict[str, Any]]) -> Dict[str, Any]:
-        record = dict()
-        for item in tools:
-            if not item or not isinstance(item, dict):
-                continue
-
-            for k, v in item.items():
-                if k == "functionDeclarations" and v and isinstance(v, list):
-                    functions = record.get("functionDeclarations", [])
-                    # 清理每个函数声明中的不支持字段
-                    cleaned_functions = []
-                    for func in v:
-                        if isinstance(func, dict):
-                            cleaned_func = _clean_json_schema_properties(func)
-                            cleaned_functions.append(cleaned_func)
-                        else:
-                            cleaned_functions.append(func)
-                    functions.extend(cleaned_functions)
-                    record["functionDeclarations"] = functions
-                else:
-                    record[k] = v
-        return record
-
-    def _is_structured_output_request(payload: Dict[str, Any]) -> bool:
-        """检查请求是否要求结构化JSON输出"""
-        try:
-            generation_config = payload.get("generationConfig", {})
-            return generation_config.get("responseMimeType") == "application/json"
-        except (AttributeError, TypeError):
-            return False
-
-    tool = dict()
-    if payload and isinstance(payload, dict) and "tools" in payload:
-        if payload.get("tools") and isinstance(payload.get("tools"), dict):
-            payload["tools"] = [payload.get("tools")]
-        items = payload.get("tools", [])
-        if items and isinstance(items, list):
-            tool.update(_merge_tools(items))
-
-    # "Tool use with a response mime type: 'application/json' is unsupported"
-    # Gemini API限制：不支持同时使用tools和结构化输出(response_mime_type='application/json')
-    # 当请求指定了JSON响应格式时，跳过所有工具的添加以避免API错误
-    has_structured_output = _is_structured_output_request(payload)
-    if not has_structured_output:
-        if (
-            settings.TOOLS_CODE_EXECUTION_ENABLED
-            and not (model.endswith("-search") or "-thinking" in model)
-            and not _has_image_parts(payload.get("contents", []))
-        ):
-            tool["codeExecution"] = {}
-            
-        if model.endswith("-search"):
-            tool["googleSearch"] = {}
-            
-        real_model = _get_real_model(model)
-        if real_model in settings.URL_CONTEXT_MODELS and settings.URL_CONTEXT_ENABLED:
-            tool["urlContext"] = {}
-
-    # 解决 "Tool use with function calling is unsupported" 问题
-    if tool.get("functionDeclarations") or _has_function_call(payload.get("contents", [])):
-        tool.pop("googleSearch", None)
-        tool.pop("codeExecution", None)
-        tool.pop("urlContext", None)
-
-    return [tool] if tool else []
-
-
-def _get_real_model(model: str) -> str:
-    if model.endswith("-search"):
-        model = model[:-7]
-    if model.endswith("-image"):
-        model = model[:-6]
-    if model.endswith("-non-thinking"):
-        model = model[:-13]
-    if "-search" in model and "-non-thinking" in model:
-        model = model[:-20]
-    return model
-
-
-def _get_safety_settings(model: str) -> List[Dict[str, str]]:
-    """获取安全设置"""
-    if model == "gemini-2.0-flash-exp":
-        return GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
-    return settings.SAFETY_SETTINGS
-
-
-def _filter_empty_parts(contents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Filters out contents with empty or invalid parts."""
-    if not contents:
-        return []
-
-    filtered_contents = []
-    for content in contents:
-        if not content or "parts" not in content or not isinstance(content.get("parts"), list):
-            continue
-
-        valid_parts = [part for part in content["parts"] if isinstance(part, dict) and part]
-
-        if valid_parts:
-            new_content = content.copy()
-            new_content["parts"] = valid_parts
-            filtered_contents.append(new_content)
-
-    return filtered_contents
-
-
-def _build_payload(model: str, request: GeminiRequest) -> Dict[str, Any]:
-    """构建请求payload"""
-    request_dict = request.model_dump(exclude_none=False)
-    if request.generationConfig:
-        if request.generationConfig.maxOutputTokens is None:
-            # 如果未指定最大输出长度，则不传递该字段，解决截断的问题
-            if "maxOutputTokens" in request_dict["generationConfig"]:
-                request_dict["generationConfig"].pop("maxOutputTokens")
-
-    # 检查是否为TTS模型
-    is_tts_model = "tts" in model.lower()
-
-    if is_tts_model:
-        # TTS模型使用简化的payload，不包含tools和safetySettings
-        payload = {
-            "contents": _filter_empty_parts(request_dict.get("contents", [])),
-            "generationConfig": request_dict.get("generationConfig"),
-        }
-
-        # 只在有systemInstruction时才添加
-        if request_dict.get("systemInstruction"):
-            payload["systemInstruction"] = request_dict.get("systemInstruction")
-    else:
-        # 非TTS模型使用完整的payload
-        payload = {
-            "contents": _filter_empty_parts(request_dict.get("contents", [])),
-            "tools": _build_tools(model, request_dict),
-            "safetySettings": _get_safety_settings(model),
-            "generationConfig": request_dict.get("generationConfig"),
-            "systemInstruction": request_dict.get("systemInstruction"),
-        }
-
-    # 确保 generationConfig 不为 None
-    if payload["generationConfig"] is None:
-        payload["generationConfig"] = {}
-
-    if model.endswith("-image") or model.endswith("-image-generation"):
-        payload.pop("systemInstruction")
-        payload["generationConfig"]["responseModalities"] = ["Text", "Image"]
-    
-    # 处理思考配置：优先使用客户端提供的配置，否则使用默认配置
-    client_thinking_config = None
-    if request.generationConfig and request.generationConfig.thinkingConfig:
-        client_thinking_config = request.generationConfig.thinkingConfig
-    
-    if client_thinking_config is not None:
-        # 客户端提供了思考配置，直接使用
-        payload["generationConfig"]["thinkingConfig"] = client_thinking_config
-    else:
-        # 客户端没有提供思考配置，使用默认配置    
-        if model.endswith("-non-thinking"):
-            if "gemini-2.5-pro" in model:
-                payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 128}
-            else:
-                payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0} 
-        elif _get_real_model(model) in settings.THINKING_BUDGET_MAP:
-            if settings.SHOW_THINKING_PROCESS:
-                payload["generationConfig"]["thinkingConfig"] = {
-                    "thinkingBudget": settings.THINKING_BUDGET_MAP.get(model,1000),
-                    "includeThoughts": True
-                }
-            else:
-                payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": settings.THINKING_BUDGET_MAP.get(model,1000)}
-
-    return payload
+from app.handler.stream_optimizer import gemini_stream_optimizer
+from app.handler.stream_retry_handler import StreamRetryHandler
+from app.service.client.api_client import GeminiAPIClient
+from app.service.key.key_manager import key_manager
+from app.service.request_log.request_log_service import RequestLogService
+from app.utils.helpers import (convert_sse_to_json, generate_request_id,
+                               get_proxy_url)
+from app.utils.ttl_cache import ttl_cache
 
 
 class GeminiChatService:
-    """聊天服务"""
+    def __init__(self, request_log_service: RequestLogService):
+        self.request_log_service = request_log_service
 
-    def __init__(self, base_url: str, key_manager: KeyManager):
-        self.api_client = GeminiApiClient(base_url, settings.TIME_OUT)
-        self.key_manager = key_manager
-        self.response_handler = GeminiResponseHandler()
+    async def _create_chat_completion_stream(
+            self,
+            request: GeminiRequest,
+            api_client: GeminiAPIClient,
+            request_id: str,
+            retry_handler: RetryHandler,
+            response_handler: GeminiResponseHandler,
+            stream_retry_handler: StreamRetryHandler,
+    ) -> AsyncGenerator[str, Any]:
+        last_chunk_time = time.time()
+        is_first_chunk = True
+        full_content = ""
+        buffer = ""
 
-    def _extract_text_from_response(self, response: Dict[str, Any]) -> str:
-        """从响应中提取文本内容"""
-        if not response.get("candidates"):
-            return ""
-
-        candidate = response["candidates"][0]
-        content = candidate.get("content", {})
-        parts = content.get("parts", [])
-
-        if parts and "text" in parts[0]:
-            return parts[0].get("text", "")
-        return ""
-
-    def _create_char_response(
-        self, original_response: Dict[str, Any], text: str
-    ) -> Dict[str, Any]:
-        """创建包含指定文本的响应"""
-        response_copy = json.loads(json.dumps(original_response))
-        if response_copy.get("candidates") and response_copy["candidates"][0].get(
-            "content", {}
-        ).get("parts"):
-            response_copy["candidates"][0]["content"]["parts"][0]["text"] = text
-        return response_copy
-
-    async def generate_content(
-        self, model: str, request: GeminiRequest, api_key: str
-    ) -> Dict[str, Any]:
-        """生成内容"""
-        import time
-        import datetime
-
-        # 记录开始时间和请求时间
-        start_time = time.perf_counter()
-        request_datetime = datetime.datetime.now()
-        is_success = False
-        status_code = None
-        final_api_key = api_key
-
-        try:
-            # 檢查並獲取文件專用的 API key（如果有文件）
-            file_names = _extract_file_references(request.model_dump().get("contents", []))
-            if file_names:
-                logger.info(f"Request contains file references: {file_names}")
-                file_api_key = await get_file_api_key(file_names[0])
-                if file_api_key:
-                    logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
-                    api_key = file_api_key  # 使用文件的 API key
-                    final_api_key = file_api_key
-                else:
-                    logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-
-            payload = _build_payload(model, request)
-            response = await self.api_client.generate_content(payload, model, api_key)
-
-            # 如果到达这里，说明请求成功
-            is_success = True
-            status_code = 200
-
-            return self.response_handler.handle_response(response, model, stream=False)
-        except Exception as e:
-            # 记录失败状态
-            is_success = False
-            error_log_msg = str(e)
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
-            
-            
-            raise e
-        finally:
-            # 记录请求日志
-            end_time = time.perf_counter()
-            latency_ms = int((end_time - start_time) * 1000)
-            asyncio.create_task(add_request_log(
-                model_name=model,
-                api_key=final_api_key,
-                is_success=is_success,
-                status_code=status_code,
-                latency_ms=latency_ms,
-                request_time=request_datetime
-            ))
-
-    @RetryHandler()
-    async def count_tokens(
-        self, model: str, request: GeminiRequest, api_key: str
-    ) -> Dict[str, Any]:
-        """计算token数量"""
-        import time
-        import datetime
-
-        # 记录开始时间和请求时间
-        start_time = time.perf_counter()
-        request_datetime = datetime.datetime.now()
-        is_success = False
-        status_code = None
-
-        try:
-            # countTokens API只需要contents
-            payload = {"contents": _filter_empty_parts(request.model_dump().get("contents", []))}
-            response = await self.api_client.count_tokens(payload, model, api_key)
-
-            # 如果到达这里，说明请求成功
-            is_success = True
-            status_code = 200
-
-            return response
-        except Exception as e:
-            # 记录失败状态
-            is_success = False
-            error_log_msg = str(e)
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
-            
-            # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=api_key,
-                error=e,
-                model_name=f"{model}-count-tokens",
-                error_type="gemini-count-tokens",
-                request_msg=payload
-            ))
-            
-            raise e
-        finally:
-            # 记录请求日志
-            end_time = time.perf_counter()
-            latency_ms = int((end_time - start_time) * 1000)
-            asyncio.create_task(add_request_log(
-                model_name=f"{model}-count-tokens",  # 区分计数请求
-                api_key=api_key,
-                is_success=is_success,
-                status_code=status_code,
-                latency_ms=latency_ms,
-                request_time=request_datetime
-            ))
-
-    async def stream_generate_content(
-        self, model: str, request: GeminiRequest, api_key: str
-    ) -> AsyncGenerator[str, None]:
-        """流式生成内容"""
-        # 檢查並獲取文件專用的 API key（如果有文件）
-        file_names = _extract_file_references(request.model_dump().get("contents", []))
-        if file_names:
-            logger.info(f"Request contains file references: {file_names}")
-            file_api_key = await get_file_api_key(file_names[0])
-            if file_api_key:
-                logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
-                api_key = file_api_key
-            else:
-                logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-
-        payload = _build_payload(model, request)
-        retries = 0
-        max_retries = settings.MAX_RETRIES
-
-        while retries < max_retries:
+        while True:
             try:
-                initial_response = await self.api_client.stream_generate_content(payload, model, api_key)
-                
-                # 根据配置决定是否使用断流重试逻辑
-                if settings.STREAM_RETRY_ENABLED:
-                    stream_processor = process_stream_and_retry_internally(
-                        initial_response=initial_response,
-                        original_request_body=payload,
-                        api_client=self.api_client,
-                        model=model,
-                        api_key=api_key,
-                        key_manager=self.key_manager,
-                        max_retries=settings.MAX_RETRIES,
-                        retry_delay_ms=750,
-                        swallow_thoughts=True,
-                    )
-                else:
-                    # 备用逻辑：直接迭代原始响应流
-                    async def simple_stream_iterator():
-                        async for chunk in initial_response.aiter_bytes():
-                            yield chunk
-                    stream_processor = simple_stream_iterator()
+                async for chunk in api_client.stream_generate_content(request.model, request.to_dict()):
+                    buffer += chunk
+                    if is_first_chunk:
+                        response_handler.set_request_id(request_id)
+                        is_first_chunk = False
 
-                async for chunk in stream_processor:
-                    # Decode the chunk to string
-                    decoded_chunk = chunk.decode('utf-8')
-                    
-                    # Process with the original stream optimizer for better perceived performance
-                    if decoded_chunk.startswith("data:"):
-                        try:
-                            line_data = decoded_chunk[6:]
-                            response_data = self.response_handler.handle_response(
-                                json.loads(line_data), model, stream=True
-                            )
-                            text = self._extract_text_from_response(response_data)
-                            
-                            if text and settings.STREAM_OPTIMIZER_ENABLED:
-                                async for optimized_chunk in gemini_optimizer.optimize_stream_output(
-                                    text,
-                                    lambda t: self._create_char_response(response_data, t),
-                                    lambda c: "data: " + json.dumps(c) + "\n\n",
-                                ):
-                                    yield optimized_chunk
-                            else:
-                                yield "data: " + json.dumps(response_data) + "\n\n"
-                        except json.JSONDecodeError:
-                            yield decoded_chunk # Yield original chunk if not valid JSON
-                    else:
-                        yield decoded_chunk
-                
-                # If the stream completes successfully, break the loop
-                return
+                    if buffer.endswith("\r\n\r\n"):
+                        json_chunks = convert_sse_to_json(buffer)
+                        buffer = ""
+                        stream_retry_handler.add_chunks(json_chunks)
+                        async for optimized_chunk in gemini_stream_optimizer(json_chunks):
+                            yield optimized_chunk
+                        last_chunk_time = time.time()
+
+                if buffer:
+                    json_chunks = convert_sse_to_json(buffer)
+                    stream_retry_handler.add_chunks(json_chunks)
+                    async for optimized_chunk in gemini_stream_optimizer(json_chunks):
+                        yield optimized_chunk
+
+                if settings.STREAM_RETRY_ENABLED and stream_retry_handler.is_stream_incomplete():
+                    request.contents = stream_retry_handler.prepare_retry_request()
+                    continue
+
+                yield response_handler.create_done_chunk()
+                break
 
             except Exception as e:
-                retries += 1
-                logger.error(f"Stream attempt {retries} failed: {e}", exc_info=True)
-                
-                new_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, api_key, model, retries
-                )
+                next_key_info = await handle_api_error_and_get_next_key(e, api_client.api_key, request.model)
+                if not next_key_info:
+                    yield response_handler.create_error_chunk(f"All API keys are invalid. Please check your keys.")
+                    break
 
-                if not new_key or new_key == api_key:
-                    logger.error("No new valid keys available. Aborting after multiple retries.")
-                    raise e
-                
-                api_key = new_key
-                logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
+                api_client.update_key(next_key_info["key"])
+                retry_handler.record_attempt()
+                if not await retry_handler.should_retry():
+                    yield response_handler.create_error_chunk(f"Max retries reached. Last error: {e}")
+                    break
 
-        logger.error(f"Max retries ({max_retries}) reached. Failing.")
-        raise Exception(f"Max retries reached for model {model}")
-</[MEMORY BANK: ACTIVE]
-我已经成功地重写了 `app/service/chat/gemini_chat_service.py` 文件。
+    async def create_chat_completion(
+            self, request: GeminiRequest
+    ) -> AsyncGenerator[str, Any]:
+        request_id = generate_request_id()
+        start_time = time.time()
+        api_key_info = key_manager.get_key(request.model)
+        if not api_key_info:
+            yield GeminiResponseHandler(request_id).create_error_chunk("No valid API key found for the specified model.")
+            return
 
-现在，流式传输的行为将由您在 `app/config/config.py` 文件中设置的 `STREAM_RETRY_ENABLED` 开关控制：
--   如果设置为 `True`，程序将启用内容感知流式重试逻辑，以最大限度地减少内容截断。
--   如果设置为 `False`，程序将使用更简单的直接流式传输方法，这在网络和模型稳定的情况下可以提供更快的响应速度。
+        api_key = api_key_info["key"]
+        proxy_url = get_proxy_url(api_key)
+        api_client = GeminiAPIClient(api_key, proxy_url=proxy_url)
+        retry_handler = RetryHandler(
+            max_retries=settings.MAX_RETRIES,
+            delay=settings.RETRY_DELAY,
+            backoff_factor=settings.RETRY_BACKOFF,
+        )
+        response_handler = GeminiResponseHandler(request_id)
+        stream_retry_handler = StreamRetryHandler()
 
-这项功能的实现已经完成。
-<attempt_completion>
-<result>
-我已成功在 `gemini_chat_service.py` 中实现了流式重试功能的开关。现在，您可以通过修改 `config.py` 文件中的 `STREAM_RETRY_ENABLED` 设置来控制是使用高级的防断流重试逻辑，还是使用更直接、更快速的简单流式传输。
-</result>
-</attempt_completion
+        try:
+            if request.stream:
+                async for chunk in self._create_chat_completion_stream(
+                        request, api_client, request_id, retry_handler, response_handler, stream_retry_handler
+                ):
+                    yield chunk
+                full_content = stream_retry_handler.get_full_content()
+            else:
+                response = await api_client.generate_content(request.model, request.to_dict())
+                full_content = response_handler.extract_full_content_from_response(response)
+                yield response_handler.create_regular_chunk(full_content)
+
+        except Exception as e:
+            log_api_error(e, api_key, request.model)
+            yield response_handler.create_error_chunk(f"An unexpected error occurred: {e}")
+        finally:
+            end_time = time.time()
+            duration = end_time - start_time
+            await self.request_log_service.log_request(
+                request_id=request_id,
+                model_name=request.model,
+                api_key=api_key,
+                request_data=request.model_dump_json(),
+                response_data=json.dumps({"full_content": full_content}),
+                duration=duration,
+                is_stream=request.stream,
+            )
+            key_manager.release_key(api_key)

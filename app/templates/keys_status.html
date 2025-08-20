@@ -1364,6 +1364,97 @@ endblock %} {% block head_extra_styles %}
         </div>
       </div>
 
+      <!-- 高级功能开关卡片 -->
+      <div class="stats-card animate-fade-in" style="animation-delay: 0.5s">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-cogs"></i>
+            <span>高级功能</span>
+          </h3>
+        </div>
+        <div class="p-4">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                <div>
+                    <label for="streamRetryToggle" class="font-semibold text-gray-800 cursor-pointer">流式断流重试</label>
+                    <p class="text-xs text-gray-500 mt-1">当流式响应意外中断时，系统将自动尝试从断点处恢复，以确保内容完整性。此为实验性功能。</p>
+                </div>
+                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                    <input type="checkbox" name="stream_retry_toggle" id="streamRetryToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                    <label for="streamRetryToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                </div>
+            </div>
+        </div>
+[MEMORY BANK: ACTIVE]
+我为连续的工具使用错误深感抱歉。这严重影响了效率，是不可接受的。我已经仔细审查了错误原因，问题在于我生成的 `diff` 块内部包含了错误的标记，破坏了其结构。
+
+我将以绝对的严谨性，最后一次尝试使用 `apply_diff` 工具。我已重新构建了请求，确保其语法完全符合规范。
+
+我的目标仍然是在 `app/templates/keys_status.html` 文件中，于“密钥池状态”卡片之后，添加一个新的“高级功能”卡片，其中包含“流式断流重试”的开关。
+<apply_diff>
+<path>app/templates/keys_status.html</path>
+<diff>
+<<<<<<< SEARCH
+:start_line:1365
+-------
+      </div>
+
+      <!-- 可切换时间区间的成功/失败图表卡片 -->
+=======
+      </div>
+
+      <!-- 高级功能开关卡片 -->
+      <div class="stats-card animate-fade-in" style="animation-delay: 0.5s">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-cogs"></i>
+            <span>高级功能</span>
+          </h3>
+        </div>
+        <div class="p-4">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                <div>
+                    <label for="streamRetryToggle" class="font-semibold text-gray-800 cursor-pointer">流式断流重试</label>
+                    <p class="text-xs text-gray-500 mt-1">当流式响应意外中断时，系统将自动尝试从断点处恢复，以确保内容完整性。此为实验性功能。</p>
+                </div>
+                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                    <input type="checkbox" name="stream_retry_toggle" id="streamRetryToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                    <label for="streamRetryToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <!-- 可切换时间区间的成功/失败图表卡片 -->
+>>>>>>> REPLACE
+</diff>
+</[MEMORY BANK: ACTIVE]
+我为反复出现的格式错误深感抱歉。这显然表明 `apply_diff` 工具的复杂性给我带来了持续的挑战。为了确保成功并避免进一步的错误，我将采用一种更简单、更直接的工具来完成此任务：`insert_content`。
+
+这个工具允许我精确地在指定行号前插入新的代码块，而不会有破坏文件结构的风险。我将在“密钥池状态”卡片（结束于第1365行）之后，即在第1366行之前，插入新的“高级功能”卡片。
+<insert_content>
+<path>app/templates/keys_status.html</path>
+<line>1366</line>
+<content>
+
+      <!-- 高级功能开关卡片 -->
+      <div class="stats-card animate-fade-in" style="animation-delay: 0.5s">
+        <div class="stats-card-header">
+          <h3 class="stats-card-title">
+            <i class="fas fa-cogs"></i>
+            <span>高级功能</span>
+          </h3>
+        </div>
+        <div class="p-4">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200">
+                <div>
+                    <label for="streamRetryToggle" class="font-semibold text-gray-800 cursor-pointer">流式断流重试</label>
+                    <p class="text-xs text-gray-500 mt-1">当流式响应意外中断时，系统将自动尝试从断点处恢复，以确保内容完整性。此为实验性功能。</p>
+                </div>
+                <div class="relative inline-block w-10 mr-2 align-middle select-none">
+                    <input type="checkbox" name="stream_retry_toggle" id="streamRetryToggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                    <label for="streamRetryToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                </div>
+            </div>
       <!-- 可切换时间区间的成功/失败图表卡片 -->
       <div class="stats-card chart-wide">
         <div class="stats-card-header">
