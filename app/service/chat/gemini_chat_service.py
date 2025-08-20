@@ -473,7 +473,18 @@ class GeminiChatService:
 
             except Exception as e:
                 retries += 1
-                logger.error(f"Stream attempt {retries} failed: {e}", exc_info=True)
+                error_str = str(e)
+                if "429" in error_str:
+                    simplified_message = "API call failed with status code 429 (Quota exceeded)"
+                    try:
+                        # Try to parse the detailed message
+                        details = json.loads(error_str.split(',', 1)[1].strip())
+                        simplified_message = details.get("error", {}).get("message", simplified_message)
+                    except Exception:
+                        pass # Keep the basic message if parsing fails
+                    logger.error(f"Stream attempt {retries} failed: {simplified_message}")
+                else:
+                    logger.error(f"Stream attempt {retries} failed: {e}", exc_info=True)
                 
                 new_key = await handle_api_error_and_get_next_key(
                     self.key_manager, e, api_key, model, retries
