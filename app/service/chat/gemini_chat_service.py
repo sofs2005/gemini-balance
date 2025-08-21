@@ -305,6 +305,21 @@ class GeminiChatService:
             response_copy["candidates"][0]["content"]["parts"][0]["text"] = text
         return response_copy
 
+    async def _verify_key_with_api(self, key_to_verify: str) -> Exception | None:
+        """
+        A simplified, non-retrying method to verify a key directly.
+        Returns None on success, or the exception on failure.
+        """
+        try:
+            payload = _build_payload(
+                settings.TEST_MODEL,
+                GeminiRequest(contents=[GeminiContent(role="user", parts=[{"text": "hi"}])])
+            )
+            await self.api_client.generate_content(payload, settings.TEST_MODEL, key_to_verify)
+            return None  # Success
+        except Exception as e:
+            return e  # Failure
+
     async def generate_content(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:

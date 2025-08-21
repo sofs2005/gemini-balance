@@ -557,34 +557,23 @@ class ValidKeyPool:
                 self._verifying_keys.discard(key)
                 return False
             
-            # 构造测试请求
-            gemini_request = GeminiRequest(
-                contents=[
-                    GeminiContent(
-                        role="user",
-                        parts=[{"text": "hi"}],
-                    )
-                ]
-            )
+            # 使用新的、无副作用的验证方法
+            verification_result = await self.chat_service._verify_key_with_api(key)
             
-            # 发送验证请求
-            await self.chat_service.generate_content(
-                settings.TEST_MODEL, gemini_request, key
-            )
-            
-            # 验证成功，重置失败计数
-            await self.key_manager.reset_key_failure_count(key)
-            logger.debug(f"Key verification successful for {redact_key_for_logging(key)}")
-            return True
-            
+            if verification_result is None:
+                # 验证成功
+                await self.key_manager.reset_key_failure_count(key)
+                logger.debug(f"Key verification successful for {redact_key_for_logging(key)}")
+                return True
+            else:
+                # 验证失败，处理异常
+                logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(verification_result)}")
+                await self.error_processor.process_error(key, verification_result)
+                return False
         except asyncio.CancelledError:
             # 任务被取消，不记录为验证失败
             logger.debug(f"Key verification cancelled for {redact_key_for_logging(key)}")
             raise  # 重新抛出CancelledError
-        except Exception as e:
-            logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-            await self.error_processor.process_error(key, e)
-            return False
         finally:
             self._verifying_keys.discard(key)
     
@@ -603,35 +592,20 @@ class ValidKeyPool:
                 logger.warning("Chat service not available for emergency key verification")
                 return None
 
-            # 构造测试请求
-            gemini_request = GeminiRequest(
-                contents=[
-                    GeminiContent(
-                        role="user",
-                        parts=[{"text": "hi"}],
-                    )
-                ]
-            )
-
-            # 发送验证请求（不调用错误处理器，避免递归）
-            await self.chat_service.generate_content(
-                settings.TEST_MODEL, gemini_request, key
-            )
-
-            # 验证成功，重置失败计数
-            await self.key_manager.reset_key_failure_count(key)
-            logger.debug(f"Emergency key verification successful for {redact_key_for_logging(key)}")
-            return key
-
+            # 使用新的、无副作用的验证方法
+            is_valid = await self.chat_service._verify_key_with_api(key)
+            if is_valid:
+                # 验证成功，重置失败计数
+                await self.key_manager.reset_key_failure_count(key)
+                logger.debug(f"Emergency key verification successful for {redact_key_for_logging(key)}")
+                return key
+            else:
+                # 验证失败，返回None
+                return None
         except asyncio.CancelledError:
             # 任务被取消
             logger.debug(f"Emergency key verification cancelled for {redact_key_for_logging(key)}")
             raise
-        except Exception as e:
-            # 验证失败，记录失败计数但不获取新密钥避免影响池内密钥
-            logger.debug(f"Emergency key verification failed for {redact_key_for_logging(key)}: {str(e)}")
-            await self.error_processor.process_error(key, e)
-            return None
 
     def _remove_expired_keys(self) -> int:
         """
