@@ -10,12 +10,19 @@ class ErrorProcessor:
         self.key_manager = key_manager
         self.model_service = model_service
 
-    async def process_error(self, key: str, exception: Exception, model_name: str = "unknown"):
+    async def process_error(
+        self,
+        key: str,
+        exception: Exception,
+        model_name: str = "unknown",
+        request_msg: Optional[Dict[str, Any]] = None,
+        status_code_override: Optional[int] = None
+    ):
         # Import APIError here to avoid circular dependency at module level
         from app.exception.exceptions import APIError
 
         # 1. Determine error type and status code with more precision
-        status_code = getattr(exception, 'status_code', None)
+        status_code = status_code_override if status_code_override is not None else getattr(exception, 'status_code', None)
         error_type = "UNKNOWN_ERROR"
 
         if isinstance(exception, APIError):
@@ -43,7 +50,8 @@ class ErrorProcessor:
             model_name=model_name,
             error_log=simplified_message,
             error_type=error_type,
-            error_code=status_code
+            error_code=status_code,
+            request_msg=request_msg
         ))
 
         # 3. Handle the key state based on the original logic

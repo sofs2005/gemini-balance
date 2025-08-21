@@ -354,15 +354,25 @@ class OpenAIChatService:
             match = re.search(r"status code (\d+)", error_log_msg)
             status_code = int(match.group(1)) if match else 500
 
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=model,
-                error_type="openai-chat-non-stream",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=payload,
-                request_datetime=request_datetime,
-            )
+            if self.key_manager:
+                await self.key_manager.error_processor.process_error(
+                    key=api_key,
+                    exception=e,
+                    model_name=model,
+                    request_msg=payload,
+                    status_code_override=status_code
+                )
+            else:
+                # Fallback for consistency, though key_manager should ideally be present
+                await add_error_log(
+                    gemini_key=api_key,
+                    model_name=model,
+                    error_type="openai-chat-non-stream",
+                    error_log=error_log_msg,
+                    error_code=status_code,
+                    request_msg=payload,
+                    request_datetime=request_datetime,
+                )
             raise e
         finally:
             end_time = time.perf_counter()
@@ -552,17 +562,14 @@ class OpenAIChatService:
                     else:
                         status_code = 500
 
-                await add_error_log(
-                    gemini_key=current_attempt_key,
-                    model_name=model,
-                    error_type="openai-chat-stream",
-                    error_log=error_log_msg,
-                    error_code=status_code,
-                    request_msg=payload,
-                )
-
                 if self.key_manager:
-                    await self.key_manager.error_processor.process_error(current_attempt_key, e)
+                    await self.key_manager.error_processor.process_error(
+                        key=current_attempt_key,
+                        exception=e,
+                        model_name=model,
+                        request_msg=payload,
+                        status_code_override=status_code
+                    )
                     new_api_key = await self.key_manager.get_next_working_key(model)
                     if new_api_key and new_api_key != current_attempt_key:
                         final_api_key = new_api_key
