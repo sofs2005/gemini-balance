@@ -593,10 +593,9 @@ class ValidKeyPool:
                 logger.warning("Chat service not available for emergency key verification")
                 return None
 
-            # 使用新的、无副作用的验证方法
-            # _verify_key_with_api 成功时返回 None，失败时返回 APIError
-            error = await self.chat_service._verify_key_with_api(key)
-            if error is None:
+            # 紧急验证方法返回布尔值：True表示成功，False表示失败
+            is_valid = await self.chat_service._verify_key_with_api(key)
+            if is_valid:
                 # 验证成功
                 self.stats["successful_verifications"] += 1
                 await self.key_manager.reset_key_failure_count(key)
