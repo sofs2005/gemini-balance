@@ -356,6 +356,8 @@ class GeminiChatService:
                         logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
                     await self.key_manager.error_processor.process_error(api_key, e)
+                    # 立即从所有池中移除失败的key，避免在同一轮重试中再次选中
+                    await self.key_manager.remove_key(api_key)
                     new_key = await self.key_manager.get_next_working_key(model)
 
                     if not new_key or new_key == api_key:
@@ -518,6 +520,8 @@ class GeminiChatService:
                     logger.error(f"Stream attempt {retries} failed.", exc_info=True)
                 
                 await self.key_manager.error_processor.process_error(api_key, e)
+                # 立即从所有池中移除失败的key，避免在同一轮重试中再次选中
+                await self.key_manager.remove_key(api_key)
                 new_key = await self.key_manager.get_next_working_key(model)
 
                 if not new_key or new_key == api_key:
