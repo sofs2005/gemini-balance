@@ -189,3 +189,37 @@ def get_current_version(default_version: str = "0.0.0") -> str:
     except IOError as e:
         helper_logger.error(f"Error reading VERSION file ('{version_file}'): {e}. Using default version '{default_version}'.")
         return default_version
+
+
+def simplify_api_error_message(error_content: str, max_length: int = 200) -> str:
+    """
+    Simplifies an API error message for cleaner logging.
+    Tries to extract the 'message' from a JSON error response.
+    If it fails, it returns a truncated version of the original content.
+
+    Args:
+        error_content: The raw error content from the API response.
+        max_length: The maximum length of the returned string if parsing fails.
+
+    Returns:
+        A simplified error message.
+    """
+    try:
+        # Try to parse the error content as JSON
+        error_json = json.loads(error_content)
+        
+        # Extract the core error message if available
+        message = error_json.get("error", {}).get("message")
+        if message:
+            return message
+            
+    except (json.JSONDecodeError, AttributeError):
+        # If it's not a valid JSON or doesn't have the expected structure,
+        # fall back to a truncated raw message.
+        pass
+
+    # Truncate the raw content if it's too long
+    if len(error_content) > max_length:
+        return f"{error_content[:max_length]}..."
+        
+    return error_content

@@ -37,5 +37,5 @@ class ErrorProcessor:
 
     async def handle_server_error(self, key):
         # Temporarily remove the key from the pool and increase the failure count
-        await self.key_manager.increase_failure_count(key)
+        await self.key_manager.increment_failure_count(key)
         await self.key_manager.remove_key_from_pool(key)

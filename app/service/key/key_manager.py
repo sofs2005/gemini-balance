@@ -337,6 +337,19 @@ class KeyManager:
         else:
             return ""
 
+    async def increment_failure_count(self, api_key: str):
+        """
+        增加指定key的失败计数，并在达到阈值时将其从有效列表中移除
+        """
+        async with self.failure_count_lock:
+            if api_key in self.key_failure_counts:
+                self.key_failure_counts[api_key] += 1
+                logger.info(f"Increased failure count for key {redact_key_for_logging(api_key)} to {self.key_failure_counts[api_key]}.")
+                if self.key_failure_counts[api_key] >= self.MAX_FAILURES:
+                    if api_key in self.valid_api_keys:
+                        self.valid_api_keys.remove(api_key)
+                        logger.warning(f"API key {redact_key_for_logging(api_key)} exceeded max failures ({self.MAX_FAILURES}), removing from valid pool.")
+
     async def handle_vertex_api_failure(self, api_key: str, retries: int) -> str:
         """处理 Vertex Express API 调用失败"""
         async with self.vertex_failure_count_lock:
