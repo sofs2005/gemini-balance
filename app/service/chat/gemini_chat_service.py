@@ -17,7 +17,7 @@ from app.service.key.key_manager import KeyManager
 import asyncio
 from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.handler.stream_retry_handler import process_stream_and_retry_internally
-from app.utils.helpers import redact_key_for_logging
+from app.utils.helpers import redact_key_for_logging, simplify_api_error_message
 from app.exception.exceptions import MaxRetriesExceededError
 
 logger = get_gemini_logger()
@@ -366,7 +366,7 @@ class GeminiChatService:
                     is_known_http_error = "API call failed with status code" in error_msg
                     
                     if is_known_http_error:
-                        logger.error(f"Content generation attempt {retries} failed: {error_msg}")
+                        logger.error(f"Content generation attempt {retries} failed: {simplify_api_error_message(error_msg)}")
                     else:
                         logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
@@ -438,7 +438,7 @@ class GeminiChatService:
                 except Exception as e:
                     retries += 1
                     error_msg = str(e)
-                    logger.error(f"Count tokens attempt {retries} failed: {error_msg}")
+                    logger.error(f"Count tokens attempt {retries} failed: {simplify_api_error_message(error_msg)}")
                     
                     await self.key_manager.error_processor.process_error(api_key, e)
                     new_key = await self.key_manager.get_next_working_key(model)
@@ -479,79 +479,124 @@ class GeminiChatService:
         self, model: str, request: GeminiRequest, api_key: str
     ) -> AsyncGenerator[str, None]:
         """流式生成内容"""
-        # 檢查並獲取文件專用的 API key（如果有文件）
-        file_names = _extract_file_references(request.model_dump().get("contents", []))
-        if file_names:
-            logger.info(f"Request contains file references: {file_names}")
-            file_api_key = await get_file_api_key(file_names[0])
-            if file_api_key:
-                logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
-                api_key = file_api_key
-            else:
-                logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-
-        payload = _build_payload(model, request)
-        retries = 0
-        max_retries = settings.MAX_RETRIES
-
-        while retries < max_retries:
-            try:
-                async for decoded_chunk in self.api_client.stream_generate_content(payload, model, api_key):
-                    # Process with the original stream optimizer for better perceived performance
-                    if decoded_chunk.startswith("data:"):
-                        try:
-                            line_data = decoded_chunk[6:]
-                            response_data = self.response_handler.handle_response(
-                                json.loads(line_data), model, stream=True
-                            )
-                            text = self._extract_text_from_response(response_data)
-                            
-                            if text and settings.STREAM_OPTIMIZER_ENABLED:
-                                async for optimized_chunk in gemini_optimizer.optimize_stream_output(
-                                    text,
-                                    lambda t: self._create_char_response(response_data, t),
-                                    lambda c: "data: " + json.dumps(c) + "\n\n",
-                                ):
-                                    yield optimized_chunk
-                            else:
-                                yield "data: " + json.dumps(response_data) + "\n\n"
-                        except json.JSONDecodeError:
-                            yield decoded_chunk # Yield original chunk if not valid JSON
-                    else:
-                        yield decoded_chunk
-                
-                # If thestream completes successfully, break the loop
-                return
-
-            except Exception as e:
-                retries += 1
-                # 检查是否为已知HTTP错误，以决定是否打印完整堆栈
-                error_msg = str(e)
-                is_known_http_error = "API call failed with status code" in error_msg
-                
-                if is_known_http_error:
-                    logger.error(f"Stream attempt {retries} failed: {error_msg}")
+        start_time = time.perf_counter()
+        request_datetime = datetime.datetime.now()
+        is_success = False
+        status_code = None
+        final_api_key = api_key
+        
+        try:
+            # 檢查並獲取文件專用的 API key（如果有文件）
+            file_names = _extract_file_references(request.model_dump().get("contents", []))
+            if file_names:
+                logger.info(f"Request contains file references: {file_names}")
+                file_api_key = await get_file_api_key(file_names[0])
+                if file_api_key:
+                    logger.info(f"Found API key for file {file_names[0]}: {redact_key_for_logging(file_api_key)}")
+                    api_key = file_api_key
                 else:
-                    logger.error(f"Stream attempt {retries} failed.", exc_info=True)
-                
-                await self.key_manager.error_processor.process_error(api_key, e)
-                # 立即从所有池中移除失败的key，避免在同一轮重试中再次选中
-                await self.key_manager.remove_key(api_key)
-                new_key = await self.key_manager.get_next_working_key(model)
+                    logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
 
-                if not new_key or new_key == api_key:
-                    logger.error("No new valid keys available. Aborting after multiple retries.")
-                    raise e
-                
-                api_key = new_key
-                logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
+            payload = _build_payload(model, request)
+            retries = 0
+            max_retries = settings.MAX_RETRIES
 
-        logger.error(f"Max retries ({max_retries}) reached. Failing.")
-        error_payload = {
-            "error": {
-                "code": 500,
-                "message": f"Max retries reached for model {model}. The service may be unstable.",
-                "status": "INTERNAL_SERVER_ERROR"
+            while retries < max_retries:
+                try:
+                    final_api_key = api_key
+                    async for decoded_chunk in self.api_client.stream_generate_content(payload, model, api_key):
+                        # Process with the original stream optimizer for better perceived performance
+                        if decoded_chunk.startswith("data:"):
+                            try:
+                                line_data = decoded_chunk[6:]
+                                response_data = self.response_handler.handle_response(
+                                    json.loads(line_data), model, stream=True
+                                )
+                                text = self._extract_text_from_response(response_data)
+                                
+                                if text and settings.STREAM_OPTIMIZER_ENABLED:
+                                    async for optimized_chunk in gemini_optimizer.optimize_stream_output(
+                                        text,
+                                        lambda t: self._create_char_response(response_data, t),
+                                        lambda c: "data: " + json.dumps(c) + "\n\n",
+                                    ):
+                                        yield optimized_chunk
+                                else:
+                                    yield "data: " + json.dumps(response_data) + "\n\n"
+                            except json.JSONDecodeError:
+                                yield decoded_chunk # Yield original chunk if not valid JSON
+                        else:
+                            yield decoded_chunk
+                    
+                    is_success = True
+                    status_code = 200
+                    return
+
+                except Exception as e:
+                    retries += 1
+                    error_msg = str(e)
+                    is_known_http_error = "API call failed with status code" in error_msg
+                    
+                    if is_known_http_error:
+                        logger.error(f"Stream attempt {retries} failed: {simplify_api_error_message(error_msg)}")
+                        match = re.search(r"status code (\d+)", error_msg)
+                        if match:
+                            status_code = int(match.group(1))
+                    else:
+                        logger.error(f"Stream attempt {retries} failed.", exc_info=True)
+                        status_code = 500
+                    
+                    await self.key_manager.error_processor.process_error(api_key, e)
+                    await self.key_manager.remove_key(api_key)
+                    new_key = await self.key_manager.get_next_working_key(model)
+
+                    if not new_key or new_key == api_key:
+                        logger.error("No new valid keys available. Aborting after multiple retries.")
+                        raise e
+                    
+                    api_key = new_key
+                    logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
+
+            logger.error(f"Max retries ({max_retries}) reached. Failing.")
+            is_success = False
+            status_code = 503 # Service Unavailable
+            error_payload = {
+                "error": {
+                    "code": 503,
+                    "message": f"Max retries reached for model {model}. The service may be unstable.",
+                    "status": "SERVICE_UNAVAILABLE"
+                }
             }
-        }
-        yield f"data: {json.dumps(error_payload)}\n\n"
+            yield f"data: {json.dumps(error_payload)}\n\n"
+
+        except Exception as e:
+            is_success = False
+            error_log_msg = str(e)
+            match = re.search(r"status code (\d+)", error_log_msg)
+            if match:
+                status_code = int(match.group(1))
+            else:
+                status_code = 500
+            # To prevent unhandled exceptions from crashing the stream, we yield a generic error
+            # The actual exception will be logged in the finally block
+            error_payload = {
+                "error": {
+                    "code": status_code,
+                    "message": "An unexpected error occurred during the stream.",
+                    "status": "INTERNAL_SERVER_ERROR"
+                }
+            }
+            yield f"data: {json.dumps(error_payload)}\n\n"
+            # Re-raise to ensure it's logged if not already
+            raise e
+        finally:
+            end_time = time.perf_counter()
+            latency_ms = int((end_time - start_time) * 1000)
+            asyncio.create_task(add_request_log(
+                model_name=f"{model}-stream",
+                api_key=final_api_key,
+                is_success=is_success,
+                status_code=status_code,
+                latency_ms=latency_ms,
+                request_time=request_datetime
+            ))
