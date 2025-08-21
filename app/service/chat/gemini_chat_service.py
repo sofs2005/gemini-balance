@@ -370,7 +370,15 @@ class GeminiChatService:
                     else:
                         logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
-                    await self.key_manager.error_processor.process_error(api_key, e, model)
+                    match = re.search(r"status code (\d+)", error_msg)
+                    status_code = int(match.group(1)) if match else 500
+                    await self.key_manager.error_processor.process_error(
+                        key=api_key,
+                        exception=e,
+                        model_name=model,
+                        request_msg=payload,
+                        status_code_override=status_code
+                    )
                     # 立即从所有池中移除失败的key，避免在同一轮重试中再次选中
                     await self.key_manager.remove_key(api_key)
                     new_key = await self.key_manager.get_next_working_key(model)
@@ -441,7 +449,15 @@ class GeminiChatService:
                     error_msg = str(e)
                     logger.error(f"Count tokens attempt {retries} failed: {simplify_api_error_message(error_msg)}")
                     
-                    await self.key_manager.error_processor.process_error(api_key, e, model)
+                    match = re.search(r"status code (\d+)", error_msg)
+                    status_code = int(match.group(1)) if match else 500
+                    await self.key_manager.error_processor.process_error(
+                        key=api_key,
+                        exception=e,
+                        model_name=model,
+                        request_msg=payload,
+                        status_code_override=status_code
+                    )
                     new_key = await self.key_manager.get_next_working_key(model)
 
                     if not new_key or new_key == api_key:
@@ -547,7 +563,13 @@ class GeminiChatService:
                         logger.error(f"Stream attempt {retries} failed.", exc_info=True)
                         status_code = 500
                     
-                    await self.key_manager.error_processor.process_error(api_key, e, model)
+                    await self.key_manager.error_processor.process_error(
+                        key=api_key,
+                        exception=e,
+                        model_name=model,
+                        request_msg=payload,
+                        status_code_override=status_code
+                    )
                     await self.key_manager.remove_key(api_key)
                     new_key = await self.key_manager.get_next_working_key(model)
 
