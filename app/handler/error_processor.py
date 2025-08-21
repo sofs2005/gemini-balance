@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any, Dict, Optional
 from fastapi import HTTPException
 from app.service.key.key_manager import KeyManager
 from app.service.model.model_service import ModelService
@@ -54,18 +55,16 @@ class ErrorProcessor:
             request_msg=request_msg
         ))
 
-        # 3. Handle the key state based on the original logic
-        if isinstance(exception, HTTPException):
-            # Re-fetch status_code to be safe
-            current_status_code = exception.status_code
-            if current_status_code == 429:
+        # 3. Handle the key state based on the determined status_code
+        if status_code:
+            if status_code == 429:
                 await self.handle_rate_limit_error(key, model_name)
-            elif current_status_code in [401, 403]:
+            elif status_code in [401, 403]:
                 await self.handle_authentication_error(key)
-            elif current_status_code >= 500:
+            elif status_code >= 500:
                 await self.handle_server_error(key)
         else:
-            # For non-HTTP exceptions, treat as a server-side/unknown issue
+            # For exceptions without a status code, treat as a server-side/unknown issue
             await self.handle_server_error(key)
 
     async def handle_rate_limit_error(self, key: str, model_name: str):
