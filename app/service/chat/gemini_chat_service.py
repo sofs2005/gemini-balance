@@ -370,7 +370,7 @@ class GeminiChatService:
                     else:
                         logger.error(f"Content generation attempt {retries} failed.", exc_info=True)
                     
-                    await self.key_manager.error_processor.process_error(api_key, e)
+                    await self.key_manager.error_processor.process_error(api_key, e, model)
                     # 立即从所有池中移除失败的key，避免在同一轮重试中再次选中
                     await self.key_manager.remove_key(api_key)
                     new_key = await self.key_manager.get_next_working_key(model)
@@ -440,7 +440,7 @@ class GeminiChatService:
                     error_msg = str(e)
                     logger.error(f"Count tokens attempt {retries} failed: {simplify_api_error_message(error_msg)}")
                     
-                    await self.key_manager.error_processor.process_error(api_key, e)
+                    await self.key_manager.error_processor.process_error(api_key, e, model)
                     new_key = await self.key_manager.get_next_working_key(model)
 
                     if not new_key or new_key == api_key:
@@ -546,7 +546,7 @@ class GeminiChatService:
                         logger.error(f"Stream attempt {retries} failed.", exc_info=True)
                         status_code = 500
                     
-                    await self.key_manager.error_processor.process_error(api_key, e)
+                    await self.key_manager.error_processor.process_error(api_key, e, model)
                     await self.key_manager.remove_key(api_key)
                     new_key = await self.key_manager.get_next_working_key(model)
 
@@ -557,17 +557,9 @@ class GeminiChatService:
                     api_key = new_key
                     logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
 
-            logger.error(f"Max retries ({max_retries}) reached. Failing.")
-            is_success = False
-            status_code = 503 # Service Unavailable
-            error_payload = {
-                "error": {
-                    "code": 503,
-                    "message": f"Max retries reached for model {model}. The service may be unstable.",
-                    "status": "SERVICE_UNAVAILABLE"
-                }
-            }
-            yield f"data: {json.dumps(error_payload)}\n\n"
+            # When max retries are reached, raise an exception to be caught by the outer try-except block
+            # This ensures that is_success is correctly set to False for logging.
+            raise MaxRetriesExceededError(f"Max retries reached for model {model}. The service may be unstable.")
 
         except Exception as e:
             is_success = False

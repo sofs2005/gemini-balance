@@ -239,8 +239,9 @@ class ValidKeyPool:
         min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
         current_size = len(self.valid_keys)
 
-        if current_size < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
-            logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
+        # 只要低于阈值，就触发紧急补充
+        if current_size < min_threshold:
+            logger.warning(f"Pool size {current_size} is below threshold {min_threshold}, triggering emergency refill.")
             asyncio.create_task(self.emergency_refill_async())
         elif current_size < self.pool_size:  # 未达到最大容量时继续补充
             # 降低触发频率，避免过度验证
@@ -257,11 +258,7 @@ class ValidKeyPool:
                 return
             
             # 循序式补充策略：每次只补充1个密钥
-            if current_size < min_threshold:
-                # 低于阈值时，降低补充概率到60%
-                refill_chance = 0.6
-                logger.info(f"Pool size {current_size} below threshold {min_threshold}, triggering sequential refill (60% chance)")
-            elif current_size < self.pool_size * 0.8:  # 低于80%容量时
+            if current_size < self.pool_size * 0.8:  # 低于80%容量时
                 # 根据池大小动态调整补充概率
                 if current_size < min_threshold * 1.5:  # 低于30个时
                     refill_chance = 0.4  # 40%概率补充
@@ -568,7 +565,7 @@ class ValidKeyPool:
             else:
                 # 验证失败，处理异常
                 logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(verification_result)}")
-                await self.error_processor.process_error(key, verification_result)
+                await self.error_processor.process_error(key, verification_result, settings.TEST_MODEL)
                 return False
         except asyncio.CancelledError:
             # 任务被取消，不记录为验证失败
