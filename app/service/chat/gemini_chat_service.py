@@ -569,18 +569,19 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
-            # To prevent unhandled exceptions from crashing the stream, we yield a generic error
-            # The actual exception will be logged in the finally block
+            # Log the final error and yield a message to the client without re-raising.
+            # This prevents the "response already started" crash.
+            final_error_message = f"Stream failed after multiple retries. Last error: {error_log_msg}"
+            logger.error(final_error_message)
+            
             error_payload = {
                 "error": {
                     "code": status_code,
-                    "message": "An unexpected error occurred during the stream.",
+                    "message": simplify_api_error_message(str(e)),
                     "status": "INTERNAL_SERVER_ERROR"
                 }
             }
             yield f"data: {json.dumps(error_payload)}\n\n"
-            # Re-raise to ensure it's logged if not already
-            raise e
         finally:
             end_time = time.perf_counter()
             latency_ms = int((end_time - start_time) * 1000)
