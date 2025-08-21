@@ -977,3 +977,26 @@ class ValidKeyPool:
             "total_get_key_calls": 0,
             "avg_verification_time": 0.0
         }
+
+    def remove_key(self, key_to_remove: str) -> bool:
+        """
+        Removes a key from the pool and then triggers the probabilistic replenishment logic.
+        This is the single, unified entry point for removing a key from the pool.
+        """
+        initial_size = len(self.valid_keys)
+        
+        # Create a new deque without the key to remove
+        new_keys = deque(
+            key_obj for key_obj in self.valid_keys if key_obj.key != key_to_remove
+        )
+        
+        if len(new_keys) < initial_size:
+            self.valid_keys = new_keys
+            self._pool_keys_set.discard(key_to_remove)
+            logger.info(f"Key {redact_key_for_logging(key_to_remove)} removed from pool. Current size: {len(self.valid_keys)}")
+            
+            # Now, trigger the internal replenishment logic
+            self._trigger_refill_on_key_removal()
+            return True
+            
+        return False

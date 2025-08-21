@@ -520,24 +520,9 @@ class KeyManager:
         """
         优化池中密钥移除逻辑，确保线程安全和一致性
         """
-        if self.valid_key_pool and self.valid_key_pool.valid_keys:
-            async with self.failure_count_lock:
-                initial_pool_size = len(self.valid_key_pool.valid_keys)
-                
-                # 使用线程安全的方式移除密钥
-                filtered_keys = deque(
-                    key_obj for key_obj in self.valid_key_pool.valid_keys if key_obj.key != key_to_remove
-                )
-                
-                if len(filtered_keys) < initial_pool_size:
-                    self.valid_key_pool.valid_keys = filtered_keys
-                    
-                    # 同时从集合中移除
-                    if hasattr(self.valid_key_pool, '_pool_keys_set') and key_to_remove in self.valid_key_pool._pool_keys_set:
-                        self.valid_key_pool._pool_keys_set.remove(key_to_remove)
-                    
-                    logger.info(f"Key '{redact_key_for_logging(key_to_remove)}' removed from pool due to error.")
-                    return True
+        if self.valid_key_pool:
+            # Delegate removal to the pool itself to trigger its internal logic
+            return self.valid_key_pool.remove_key(key_to_remove)
         return False
 
 
