@@ -47,6 +47,7 @@ class ValidKeyPool:
         self.error_processor = error_processor
         self.valid_keys: deque[ValidKeyWithTTL] = deque(maxlen=pool_size)
         self._pool_keys_set: set[str] = set()
+        self._verifying_keys: set[str] = set()
         concurrent_verifications = getattr(settings, 'CONCURRENT_VERIFICATIONS', 1)
         self.verification_semaphore = asyncio.Semaphore(concurrent_verifications)
         logger.info(f"Verification semaphore initialized with {concurrent_verifications} concurrent tasks.")
@@ -328,21 +329,14 @@ class ValidKeyPool:
 
             # 选择密钥策略：优先选择未在池中的密钥
             pool_keys = self._pool_keys_set
-            unused_keys = [key for key in available_keys if key not in pool_keys]
+            unused_keys = [key for key in available_keys if key not in pool_keys and key not in self._verifying_keys]
 
-            if unused_keys:
-                # 从未使用的密钥中随机选择
-                selected_key = random.choice(unused_keys)
-                logger.info(f"Selected unused key {redact_key_for_logging(selected_key)} from {len(unused_keys)} unused keys")
-            else:
-                # 如果所有密钥都在池中，随机选择一个
-                selected_key = random.choice(available_keys)
-                logger.info(f"All keys in use, selected key {redact_key_for_logging(selected_key)} from {len(available_keys)} available keys")
-
-            # 检查密钥是否已在池中
-            if self._is_key_in_pool(selected_key):
-                logger.info(f"Key {redact_key_for_logging(selected_key)} already in pool, skipping")
+            if not unused_keys:
+                logger.info("No available keys to verify (all are either in pool or currently being verified).")
                 return
+
+            selected_key = random.choice(unused_keys)
+            logger.info(f"Selected key {redact_key_for_logging(selected_key)} for verification from {len(unused_keys)} available keys.")
 
             # 验证密钥
             verification_start = time.time()
@@ -552,9 +546,15 @@ class ValidKeyPool:
         """
         self.stats["total_verifications"] += 1
         
+        if key in self._verifying_keys:
+            logger.warning(f"Key {redact_key_for_logging(key)} is already being verified. Skipping duplicate verification.")
+            return False
+            
+        self._verifying_keys.add(key)
         try:
             if not self.chat_service:
                 logger.warning("Chat service not available for key verification")
+                self._verifying_keys.discard(key)
                 return False
             
             # 构造测试请求
@@ -585,6 +585,8 @@ class ValidKeyPool:
             logger.debug(f"Key verification failed for {redact_key_for_logging(key)}: {str(e)}")
             await self.error_processor.process_error(key, e)
             return False
+        finally:
+            self._verifying_keys.discard(key)
     
     async def _verify_key_for_emergency(self, key: str) -> Optional[str]:
         """
