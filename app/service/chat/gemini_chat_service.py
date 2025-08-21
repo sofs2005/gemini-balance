@@ -383,6 +383,7 @@ class GeminiChatService:
                     logger.info(f"Switched to new API key for retry: ...{api_key[-4:]}")
 
             logger.error(f"Max retries ({max_retries}) reached. Failing.")
+            await self.key_manager.record_pool_miss()
             raise MaxRetriesExceededError(f"Max retries reached for model {model}. The service may be unstable.")
 
         except Exception as e:
@@ -559,6 +560,7 @@ class GeminiChatService:
 
             # When max retries are reached, raise an exception to be caught by the outer try-except block
             # This ensures that is_success is correctly set to False for logging.
+            await self.key_manager.record_pool_miss()
             raise MaxRetriesExceededError(f"Max retries reached for model {model}. The service may be unstable.")
 
         except Exception as e:

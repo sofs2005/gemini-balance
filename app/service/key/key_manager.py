@@ -525,6 +525,12 @@ class KeyManager:
             return self.valid_key_pool.remove_key(key_to_remove)
         return False
 
+    async def record_pool_miss(self):
+        """
+        记录一次密钥池未命中
+        """
+        if self.valid_key_pool:
+            self.valid_key_pool.record_miss()
 
     async def validate_gemini_key(self, key: str) -> bool:
         """

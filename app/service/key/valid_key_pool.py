@@ -69,7 +69,8 @@ class ValidKeyPool:
             "verification_failures": 0,
             "usage_exhausted_keys_removed": 0,  # 新增：因使用次数耗尽而移除的密钥数
             "pro_model_requests": 0,  # 新增：Pro模型请求数
-            "non_pro_model_requests": 0  # 新增：非Pro模型请求数
+            "non_pro_model_requests": 0,  # 新增：非Pro模型请求数
+            "keys_checked_for_expiration": 0  # 新增：检查过期的密钥总数
         }
 
         # 性能监控
@@ -364,6 +365,8 @@ class ValidKeyPool:
         """
         紧急恢复模式：立即返回一个候选密钥，并在后台异步验证和补充池。
         """
+        # self.stats["miss_count"] += 1 # Counting is now handled by the caller when a request ultimately fails
+        # self.performance_stats["last_miss_time"] = datetime.now()
         logger.warning("Starting non-blocking emergency refill process")
 
         # 尝试立即获取一个候选密钥返回，避免阻塞请求
@@ -584,19 +587,24 @@ class ValidKeyPool:
         Returns:
             Optional[str]: 验证成功返回密钥，失败返回None
         """
+        self.stats["total_verifications"] += 1
         try:
             if not self.chat_service:
                 logger.warning("Chat service not available for emergency key verification")
                 return None
 
             # 使用新的、无副作用的验证方法
-            is_valid = await self.chat_service._verify_key_with_api(key)
-            if is_valid:
-                # 验证成功，重置失败计数
+            # _verify_key_with_api 成功时返回 None，失败时返回 APIError
+            error = await self.chat_service._verify_key_with_api(key)
+            if error is None:
+                # 验证成功
+                self.stats["successful_verifications"] += 1
                 await self.key_manager.reset_key_failure_count(key)
                 logger.debug(f"Emergency key verification successful for {redact_key_for_logging(key)}")
                 return key
             else:
+                # 验证失败
+                self.stats["verification_failures"] += 1
                 # 验证失败，返回None
                 return None
         except asyncio.CancelledError:
@@ -616,6 +624,7 @@ class ValidKeyPool:
         # 遍历当前池，分离出未过期的和已过期的
         while self.valid_keys:
             key_obj = self.valid_keys.popleft()
+            self.stats["keys_checked_for_expiration"] += 1
             # The key is always removed from the set here.
             # If it's not expired, it will be added back to both deque and set.
             self._pool_keys_set.discard(key_obj.key)
@@ -815,8 +824,9 @@ class ValidKeyPool:
 
         # 计算TTL过期率
         ttl_expiry_rate = 0.0
-        if self.stats["expired_keys_removed"] > 0 and total_requests > 0:
-            ttl_expiry_rate = self.stats["expired_keys_removed"] / (self.stats["expired_keys_removed"] + self.stats["hit_count"])
+        total_checked = self.stats.get("keys_checked_for_expiration", 0)
+        if total_checked > 0:
+            ttl_expiry_rate = self.stats["expired_keys_removed"] / total_checked
 
         return {
             # 基本池信息
@@ -997,3 +1007,13 @@ class ValidKeyPool:
             return True
             
         return False
+
+    def record_miss(self):
+        """
+        Records a pool miss event. This should be called when the entire request
+        (including all retries) fails to find a working key.
+        """
+        self.stats["miss_count"] += 1
+        self.performance_stats["last_miss_time"] = datetime.now()
+        logger.warning("Pool miss recorded. A request failed after all retries.")
+
