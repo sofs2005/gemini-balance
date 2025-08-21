@@ -974,7 +974,8 @@ class ValidKeyPool:
             "verification_failures": 0,
             "usage_exhausted_keys_removed": 0,  # 因使用次数耗尽而移除的密钥数
             "pro_model_requests": 0,  # Pro模型请求数
-            "non_pro_model_requests": 0  # 非Pro模型请求数
+            "non_pro_model_requests": 0,  # 非Pro模型请求数
+            "keys_checked_for_expiration": 0
         }
 
         self.performance_stats = {
