@@ -14,10 +14,19 @@ class ErrorProcessor:
         # Log the error to the database first
         error_message = str(exception)
         simplified_message = simplify_api_error_message(error_message)
+        
+        # Extract status code and error type
+        status_code = None
+        error_type = type(exception).__name__
+        if isinstance(exception, HTTPException):
+            status_code = exception.status_code
+
         asyncio.create_task(add_error_log(
             gemini_key=key,
             model_name=model_name,
-            error_log=simplified_message
+            error_log=simplified_message,
+            error_type=error_type,
+            error_code=status_code
         ))
 
         if isinstance(exception, HTTPException):
