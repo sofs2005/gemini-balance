@@ -311,12 +311,10 @@ class GeminiChatService:
         Returns None on success, or the exception on failure.
         """
         try:
-            # For verification, we must use the simplest possible payload to avoid
-            # conflicts with API rules (e.g., adding tools or thinkingConfig to a
-            # simple prompt). We bypass the complex _build_payload function entirely.
-            payload = {
-                "contents": [{"role": "user", "parts": [{"text": "hi"}]}]
-            }
+            payload = _build_payload(
+                settings.TEST_MODEL,
+                GeminiRequest(contents=[GeminiContent(role="user", parts=[{"text": "hi"}])])
+            )
             await self.api_client.generate_content(payload, settings.TEST_MODEL, key_to_verify)
             return None  # Success
         except Exception as e:
