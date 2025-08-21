@@ -315,6 +315,12 @@ class GeminiChatService:
                 settings.TEST_MODEL,
                 GeminiRequest(contents=[GeminiContent(role="user", parts=[{"text": "hi"}])])
             )
+            # For verification, we don't need any tools.
+            # The _build_payload function might add tools like codeExecution by default,
+            # which can cause validation to fail if the test model doesn't support it
+            # or if the simple "hi" prompt is incompatible.
+            payload.pop("tools", None)
+            
             await self.api_client.generate_content(payload, settings.TEST_MODEL, key_to_verify)
             return None  # Success
         except Exception as e:
