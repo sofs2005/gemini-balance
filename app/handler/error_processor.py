@@ -15,9 +15,9 @@ class ErrorProcessor:
         error_message = str(exception)
         simplified_message = simplify_api_error_message(error_message)
         asyncio.create_task(add_error_log(
-            api_key=key,
+            gemini_key=key,
             model_name=model_name,
-            error_message=simplified_message
+            error_log=simplified_message
         ))
 
         if isinstance(exception, HTTPException):

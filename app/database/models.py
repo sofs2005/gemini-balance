@@ -3,6 +3,7 @@
 """
 import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, Boolean, BigInteger, Enum
+from sqlalchemy.dialects.mysql import LONGTEXT
 import enum
 
 from app.database.connection import Base
@@ -16,7 +17,7 @@ class Settings(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True)
     key = Column(String(100), nullable=False, unique=True, comment="配置项键名")
-    value = Column(Text, nullable=True, comment="配置项值")
+    value = Column(LONGTEXT, nullable=True, comment="配置项值")
     description = Column(String(255), nullable=True, comment="配置项描述")
     created_at = Column(DateTime, default=datetime.datetime.now, comment="创建时间")
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now, comment="更新时间")
