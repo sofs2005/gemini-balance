@@ -7,7 +7,7 @@ import time
 from typing import Any, AsyncGenerator, Dict, List
 from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
-from app.domain.gemini_models import GeminiRequest
+from app.domain.gemini_models import GeminiRequest, GeminiContent
 from app.handler.response_handler import GeminiResponseHandler
 from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
