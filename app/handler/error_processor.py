@@ -11,16 +11,33 @@ class ErrorProcessor:
         self.model_service = model_service
 
     async def process_error(self, key: str, exception: Exception, model_name: str = "unknown"):
-        # Log the error to the database first
+        # Import APIError here to avoid circular dependency at module level
+        from app.exception.exceptions import APIError
+
+        # 1. Determine error type and status code with more precision
+        status_code = getattr(exception, 'status_code', None)
+        error_type = "UNKNOWN_ERROR"
+
+        if isinstance(exception, APIError):
+            # Use the specific error_code from our custom exceptions
+            error_type = exception.error_code.upper()
+        elif status_code:
+            # Fallback for generic HTTPException
+            if status_code == 429:
+                error_type = "RATE_LIMIT"
+            elif status_code in [401, 403]:
+                error_type = "AUTH_ERROR"
+            elif status_code >= 500:
+                error_type = "SERVER_ERROR"
+            else:
+                error_type = f"HTTP_{status_code}"
+        else:
+            # For all other exceptions
+            error_type = type(exception).__name__.upper()
+
+        # 2. Log the error to the database
         error_message = str(exception)
         simplified_message = simplify_api_error_message(error_message)
-        
-        # Extract status code and error type
-        status_code = None
-        error_type = type(exception).__name__
-        if isinstance(exception, HTTPException):
-            status_code = exception.status_code
-
         asyncio.create_task(add_error_log(
             gemini_key=key,
             model_name=model_name,
@@ -29,15 +46,18 @@ class ErrorProcessor:
             error_code=status_code
         ))
 
+        # 3. Handle the key state based on the original logic
         if isinstance(exception, HTTPException):
-            status_code = exception.status_code
-            if status_code == 429:
+            # Re-fetch status_code to be safe
+            current_status_code = exception.status_code
+            if current_status_code == 429:
                 await self.handle_rate_limit_error(key, model_name)
-            elif status_code in [401, 403]:
+            elif current_status_code in [401, 403]:
                 await self.handle_authentication_error(key)
-            elif status_code >= 500:
+            elif current_status_code >= 500:
                 await self.handle_server_error(key)
         else:
+            # For non-HTTP exceptions, treat as a server-side/unknown issue
             await self.handle_server_error(key)
 
     async def handle_rate_limit_error(self, key: str, model_name: str):
