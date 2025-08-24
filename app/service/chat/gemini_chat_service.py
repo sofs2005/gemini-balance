@@ -349,14 +349,7 @@ class GeminiChatService:
             else:
                 status_code = 500
             
-            # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=final_api_key,
-                error=e,
-                model_name=model,
-                error_type="gemini-chat-non-stream",
-                request_msg=payload
-            ))
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             
             raise e
         finally:
@@ -406,14 +399,7 @@ class GeminiChatService:
             else:
                 status_code = 500
             
-            # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=api_key,
-                error=e,
-                model_name=f"{model}-count-tokens",
-                error_type="gemini-count-tokens",
-                request_msg=payload
-            ))
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             
             raise e
         finally:

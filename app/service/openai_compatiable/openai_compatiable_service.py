@@ -87,14 +87,7 @@ class OpenAICompatiableService:
             else:
                 status_code = 500
 
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=model,
-                error_type="openai-compatiable-non-stream",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=request,
-            )
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             raise e
         finally:
             end_time = time.perf_counter()
@@ -147,14 +140,7 @@ class OpenAICompatiableService:
                 else:
                     status_code = 500
 
-                await add_error_log(
-                    gemini_key=current_attempt_key,
-                    model_name=model,
-                    error_type="openai-compatiable-stream",
-                    error_log=error_log_msg,
-                    error_code=status_code,
-                    request_msg=payload,
-                )
+                # 错误日志将由 handle_api_error_and_get_next_key 统一处理
 
                 if self.key_manager:
                     api_key = await handle_api_error_and_get_next_key(
