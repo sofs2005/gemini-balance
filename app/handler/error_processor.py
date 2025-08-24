@@ -101,51 +101,44 @@ async def handle_api_error_and_get_next_key(
     except Exception as log_error:
         logger.error(f"Failed to record error log for key {old_key[:8]}...: {str(log_error)}", exc_info=True)
 
-    new_key = None
     logger.info(f"Processing error for key {old_key[:8]}...: error_type={error_type}, should_switch={'yes' if (is_429_error or is_fatal_error or is_retryable_error) else 'no'}")
 
+    # --- Step 1: Handle the key that caused the error ---
     if is_429_error:
         if model_name:
-            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown and removing from active pool.")
+            logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown.")
             await key_manager.mark_key_model_as_cooling(old_key, model_name)
             if source != "key_validation":
-                await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
+                logger.info("Temporarily removing from active pool as it was an in-use key.")
+                await key_manager.remove_key_from_pool(old_key)
         else:
-            # This case is less likely with model-specific logic, but as a fallback:
             logger.info(f"Detected 429 error with key '{old_key}'. Marking key as failed due to rate limit.")
-            await key_manager.mark_key_as_failed(old_key) # This will remove it from the valid_api_keys list
-        
-        logger.info(f"Getting next working key for 429 error...")
-        new_key = await key_manager.get_next_working_key(model_name=model_name)
-        logger.info(f"429 error: got new_key={redact_key_for_logging(new_key)}")
+            await key_manager.mark_key_as_failed(old_key)
 
     elif is_fatal_error:
-        error_category = "auth" if is_auth_error else ("client" if is_client_error else "server")
-        logger.warning(f"Detected fatal {error_category} error ({error_str.split(',')[0]}) for key '{old_key}'. Marking key as failed immediately.")
+        error_category = "auth" if is_auth_error else "client"
+        logger.warning(f"Detected fatal {error_category} error for key '{old_key}'. Marking key as failed immediately.")
         await key_manager.mark_key_as_failed(old_key)
-        new_key = await key_manager.get_next_working_key(model_name=model_name)
-    elif is_retryable_error:
-        if is_service_unavailable:
-            logger.warning(f"Detected 503 Service Unavailable for key '{old_key}'. Temporarily removing from pool and switching key.")
-            await key_manager.remove_key_from_pool(old_key)
-        elif is_timeout_error:
-            logger.warning(f"Detected 408 Request Timeout for key '{old_key}'. Temporarily removing from pool and switching key.")
-            await key_manager.remove_key_from_pool(old_key)
-        else: # General server errors
-             logger.warning(f"Detected retryable server error for key '{old_key}'. Temporarily removing from pool and switching key.")
-             if source != "key_validation":
-                await key_manager.remove_key_from_pool(old_key)
-        new_key = await key_manager.get_next_working_key(model_name=model_name)
-    else:
-        # For other errors, use the original failure counting logic
-        new_key = await key_manager.handle_api_failure(
-            old_key, retries, model_name=model_name
-        )
 
-    # 如果错误源是密钥验证，不应该消耗一个新的密钥
+    elif is_retryable_error:
+        logger.warning(f"Detected retryable server error for key '{old_key}'.")
+        if source != "key_validation":
+            logger.info("Temporarily removing from active pool as it was an in-use key.")
+            await key_manager.remove_key_from_pool(old_key)
+
+    else:
+        # For other non-specific errors, use the original failure counting logic
+        await key_manager.handle_api_failure(old_key, retries, model_name=model_name)
+
+    # --- Step 2: Decide whether to provide a new key ---
     if source == "key_validation":
-        logger.debug(f"Error handled for key validation source. No new key will be provided.")
+        logger.debug("Error handled for key validation source. No new key will be provided.")
         return ""
+
+    # --- Step 3: If not a validation call, get the next available key ---
+    logger.info(f"Getting next working key after '{error_type}' error...")
+    new_key = await key_manager.get_next_working_key(model_name=model_name)
+    logger.info(f"Switched to new key: {redact_key_for_logging(new_key)}")
 
     return new_key
 
