@@ -474,6 +474,18 @@ class ValidKeyPool:
         removed_count = 0
         for key_obj in keys_to_validate:
             try:
+                # 检查密钥是否已过宽限期
+                grace_period_minutes = 5
+                if datetime.now() - key_obj.created_at < timedelta(minutes=grace_period_minutes):
+                    logger.debug(f"Key {redact_key_for_logging(key_obj.key)} is within the grace period, skipping validation.")
+                    continue
+
+                # 检查密钥是否已过宽限期
+                grace_period_minutes = settings.KEY_VALIDATION_GRACE_PERIOD_MINUTES
+                if datetime.now() - key_obj.created_at < timedelta(minutes=grace_period_minutes):
+                    logger.debug(f"Key {redact_key_for_logging(key_obj.key)} is within the grace period, skipping validation.")
+                    continue
+
                 # 检查密钥是否过期
                 if key_obj.is_expired():
                     # This is slow, but keys_to_validate is small.
@@ -750,7 +762,7 @@ class ValidKeyPool:
             logger.info(f"Pool size ({current_size}) at capacity ({self.pool_size}), no refill needed")
 
         # 定期验证池内密钥，清理失效的密钥
-        await self._validate_pool_keys()
+        # await self._validate_pool_keys() # 此功能在高并发时可能导致问题，暂时禁用
                     # 继续尝试下一个密钥
 
         maintenance_time = time.time() - maintenance_start

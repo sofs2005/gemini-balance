@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     POOL_MIN_THRESHOLD: int = 10  # 池大小最小阈值，低于此值时主动补充
     EMERGENCY_REFILL_COUNT: int = 5  # 紧急补充时并发验证的密钥数量
     POOL_MAINTENANCE_INTERVAL_MINUTES: int = 30  # 密钥池维护间隔（分钟）
+    KEY_VALIDATION_GRACE_PERIOD_MINUTES: int = 10 # 密钥验证宽限期（分钟）
 
     # 密钥池使用策略配置
     PRO_MODELS: List[str] = [
