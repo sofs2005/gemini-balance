@@ -1216,27 +1216,9 @@ function initializeKeySelectionListeners() {
       const listItem = event.target.closest("li[data-key]");
       if (!listItem) return;
 
-      // Do not toggle if a button, a link, or any element explicitly designed for interaction within the li was clicked
-      if (
-        event.target.closest(
-          "button, a, input[type='button'], input[type='submit']"
-        )
-      ) {
-        let currentTarget = event.target;
-        let isInteractiveElementClick = false;
-        while (currentTarget && currentTarget !== listItem) {
-          if (
-            currentTarget.tagName === "BUTTON" ||
-            currentTarget.tagName === "A" ||
-            (currentTarget.tagName === "INPUT" &&
-              ["button", "submit"].includes(currentTarget.type))
-          ) {
-            isInteractiveElementClick = true;
-            break;
-          }
-          currentTarget = currentTarget.parentElement;
-        }
-        if (isInteractiveElementClick) return;
+      // If the click was directly on the checkbox, or on a button/link, let the native behavior handle it.
+      if (event.target.closest("button, a, input[type='button'], input[type='submit'], .key-checkbox")) {
+          return;
       }
 
       const checkbox = listItem.querySelector(".key-checkbox");
