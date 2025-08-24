@@ -918,6 +918,14 @@ class ValidKeyPool:
                     break
 
         logger.info(f"Pool preload completed. Loaded {len(self.valid_keys)} keys")
+
+        # 检查预加载后池大小是否低于最小阈值
+        min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
+        if len(self.valid_keys) < min_threshold:
+            logger.warning(f"Pool size after preload ({len(self.valid_keys)}) is below the minimum threshold ({min_threshold}). "
+                           f"Triggering an emergency async refill.")
+            asyncio.create_task(self.emergency_refill_async())
+
         return len(self.valid_keys)
 
     def log_performance_summary(self) -> None:
