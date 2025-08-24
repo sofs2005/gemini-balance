@@ -550,7 +550,8 @@ class ValidKeyPool:
                 error=e,
                 old_key=key,
                 model_name=settings.TEST_MODEL,
-                retries=self.key_manager.MAX_FAILURES
+                retries=self.key_manager.MAX_FAILURES,
+                source="key_validation",
             )
             return False
     
@@ -601,7 +602,8 @@ class ValidKeyPool:
                 error=e,
                 old_key=key,
                 model_name=settings.TEST_MODEL,
-                retries=self.key_manager.MAX_FAILURES  # 传递高重试次数以确保必要时标记为失败
+                retries=self.key_manager.MAX_FAILURES,  # 传递高重试次数以确保必要时标记为失败
+                source="key_validation",
             )
             return None
 

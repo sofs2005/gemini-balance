@@ -9,10 +9,16 @@ logger = get_gemini_logger()
 
 
 async def handle_api_error_and_get_next_key(
-    key_manager: KeyManager, error: Exception, old_key: str, model_name: str = None, retries: int = 1
+    key_manager: KeyManager,
+    error: Exception,
+    old_key: str,
+    model_name: str = None,
+    retries: int = 1,
+    source: str = "unknown",
 ) -> str:
     """
     统一处理API错误，根据错误类型执行相应操作，并返回一个新的可用密钥。
+    如果错误源是'key_validation'，则不返回新密钥。
     """
     error_str = str(error)
 
@@ -102,7 +108,8 @@ async def handle_api_error_and_get_next_key(
         if model_name:
             logger.info(f"Detected 429 error for model '{model_name}' with key '{old_key}'. Marking key for model-specific cooldown and removing from active pool.")
             await key_manager.mark_key_model_as_cooling(old_key, model_name)
-            await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
+            if source != "key_validation":
+                await key_manager.remove_key_from_pool(old_key) # Temporarily remove from pool
         else:
             # This case is less likely with model-specific logic, but as a fallback:
             logger.info(f"Detected 429 error with key '{old_key}'. Marking key as failed due to rate limit.")
@@ -126,13 +133,19 @@ async def handle_api_error_and_get_next_key(
             await key_manager.remove_key_from_pool(old_key)
         else: # General server errors
              logger.warning(f"Detected retryable server error for key '{old_key}'. Temporarily removing from pool and switching key.")
-             await key_manager.remove_key_from_pool(old_key)
+             if source != "key_validation":
+                await key_manager.remove_key_from_pool(old_key)
         new_key = await key_manager.get_next_working_key(model_name=model_name)
     else:
         # For other errors, use the original failure counting logic
         new_key = await key_manager.handle_api_failure(
             old_key, retries, model_name=model_name
         )
+
+    # 如果错误源是密钥验证，不应该消耗一个新的密钥
+    if source == "key_validation":
+        logger.debug(f"Error handled for key validation source. No new key will be provided.")
+        return ""
 
     return new_key
 
