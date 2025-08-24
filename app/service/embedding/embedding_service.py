@@ -1,6 +1,6 @@
 import datetime
-import time
 import re
+import time
 from typing import List, Union
 
 import openai
@@ -8,8 +8,8 @@ from openai import APIStatusError
 from openai.types import CreateEmbeddingResponse
 
 from app.config.config import settings
-from app.log.logger import get_embeddings_logger
 from app.database.services import add_error_log, add_request_log
+from app.log.logger import get_embeddings_logger
 
 logger = get_embeddings_logger()
 
@@ -27,11 +27,20 @@ class EmbeddingService:
         response = None
         error_log_msg = ""
         if isinstance(input_text, list):
-            request_msg_log = {"input_truncated": [str(item)[:100] + "..." if len(str(item)) > 100 else str(item) for item in input_text[:5]]}
+            request_msg_log = {
+                "input_truncated": [
+                    str(item)[:100] + "..." if len(str(item)) > 100 else str(item)
+                    for item in input_text[:5]
+                ]
+            }
             if len(input_text) > 5:
-                 request_msg_log["input_truncated"].append("...")
+                request_msg_log["input_truncated"].append("...")
         else:
-            request_msg_log = {"input_truncated": input_text[:1000] + "..." if len(input_text) > 1000 else input_text}
+            request_msg_log = {
+                "input_truncated": (
+                    input_text[:1000] + "..." if len(input_text) > 1000 else input_text
+                )
+            }
 
 
         try:
@@ -66,8 +75,9 @@ class EmbeddingService:
                     error_type="openai-embedding",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=request_msg_log
-                 )
+                    request_msg=request_msg_log,
+                    request_datetime=request_datetime,
+                )
             await add_request_log(
                 model_name=model,
                 api_key=api_key,

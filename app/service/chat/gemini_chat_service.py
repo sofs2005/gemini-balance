@@ -1,22 +1,22 @@
 # app/services/chat_service.py
 
+# app/services/chat_service.py
+
+import datetime
 import json
 import re
-import datetime
 import time
 from typing import Any, AsyncGenerator, Dict, List
+
 from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
+from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
-from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
-from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
-import asyncio
-from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
@@ -350,13 +350,15 @@ class GeminiChatService:
                 status_code = 500
             
             # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=final_api_key,
-                error=e,
+            await add_error_log(
+                gemini_key=final_api_key,
                 model_name=model,
                 error_type="gemini-chat-non-stream",
-                request_msg=payload
-            ))
+                error_log=error_log_msg,
+                error_code=status_code,
+                request_msg=payload,
+                request_datetime=request_datetime,
+            )
             
             raise e
         finally:
@@ -407,13 +409,15 @@ class GeminiChatService:
                 status_code = 500
             
             # 记录错误日志
-            asyncio.create_task(log_api_error(
-                api_key=api_key,
-                error=e,
+            await add_error_log(
+                gemini_key=api_key,
                 model_name=f"{model}-count-tokens",
                 error_type="gemini-count-tokens",
-                request_msg=payload
-            ))
+                error_log=error_log_msg,
+                error_code=status_code,
+                request_msg=payload,
+                request_datetime=request_datetime,
+            )
             
             raise e
         finally:
@@ -455,21 +459,18 @@ class GeminiChatService:
             request_datetime = datetime.datetime.now()
             start_time = time.perf_counter()
             current_attempt_key = api_key
-            final_api_key = current_attempt_key
+            final_api_key = current_attempt_key  # Update final key used
             try:
                 async for line in self.api_client.stream_generate_content(
                     payload, model, current_attempt_key
                 ):
-                    # print(line)
                     if line.startswith("data:"):
                         line = line[6:]
                         response_data = self.response_handler.handle_response(
                             json.loads(line), model, stream=True
                         )
                         text = self._extract_text_from_response(response_data)
-                        # 如果有文本内容，且开启了流式输出优化器，则使用流式输出优化器处理
                         if text and settings.STREAM_OPTIMIZER_ENABLED:
-                            # 使用流式输出优化器处理文本输出
                             async for (
                                 optimized_chunk
                             ) in gemini_optimizer.optimize_stream_output(
@@ -479,9 +480,7 @@ class GeminiChatService:
                             ):
                                 yield optimized_chunk
                         else:
-                            # 如果没有文本内容（如工具调用等），整块输出
                             yield "data: " + json.dumps(response_data) + "\n\n"
-                logger.info("Streaming completed successfully")
                 is_success = True
                 status_code = 200
                 break
@@ -498,21 +497,29 @@ class GeminiChatService:
                 else:
                     status_code = 500
 
-                new_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, current_attempt_key, model, retries
+                await add_error_log(
+                    gemini_key=current_attempt_key,
+                    model_name=model,
+                    error_type="gemini-chat-stream",
+                    error_log=error_log_msg,
+                    error_code=status_code,
+                    request_msg=payload,
+                    request_datetime=request_datetime,
                 )
 
-                if new_key and new_key != current_attempt_key:
-                    api_key = new_key
-                    logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
+                api_key = await self.key_manager.handle_api_failure(
+                    current_attempt_key, retries
+                )
+                if api_key:
+                    logger.info(
+                        f"Switched to new API key: {redact_key_for_logging(api_key)}"
+                    )
                 else:
                     logger.error(f"No valid API key available after {retries} retries.")
                     break
 
                 if retries >= max_retries:
-                    logger.error(
-                        f"Max retries ({max_retries}) reached for streaming."
-                    )
+                    logger.error(f"Max retries ({max_retries}) reached for streaming.")
                     break
             finally:
                 end_time = time.perf_counter()

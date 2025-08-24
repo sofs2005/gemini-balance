@@ -178,9 +178,6 @@ class StatsService:
 
             results = await database.fetch_all(query)
 
-            # 为失败调用尝试查找匹配的错误日志ID（时间窗口 +/- 5 分钟）
-            from app.database.models import ErrorLog  # 延迟导入避免循环依赖
-
             details: list[dict] = []
             for row in results:
                 status = "failure"
@@ -195,30 +192,6 @@ class StatsService:
                     "status_code": row["status_code"],
                     "latency_ms": row["latency_ms"],
                 }
-
-                # 如果失败，尝试附带一个相关的错误日志ID，便于前端拉取详情
-                if status == "failure" and row["key"]:
-                    try:
-                        ts = row["timestamp"]
-                        start_win = ts - datetime.timedelta(minutes=5)
-                        end_win = ts + datetime.timedelta(minutes=5)
-                        err_query = (
-                            select(ErrorLog.id)
-                            .where(
-                                ErrorLog.gemini_key == row["key"],
-                                ErrorLog.request_time >= start_win,
-                                ErrorLog.request_time <= end_win,
-                            )
-                            .order_by(ErrorLog.request_time.desc())
-                            .limit(1)
-                        )
-                        err = await database.fetch_one(err_query)
-                        if err:
-                            record["error_log_id"] = err["id"]
-                    except Exception as _e:
-                        logger.debug(
-                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
-                        )
 
                 details.append(record)
 
@@ -260,8 +233,6 @@ class StatsService:
 
             results = await database.fetch_all(query)
 
-            from app.database.models import ErrorLog
-
             details: list[dict] = []
             for row in results:
                 status = "failure"
@@ -277,29 +248,6 @@ class StatsService:
                     "latency_ms": row["latency_ms"],
                 }
 
-                if status == "failure" and row["key"]:
-                    try:
-                        ts = row["timestamp"]
-                        start_win = ts - datetime.timedelta(minutes=5)
-                        end_win = ts + datetime.timedelta(minutes=5)
-                        err_query = (
-                            select(ErrorLog.id)
-                            .where(
-                                ErrorLog.gemini_key == row["key"],
-                                ErrorLog.request_time >= start_win,
-                                ErrorLog.request_time < end_win,
-                            )
-                            .order_by(ErrorLog.request_time.desc())
-                            .limit(1)
-                        )
-                        err = await database.fetch_one(err_query)
-                        if err:
-                            record["error_log_id"] = err["id"]
-                    except Exception as _e:
-                        logger.debug(
-                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
-                        )
-
                 details.append(record)
 
             logger.info(
@@ -312,7 +260,9 @@ class StatsService:
             )
             raise
 
-    async def get_attention_keys_last_24h(self, include_keys: set[str], limit: int = 20, status_code: int = 429) -> list[dict]:
+    async def get_attention_keys_last_24h(
+        self, include_keys: set[str], limit: int = 20, status_code: int = 429
+    ) -> list[dict]:
         """返回最近24小时内指定状态码(默认429)最多的Key列表，仅包含include_keys中的Key。
 
         Returns: [{"key": str, "count": int, "status_code": int}, ...] 按次数降序
@@ -344,7 +294,9 @@ class StatsService:
                 if row["key"]
             ]
         except Exception as e:
-            logger.error(f"Failed to get attention keys ({status_code}) in last 24h: {e}")
+            logger.error(
+                f"Failed to get attention keys ({status_code}) in last 24h: {e}"
+            )
             return []
 
     async def get_key_usage_details_last_24h(self, key: str) -> Union[dict, None]:

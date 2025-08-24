@@ -148,12 +148,10 @@ async def add_error_log(
             model_name=model_name,
             error_code=error_code,
             request_msg=request_msg_json,
-            request_time=(
-                request_datetime if request_datetime else datetime.now(timezone.utc)
-            ),
+            request_time=(request_datetime if request_datetime else datetime.now()),
         )
-        result = await database.execute(query)
-        logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}, result: {result}")
+        await database.execute(query)
+        logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}")
         return True
     except Exception as e:
         logger.error(f"Failed to add error log for key {redact_key_for_logging(gemini_key)}: {str(e)}", exc_info=True)
