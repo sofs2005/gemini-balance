@@ -1684,20 +1684,24 @@ async function fetchAndRenderAttentionKeys(statusCode = 429, limit = 10) {
     }
     data.forEach(item => {
       const li = document.createElement('li');
-      li.className = 'flex items-center justify-between bg-white rounded border px-3 py-2';
+      li.className = 'flex items-center bg-white rounded border px-3 py-2';
+      li.dataset.key = item.key;
       const masked = item.key ? `${item.key.substring(0,4)}...${item.key.substring(item.key.length-4)}` : 'N/A';
       const code = item.status_code ?? statusCode;
       li.innerHTML = `
-        \u003cdiv class=\"flex items-center gap-3\"\u003e
-          \u003cspan class=\"font-mono text-sm\"\u003e${masked}\u003c/span\u003e
-          \u003cspan class=\"text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded\"\u003e${code}: ${item.count}\u003c/span\u003e
-        \u003c/div\u003e
-        \u003cdiv class=\"flex items-center gap-2\"\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white\" title=\"验证此Key\"\u003e验证\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white\" title=\"查看24小时详情\"\u003e详情\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white\" title=\"复制Key\"\u003e复制\u003c/button\u003e
-          \u003cbutton class=\"px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white\" title=\"删除此Key\"\u003e删除\u003c/button\u003e
-        \u003c/div\u003e`;
+        <input type="checkbox" class="form-checkbox h-5 w-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mr-4 key-checkbox" data-key-type="attention" value="${item.key}">
+        <div class="flex-grow flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="font-mono text-sm">${masked}</span>
+                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">${code}: ${item.count}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button class="px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white" title="验证此Key">验证</button>
+                <button class="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white" title="查看24小时详情">详情</button>
+                <button class="px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white" title="复制Key">复制</button>
+                <button class="px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white" title="删除此Key">删除</button>
+            </div>
+        </div>`;
       const [verifyBtn, detailBtn, copyBtn, deleteBtn] = li.querySelectorAll('button');
       verifyBtn.addEventListener('click', (e) => verifyKey(item.key, e.currentTarget));
       detailBtn.addEventListener('click', () => window.showKeyUsageDetails(item.key));
