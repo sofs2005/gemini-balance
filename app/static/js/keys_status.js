@@ -115,8 +115,14 @@ function initStatItemAnimations() {
 
 // 获取指定类型区域内选中的密钥
 function getSelectedKeys(type) {
+  let selectorRoot;
+  if (type === 'attention') {
+    selectorRoot = '#attentionKeysList';
+  } else {
+    selectorRoot = `#${type}Keys`;
+  }
   const checkboxes = document.querySelectorAll(
-    `#${type}Keys .key-checkbox:checked`
+    `${selectorRoot} .key-checkbox:checked`
   );
   return Array.from(checkboxes).map((cb) => cb.value);
 }
@@ -126,35 +132,32 @@ function updateBatchActions(type) {
   const selectedKeys = getSelectedKeys(type);
   const count = selectedKeys.length;
   const batchActionsDiv = document.getElementById(`${type}BatchActions`);
+  if (!batchActionsDiv) return;
   const selectedCountSpan = document.getElementById(`${type}SelectedCount`);
   const buttons = batchActionsDiv.querySelectorAll("button");
 
   if (count > 0) {
     batchActionsDiv.classList.remove("hidden");
-    selectedCountSpan.textContent = count;
+    if (selectedCountSpan) selectedCountSpan.textContent = count;
     buttons.forEach((button) => (button.disabled = false));
   } else {
     batchActionsDiv.classList.add("hidden");
-    selectedCountSpan.textContent = "0";
+    if (selectedCountSpan) selectedCountSpan.textContent = "0";
     buttons.forEach((button) => (button.disabled = true));
   }
 
   // 更新全选复选框状态
-  const selectAllCheckbox = document.getElementById(
-    `selectAll${type.charAt(0).toUpperCase() + type.slice(1)}`
-  );
-  const allCheckboxes = document.querySelectorAll(`#${type}Keys .key-checkbox`);
+  const selectAllId = `selectAll${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  const selectAllCheckbox = document.getElementById(selectAllId);
+  const rootId = type === 'attention' ? 'attentionKeysList' : `${type}Keys`;
   // 只有在有可见的 key 时才考虑全选状态
   const visibleCheckboxes = document.querySelectorAll(
-    `#${type}Keys li:not([style*="display: none"]) .key-checkbox`
+    `#${rootId} li:not([style*="display: none"]) .key-checkbox`
   );
   if (selectAllCheckbox && visibleCheckboxes.length > 0) {
     selectAllCheckbox.checked = count === visibleCheckboxes.length;
-    selectAllCheckbox.indeterminate =
-      count > 0 && count < visibleCheckboxes.length;
   } else if (selectAllCheckbox) {
     selectAllCheckbox.checked = false;
-    selectAllCheckbox.indeterminate = false;
   }
 }
 
@@ -175,29 +178,28 @@ function updateCardHeaderCount(type, delta) {
 
 // 全选/取消全选指定类型的密钥
 function toggleSelectAll(type, isChecked) {
-  const listElement = document.getElementById(`${type}Keys`);
-  // Select checkboxes within LI elements that are NOT styled with display:none
-  // This targets currently visible items based on filtering.
+  const rootId = type === 'attention' ? 'attentionKeysList' : `${type}Keys`;
+  const listElement = document.getElementById(rootId);
+  if (!listElement) return;
   const visibleCheckboxes = listElement.querySelectorAll(
     `li:not([style*="display: none"]) .key-checkbox`
   );
 
   visibleCheckboxes.forEach((checkbox) => {
     checkbox.checked = isChecked;
-    const listItem = checkbox.closest("li[data-key]"); // Get the LI from the current DOM
+    const listItem = checkbox.closest("li[data-key]");
     if (listItem) {
       listItem.classList.toggle("selected", isChecked);
-
-      // Sync with master array
-      const key = listItem.dataset.key;
-      const masterList = type === "valid" ? allValidKeys : allInvalidKeys;
-      if (masterList) {
-        // Ensure masterList is defined
-        const masterListItem = masterList.find((li) => li.dataset.key === key);
-        if (masterListItem) {
-          const masterCheckbox = masterListItem.querySelector(".key-checkbox");
-          if (masterCheckbox) {
-            masterCheckbox.checked = isChecked;
+      if (type !== 'attention') {
+        const key = listItem.dataset.key;
+        const masterList = type === "valid" ? allValidKeys : allInvalidKeys;
+        if (masterList) {
+          const masterListItem = masterList.find((li) => li.dataset.key === key);
+          if (masterListItem) {
+            const masterCheckbox = masterListItem.querySelector(".key-checkbox");
+            if (masterCheckbox) {
+              masterCheckbox.checked = isChecked;
+            }
           }
         }
       }
@@ -1253,20 +1255,21 @@ function initializeKeySelectionListeners() {
         if (listItem) {
           listItem.classList.toggle("selected", checkbox.checked);
 
-          // Sync with master array
-          const key = listItem.dataset.key;
-          const masterList =
-            keyType === "valid" ? allValidKeys : allInvalidKeys;
-          if (masterList) {
-            // Ensure masterList is defined
-            const masterListItem = masterList.find(
-              (li) => li.dataset.key === key
-            );
-            if (masterListItem) {
-              const masterCheckbox =
-                masterListItem.querySelector(".key-checkbox");
-              if (masterCheckbox) {
-                masterCheckbox.checked = checkbox.checked;
+          // Sync with master array (only for valid/invalid lists)
+          if (keyType !== 'attention') {
+            const key = listItem.dataset.key;
+            const masterList =
+              keyType === "valid" ? allValidKeys : allInvalidKeys;
+            if (masterList) {
+              const masterListItem = masterList.find(
+                (li) => li.dataset.key === key
+              );
+              if (masterListItem) {
+                const masterCheckbox =
+                  masterListItem.querySelector(".key-checkbox");
+                if (masterCheckbox) {
+                  masterCheckbox.checked = checkbox.checked;
+                }
               }
             }
           }
@@ -1278,6 +1281,7 @@ function initializeKeySelectionListeners() {
 
   setupEventListenersForList("validKeys", "valid");
   setupEventListenersForList("invalidKeys", "invalid");
+  setupEventListenersForList("attentionKeysList", "attention");
 }
 
 
