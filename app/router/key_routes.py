@@ -30,7 +30,16 @@ async def get_keys_paginated(
 
     # Filter by status
     if status == "valid":
-        keys_to_filter = all_keys_with_status["valid_keys"]
+        # 优先从 ValidKeyPool 获取数据，因为这是最准确的“有效”密钥来源
+        if key_manager.valid_key_pool:
+            pool_keys = key_manager.valid_key_pool.valid_keys
+            # 从池中的 key 对象创建 {key: fail_count} 字典
+            keys_to_filter = {
+                key_obj.key: key_manager.get_fail_count(key_obj.key)
+                for key_obj in pool_keys
+            }
+        else:
+            keys_to_filter = all_keys_with_status["valid_keys"]
     elif status == "invalid":
         keys_to_filter = all_keys_with_status["invalid_keys"]
     else:
