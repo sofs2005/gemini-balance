@@ -233,14 +233,23 @@ def _build_payload(model: str, request: GeminiRequest) -> Dict[str, Any]:
         # 非TTS模型使用完整的payload
         payload = {
             "contents": _filter_empty_parts(request_dict.get("contents", [])),
-            "tools": _build_tools(model, request_dict),
-            "safetySettings": _get_safety_settings(model),
-            "generationConfig": request_dict.get("generationConfig"),
-            "systemInstruction": request_dict.get("systemInstruction"),
         }
 
-    # 确保 generationConfig 不为 None
-    if payload["generationConfig"] is None:
+        # 只有在提供了相应配置时才添加到payload中
+        if tools := _build_tools(model, request_dict):
+            payload["tools"] = tools
+        
+        if safety_settings := _get_safety_settings(model):
+            payload["safetySettings"] = safety_settings
+            
+        if generation_config := request_dict.get("generationConfig"):
+            payload["generationConfig"] = generation_config
+        
+        if system_instruction := request_dict.get("systemInstruction"):
+            payload["systemInstruction"] = system_instruction
+
+    # 确保 generationConfig 存在且不为 None
+    if "generationConfig" not in payload or payload["generationConfig"] is None:
         payload["generationConfig"] = {}
 
     if model.endswith("-image") or model.endswith("-image-generation"):
@@ -372,7 +381,6 @@ class GeminiChatService:
                 request_time=request_datetime,
             ))
 
-    @RetryHandler()
     async def count_tokens(
         self, model: str, request: GeminiRequest, api_key: str
     ) -> Dict[str, Any]:
@@ -407,7 +415,9 @@ class GeminiChatService:
                 status_code = 500
             
             # 错误日志将由 handle_api_error_and_get_next_key 统一处理
-            
+            await handle_api_error_and_get_next_key(
+                self.key_manager, e, api_key, model
+            )
             raise e
         finally:
             # 记录请求日志
