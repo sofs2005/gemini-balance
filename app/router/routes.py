@@ -212,7 +212,7 @@ def setup_api_stats_routes(app: FastAPI) -> None:
     """
 
     @app.get("/api/stats/details")
-    async def api_stats_details(request: Request, period: str):
+    async def api_stats_details(request: Request, period: str, all: bool = False, page: int = 1, limit: int = 100):
         """获取指定时间段内的 API 调用详情"""
         try:
             auth_token = request.cookies.get("auth_token")
@@ -220,9 +220,12 @@ def setup_api_stats_routes(app: FastAPI) -> None:
                 logger.warning("Unauthorized access attempt to API stats details")
                 return {"error": "Unauthorized"}, 401
 
-            logger.info(f"Fetching API call details for period: {period}")
+            logger.info(f"Fetching API call details for period: {period}, all: {all}, page: {page}, limit: {limit}")
             stats_service = StatsService()
-            details = await stats_service.get_api_call_details(period)
+            if all:
+                details = await stats_service.get_all_api_call_details(period)
+            else:
+                details = await stats_service.get_api_call_details(period, page, limit)
             return details
         except ValueError as e:
             logger.warning(

@@ -1560,7 +1560,8 @@ function buildChartConfig(labels, successData, failureData) {
 
 async function fetchPeriodDetails(period) {
   // Uses backend endpoint /api/stats/details?period={period}
-  return await fetchAPI(`/api/stats/details?period=${period}`);
+  // For chart rendering, always fetch all data for the period.
+  return await fetchAPI(`/api/stats/details?period=${period}&all=true`);
 }
 
 function bucketizeDetails(period, details) {

@@ -209,6 +209,60 @@ class StatsService:
             logger.error(f"Failed to get API call details for period '{period}', page {page}: {e}")
             raise
 
+    async def get_all_api_call_details(self, period: str) -> list[dict]:
+        """获取指定时间段内的所有API调用详情 (无分页)"""
+        now = datetime.datetime.now()
+        if period == "1m":
+            start_time = now - datetime.timedelta(minutes=1)
+        elif period == "1h":
+            start_time = now - datetime.timedelta(hours=1)
+        elif period == "8h":
+            start_time = now - datetime.timedelta(hours=8)
+        elif period == "24h":
+            start_time = now - datetime.timedelta(hours=24)
+        else:
+            raise ValueError(f"无效的时间段标识: {period}")
+
+        try:
+            query = (
+                select(
+                    RequestLog.request_time.label("timestamp"),
+                    RequestLog.api_key.label("key"),
+                    RequestLog.model_name.label("model"),
+                    RequestLog.status_code.label("status_code"),
+                    RequestLog.latency_ms.label("latency_ms"),
+                )
+                .where(RequestLog.request_time >= start_time)
+                .order_by(RequestLog.request_time.desc())
+            )
+
+            results = await database.fetch_all(query)
+
+            details: list[dict] = []
+            for row in results:
+                status = "failure"
+                if row["status_code"] is not None:
+                    status = "success" if 200 <= row["status_code"] < 300 else "failure"
+
+                record = {
+                    "timestamp": row["timestamp"].isoformat(),
+                    "key": row["key"],
+                    "model": row["model"],
+                    "status": status,
+                    "status_code": row["status_code"],
+                    "latency_ms": row["latency_ms"],
+                }
+                details.append(record)
+
+            logger.info(
+                f"Retrieved all {len(details)} API call details for period '{period}'"
+            )
+            return details
+
+        except Exception as e:
+            logger.error(f"Failed to get all API call details for period '{period}': {e}")
+            raise
+
     async def get_key_call_details(self, key: str, period: str) -> list[dict]:
         """获取指定密钥在指定时间段内的调用详情 (与 get_api_call_details 结构一致)"""
         now = datetime.datetime.now()
