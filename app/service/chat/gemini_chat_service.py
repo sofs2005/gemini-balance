@@ -122,7 +122,7 @@ def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                     record[k] = v
         return record
 
-    def _is_structured_output_request(payload: Dict[str, Any]]) -> bool:
+    def _is_structured_output_request(payload: Dict[str, Any]) -> bool:
         """检查请求是否要求结构化JSON输出"""
         try:
             generation_config = payload.get("generationConfig", {})
