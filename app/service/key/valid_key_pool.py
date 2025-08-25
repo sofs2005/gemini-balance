@@ -876,13 +876,11 @@ class ValidKeyPool:
                             break
 
                         key_obj = ValidKeyWithTTL(result, self.ttl_hours)
-                        # 关键修复：记录在验证过程中已经消耗掉的一次使用
-                        key_obj.increment_usage()
                         self.valid_keys.append(key_obj)
                         self._pool_keys_set.add(key_obj.key)
                         batch_loaded += 1
                         total_loaded += 1
-                        logger.info(f"Key {redact_key_for_logging(result)} preloaded with initial usage count of 1.")
+                        logger.info(f"Key {redact_key_for_logging(result)} preloaded successfully.")
 
                 logger.info(f"Preload batch completed: loaded {batch_loaded}/{len(batch_keys)} keys, pool size: {len(self.valid_keys)}")
 

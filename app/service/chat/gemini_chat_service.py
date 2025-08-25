@@ -333,10 +333,9 @@ class GeminiChatService:
                     logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
 
             payload = _build_payload(model, request)
-            # 动态获取密钥
-            api_key_to_use = await self.key_manager.get_next_working_key(model_name=model)
-            final_api_key = api_key_to_use
-            response = await self.api_client.generate_content(payload, model, api_key_to_use)
+            # 验证流程依赖于使用传入的api_key，而不是从池中获取新密钥
+            final_api_key = api_key
+            response = await self.api_client.generate_content(payload, model, api_key)
 
             # 如果到达这里，说明请求成功
             is_success = True
