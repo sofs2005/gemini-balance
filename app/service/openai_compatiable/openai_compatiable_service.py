@@ -38,10 +38,12 @@ class OpenAICompatiableService:
         request_dict = request.model_dump()
         # 移除值为null的
         request_dict = {k: v for k, v in request_dict.items() if v is not None}
-        del request_dict["top_k"] # 删除top_k参数，目前不支持该参数
+        del request_dict["top_k"]  # 删除top_k参数，目前不支持该参数
         if request.stream:
             return self._handle_stream_completion(request.model, request_dict, api_key)
-        return await self._handle_normal_completion(request.model, request_dict, api_key)
+        return await self._handle_normal_completion(
+            request.model, request_dict, api_key
+        )
 
     async def generate_images(
         self,

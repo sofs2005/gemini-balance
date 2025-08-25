@@ -312,7 +312,9 @@ class StatsService:
             )
             raise
 
-    async def get_attention_keys_last_24h(self, include_keys: set[str], limit: int = 20, status_code: int = 429) -> list[dict]:
+    async def get_attention_keys_last_24h(
+        self, include_keys: set[str], limit: int = 20, status_code: int = 429
+    ) -> list[dict]:
         """返回最近24小时内指定状态码(默认429)最多的Key列表，仅包含include_keys中的Key。
 
         Returns: [{"key": str, "count": int, "status_code": int}, ...] 按次数降序
@@ -344,7 +346,9 @@ class StatsService:
                 if row["key"]
             ]
         except Exception as e:
-            logger.error(f"Failed to get attention keys ({status_code}) in last 24h: {e}")
+            logger.error(
+                f"Failed to get attention keys ({status_code}) in last 24h: {e}"
+            )
             return []
 
     async def get_key_usage_details_last_24h(self, key: str) -> Union[dict, None]:
