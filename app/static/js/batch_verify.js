@@ -67,33 +67,36 @@ async function checkTokens() {
     validButtons.style.display = 'none';
 
     try {
-        // 并发检测所有密钥
-        const results = await Promise.all(
-            uniqueTokens.map(token => checkToken(token, testModel))
-        );
-
-        const validTokens = [];
-        const invalidTokens = [];
-
-        results.forEach(result => {
-            if (result.isValid) {
-                validTokens.push(result.token);
-            } else {
-                invalidTokens.push(result);
-            }
+        // 调用新的无状态批量验证接口
+        const response = await fetch('/v1beta/batch-verify-stateless', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ keys: uniqueTokens })
         });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error || `HTTP ${response.status} - ${response.statusText}`;
+            throw new Error(errorMessage);
+        }
+
+        const data = await response.json();
+        const validTokens = data.successful_keys || [];
+        const failedKeys = data.failed_keys || {};
 
         // 显示有效密钥
         validResults.textContent = validTokens.join('\n');
 
         // 显示无效密钥
         invalidResults.innerHTML = '';
-        invalidTokens.forEach(result => {
+        Object.entries(failedKeys).forEach(([token, error]) => {
             const div = document.createElement('div');
             div.className = 'invalid-token';
             div.innerHTML = `
-                <div class="invalid-token-token">${escapeHtml(result.token)}</div>
-                <div class="invalid-token-message">错误: ${escapeHtml(result.message)}</div>
+                <div class="invalid-token-token">${escapeHtml(token)}</div>
+                <div class="invalid-token-message">错误: ${escapeHtml(error)}</div>
             `;
             invalidResults.appendChild(div);
         });
@@ -101,14 +104,13 @@ async function checkTokens() {
         // 显示复制按钮
         if (validTokens.length > 0) {
             validButtons.style.display = 'block';
-            console.log('Showing copy buttons for', validTokens.length, 'valid tokens');
         } else {
             validButtons.style.display = 'none';
         }
 
         // 显示结果统计
         showAlert(
-            `检测完成！有效: ${validTokens.length}，无效: ${invalidTokens.length}，重复: ${duplicateTokens.size}`, 
+            `检测完成！有效: ${validTokens.length}，无效: ${Object.keys(failedKeys).length}，重复: ${duplicateTokens.size}`,
             'success'
         );
 
@@ -117,34 +119,6 @@ async function checkTokens() {
     } finally {
         checkButton.disabled = false;
         checkButton.innerHTML = '<i class="fas fa-play"></i> 开始检测';
-    }
-}
-
-async function checkToken(token, testModel) {
-    // 使用与主功能相同的后端验证接口，而不是直接调用 Gemini API
-    try {
-        const response = await fetch(`/gemini/v1beta/verify-key/${encodeURIComponent(token)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success || data.status === "valid") {
-                return { token, isValid: true };
-            } else {
-                const errorMessage = data.error || data.message || "密钥验证失败";
-                return { token, isValid: false, message: errorMessage };
-            }
-        } else {
-            const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.error || errorData.message || `HTTP ${response.status} - ${response.statusText}`;
-            return { token, isValid: false, message: errorMessage };
-        }
-    } catch (error) {
-        return { token, isValid: false, message: `请求失败: ${error.message}` };
     }
 }
 

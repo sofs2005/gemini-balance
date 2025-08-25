@@ -463,6 +463,66 @@ async def verify_selected_keys(
         })
 
 
+async def _stateless_verify_single_key(api_key: str, chat_service: GeminiChatService):
+    """一个独立的、无状态的密钥验证函数，不与KeyManager交互"""
+    try:
+        gemini_request = GeminiRequest(
+            contents=[GeminiContent(role="user", parts=[{"text": "hi"}])],
+            generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
+        )
+        await chat_service.generate_content(
+            settings.TEST_MODEL,
+            gemini_request,
+            api_key
+        )
+        return {"key": api_key, "status": "valid", "error": None}
+    except Exception as e:
+        error_message = str(e)
+        logger.warning(f"Stateless verification failed for {redact_key_for_logging(api_key)}: {error_message}")
+        return {"key": api_key, "status": "invalid", "error": error_message}
+
+@router_v1beta.post("/batch-verify-stateless")
+async def batch_verify_stateless(
+    request: VerifySelectedKeysRequest,
+    chat_service: GeminiChatService = Depends(get_chat_service)
+):
+    """独立的、无状态的批量密钥验证，不影响系统密钥状态"""
+    logger.info("-" * 50 + "batch_verify_stateless" + "-" * 50)
+    keys_to_verify = request.keys
+    logger.info(f"Received stateless verification request for {len(keys_to_verify)} keys.")
+
+    if not keys_to_verify:
+        return JSONResponse({"error": "No keys provided"}, status_code=400)
+
+    CONCURRENT_LIMIT = 20  # 设置并发请求的上限
+    semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
+    
+    async def controlled_verify(key):
+        async with semaphore:
+            return await _stateless_verify_single_key(key, chat_service)
+
+    tasks = [controlled_verify(key) for key in keys_to_verify]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    successful_keys = []
+    failed_keys = {}
+    for result in results:
+        if isinstance(result, Exception):
+            # This case should ideally not happen as _stateless_verify_single_key catches exceptions
+            logger.error(f"Unexpected error during stateless verification task: {result}")
+        elif result.get("status") == "valid":
+            successful_keys.append(result["key"])
+        else:
+            failed_keys[result["key"]] = result["error"]
+
+    return {
+        "successful_keys": successful_keys,
+        "failed_keys": failed_keys,
+        "valid_count": len(successful_keys),
+        "invalid_count": len(failed_keys)
+    }
+
+
 @router.post("/models/{model_name}:embedContent")
 @router_v1beta.post("/models/{model_name}:embedContent")
 @RetryHandler(key_arg="api_key")
