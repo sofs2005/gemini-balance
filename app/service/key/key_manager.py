@@ -29,6 +29,7 @@ class KeyManager:
         self.key_model_status: Dict[str, Dict[str, datetime]] = {}
         self.MAX_FAILURES = settings.MAX_FAILURES
         self.paid_key = settings.PAID_KEY
+        settings.GEMINI_QUOTA_RESET_HOUR = int(settings.GEMINI_QUOTA_RESET_HOUR)
 
         # 初始化有效密钥池
         self.valid_key_pool = None
@@ -142,6 +143,28 @@ class KeyManager:
         """检查 Vertex key 是否有效"""
         async with self.vertex_failure_count_lock:
             return self.vertex_key_failure_counts[key] < self.MAX_FAILURES
+
+    async def is_key_available_for_verification(self, key: str) -> bool:
+        """
+        检查一个密钥是否可用于验证。
+        一个密钥可用，前提是它没有被永久禁用，并且没有因为测试模型而处于冷却状态。
+        """
+        async with self.failure_count_lock:
+            # 1. 检查是否被永久禁用
+            if self.key_failure_counts.get(key, 0) >= self.MAX_FAILURES:
+                return False
+
+            # 2. 检查是否因测试模型而处于冷却状态
+            test_model = settings.TEST_MODEL
+            now = datetime.now(pytz.utc)
+            model_statuses = self.key_model_status.get(key, {})
+            expiry_time = model_statuses.get(test_model)
+            
+            if expiry_time and now < expiry_time:
+                # 对于测试模型，它正处于冷却期，因此不可用于验证
+                return False
+
+            return True
 
     async def reset_failure_counts(self):
         """重置所有key的失败计数"""

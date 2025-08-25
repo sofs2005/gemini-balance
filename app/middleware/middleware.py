@@ -55,7 +55,7 @@ def setup_middlewares(app: FastAPI) -> None:
         app: FastAPI应用程序实例
     """
     # 添加智能路由中间件（必须在认证中间件之前）
-    app.add_middleware(SmartRoutingMiddleware)
+    # app.add_middleware(SmartRoutingMiddleware)
 
     # 添加认证中间件
     app.add_middleware(AuthMiddleware)

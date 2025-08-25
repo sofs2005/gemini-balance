@@ -1,23 +1,22 @@
 # app/services/chat_service.py
 
-# app/services/chat_service.py
-
-import datetime
 import json
 import re
+import datetime
 import time
 from typing import Any, AsyncGenerator, Dict, List
-
 from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
-from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
+from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
 from app.handler.retry_handler import RetryHandler
 from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
+import asyncio
+from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
@@ -280,6 +279,7 @@ class GeminiChatService:
         self.api_client = GeminiApiClient(base_url, settings.TIME_OUT)
         self.key_manager = key_manager
         self.response_handler = GeminiResponseHandler()
+        # 移除对 self.api_client.set_key_manager 的调用
 
     def _extract_text_from_response(self, response: Dict[str, Any]) -> str:
         """从响应中提取文本内容"""
@@ -333,7 +333,10 @@ class GeminiChatService:
                     logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
 
             payload = _build_payload(model, request)
-            response = await self.api_client.generate_content(payload, model, api_key)
+            # 动态获取密钥
+            api_key_to_use = await self.key_manager.get_next_working_key(model_name=model)
+            final_api_key = api_key_to_use
+            response = await self.api_client.generate_content(payload, model, api_key_to_use)
 
             # 如果到达这里，说明请求成功
             is_success = True
@@ -350,16 +353,7 @@ class GeminiChatService:
             else:
                 status_code = 500
             
-            # 记录错误日志
-            await add_error_log(
-                gemini_key=final_api_key,
-                model_name=model,
-                error_type="gemini-chat-non-stream",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=payload,
-                request_datetime=request_datetime,
-            )
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             
             raise e
         finally:
@@ -409,16 +403,7 @@ class GeminiChatService:
             else:
                 status_code = 500
             
-            # 记录错误日志
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=f"{model}-count-tokens",
-                error_type="gemini-count-tokens",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=payload,
-                request_datetime=request_datetime,
-            )
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             
             raise e
         finally:
@@ -460,18 +445,21 @@ class GeminiChatService:
             request_datetime = datetime.datetime.now()
             start_time = time.perf_counter()
             current_attempt_key = api_key
-            final_api_key = current_attempt_key  # Update final key used
+            final_api_key = current_attempt_key
             try:
                 async for line in self.api_client.stream_generate_content(
                     payload, model, current_attempt_key
                 ):
+                    # print(line)
                     if line.startswith("data:"):
                         line = line[6:]
                         response_data = self.response_handler.handle_response(
                             json.loads(line), model, stream=True
                         )
                         text = self._extract_text_from_response(response_data)
+                        # 如果有文本内容，且开启了流式输出优化器，则使用流式输出优化器处理
                         if text and settings.STREAM_OPTIMIZER_ENABLED:
+                            # 使用流式输出优化器处理文本输出
                             async for (
                                 optimized_chunk
                             ) in gemini_optimizer.optimize_stream_output(
@@ -481,7 +469,9 @@ class GeminiChatService:
                             ):
                                 yield optimized_chunk
                         else:
+                            # 如果没有文本内容（如工具调用等），整块输出
                             yield "data: " + json.dumps(response_data) + "\n\n"
+                logger.info("Streaming completed successfully")
                 is_success = True
                 status_code = 200
                 break
@@ -498,29 +488,21 @@ class GeminiChatService:
                 else:
                     status_code = 500
 
-                await add_error_log(
-                    gemini_key=current_attempt_key,
-                    model_name=model,
-                    error_type="gemini-chat-stream",
-                    error_log=error_log_msg,
-                    error_code=status_code,
-                    request_msg=payload,
-                    request_datetime=request_datetime,
+                new_key = await handle_api_error_and_get_next_key(
+                    self.key_manager, e, current_attempt_key, model, retries
                 )
 
-                api_key = await self.key_manager.handle_api_failure(
-                    current_attempt_key, retries
-                )
-                if api_key:
-                    logger.info(
-                        f"Switched to new API key: {redact_key_for_logging(api_key)}"
-                    )
+                if new_key and new_key != current_attempt_key:
+                    api_key = new_key
+                    logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
                 else:
                     logger.error(f"No valid API key available after {retries} retries.")
                     break
 
                 if retries >= max_retries:
-                    logger.error(f"Max retries ({max_retries}) reached for streaming.")
+                    logger.error(
+                        f"Max retries ({max_retries}) reached for streaming."
+                    )
                     break
             finally:
                 end_time = time.perf_counter()

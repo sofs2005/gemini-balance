@@ -18,8 +18,9 @@ def initialize_api_client():
     global _api_client
     if _api_client is None:
         timeout = httpx.Timeout(DEFAULT_TIMEOUT, read=DEFAULT_TIMEOUT)
+        # 移除默认headers，确保客户端是干净的
         _api_client = httpx.AsyncClient(timeout=timeout)
-        logger.info("Global httpx.AsyncClient initialized.")
+        logger.info("Global httpx.AsyncClient initialized without default headers.")
 
 async def close_api_client():
     """关闭全局 API 客户端"""

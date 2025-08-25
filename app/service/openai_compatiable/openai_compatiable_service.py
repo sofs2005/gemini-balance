@@ -11,10 +11,11 @@ from app.database.services import (
     add_request_log,
 )
 from app.domain.openai_models import ChatRequest, ImageGenerationRequest
-from app.log.logger import get_openai_compatible_logger
+from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.service.client.api_client import OpenaiApiClient
 from app.service.key.key_manager import KeyManager
 from app.utils.helpers import redact_key_for_logging
+from app.log.logger import get_openai_compatible_logger
 
 logger = get_openai_compatible_logger()
 
@@ -24,7 +25,7 @@ class OpenAICompatiableService:
         self.key_manager = key_manager
         self.base_url = base_url
         self.api_client = OpenaiApiClient(base_url, settings.TIME_OUT)
-
+        
     async def get_models(self, api_key: str) -> Dict[str, Any]:
         return await self.api_client.get_models(api_key)
 
@@ -37,12 +38,10 @@ class OpenAICompatiableService:
         request_dict = request.model_dump()
         # 移除值为null的
         request_dict = {k: v for k, v in request_dict.items() if v is not None}
-        del request_dict["top_k"]  # 删除top_k参数，目前不支持该参数
+        del request_dict["top_k"] # 删除top_k参数，目前不支持该参数
         if request.stream:
             return self._handle_stream_completion(request.model, request_dict, api_key)
-        return await self._handle_normal_completion(
-            request.model, request_dict, api_key
-        )
+        return await self._handle_normal_completion(request.model, request_dict, api_key)
 
     async def generate_images(
         self,
@@ -88,15 +87,7 @@ class OpenAICompatiableService:
             else:
                 status_code = 500
 
-            await add_error_log(
-                gemini_key=api_key,
-                model_name=model,
-                error_type="openai-compatiable-non-stream",
-                error_log=error_log_msg,
-                error_code=status_code,
-                request_msg=request,
-                request_datetime=request_datetime,
-            )
+            # 错误日志将由 handle_api_error_and_get_next_key 统一处理
             raise e
         finally:
             end_time = time.perf_counter()
@@ -149,24 +140,14 @@ class OpenAICompatiableService:
                 else:
                     status_code = 500
 
-                await add_error_log(
-                    gemini_key=current_attempt_key,
-                    model_name=model,
-                    error_type="openai-compatiable-stream",
-                    error_log=error_log_msg,
-                    error_code=status_code,
-                    request_msg=payload,
-                    request_datetime=request_datetime,
-                )
+                # 错误日志将由 handle_api_error_and_get_next_key 统一处理
 
                 if self.key_manager:
-                    api_key = await self.key_manager.handle_api_failure(
-                        current_attempt_key, retries
+                    api_key = await handle_api_error_and_get_next_key(
+                        self.key_manager, e, current_attempt_key, model, retries
                     )
                     if api_key:
-                        logger.info(
-                            f"Switched to new API key: {redact_key_for_logging(api_key)}"
-                        )
+                        logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")
                     else:
                         logger.error(
                             f"No valid API key available after {retries} retries."
@@ -174,7 +155,7 @@ class OpenAICompatiableService:
                         break
                 else:
                     logger.error("KeyManager not available for retry logic.")
-                    break
+                    break 
 
                 if retries >= max_retries:
                     logger.error(f"Max retries ({max_retries}) reached for streaming.")
@@ -193,3 +174,5 @@ class OpenAICompatiableService:
                 if not is_success and retries >= max_retries:
                     yield f"data: {json.dumps({'error': 'Streaming failed after retries'})}\n\n"
                     yield "data: [DONE]\n\n"
+                    
+    
