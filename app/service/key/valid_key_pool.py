@@ -221,7 +221,7 @@ class ValidKeyPool:
 
         if current_size < min_threshold // 2:  # 低于阈值的一半时触发紧急补充
             logger.warning(f"Pool size {current_size} critically low (< {min_threshold//2}), triggering emergency refill")
-            asyncio.create_task(self.emergency_refill_async())
+            asyncio.create_task(self._persistent_emergency_refill())
         elif current_size < self.pool_size:  # 未达到最大容量时继续补充
             # 循序式补充策略：每次只补充1个密钥
             import random
@@ -338,122 +338,80 @@ class ValidKeyPool:
         # 检查紧急补充锁，如果未锁定，则创建后台任务
         if not self.emergency_lock.locked():
             logger.info("Emergency lock is not locked, creating background refill task.")
-            asyncio.create_task(self._background_emergency_refill())
+            asyncio.create_task(self._persistent_emergency_refill())
         else:
             logger.info("Emergency refill task is already running in the background.")
 
         return candidate_key
 
-    async def _background_emergency_refill(self):
+    async def _persistent_emergency_refill(self) -> None:
         """
-        在后台执行实际的密钥验证和池补充，不阻塞主流程。
+        持续的异步紧急补充守护任务。
+        该任务会一直运行，直到池大小恢复到最低阈值。
+        使用锁来确保只有一个实例在运行。
         """
         if self.emergency_lock.locked():
-            logger.info("Background emergency refill is already in progress. Skipping.")
+            logger.info("Persistent emergency refill task is already running. Skipping.")
             return
 
         async with self.emergency_lock:
-            refill_start = time.time()
-            logger.info("Background emergency refill task started.")
+            logger.info("Starting persistent emergency refill task.")
+            self.stats["emergency_refill_count"] += 1
+            min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
 
-            try:
-                # 获取可能有效的密钥列表
-                available_keys = [
-                    key for key in self.key_manager.api_keys
-                    if await self.key_manager.is_key_valid(key) and not self._is_key_in_pool(key)
-                ]
+            while len(self.valid_keys) < min_threshold:
+                try:
+                    current_size = len(self.valid_keys)
+                    needed = min_threshold - current_size
+                    logger.info(f"Refill cycle started: current size {current_size}, threshold {min_threshold}, need {needed}.")
 
-                if not available_keys:
-                    logger.warning("No available keys for background emergency refill.")
-                    return
+                    # 并发验证多个密钥
+                    refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), needed)
 
-                # 并发验证多个密钥
-                refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), len(available_keys))
-                selected_keys = random.sample(available_keys, refill_count)
-                logger.info(f"Background refill: selected {refill_count} keys for verification.")
+                    # 获取可能有效的密钥列表
+                    available_keys = [
+                        key for key in self.key_manager.api_keys
+                        if await self.key_manager.is_key_valid(key) and not self._is_key_in_pool(key)
+                    ]
 
-                verification_tasks = [self._verify_key_for_emergency(key) for key in selected_keys]
-                results = await asyncio.gather(*verification_tasks, return_exceptions=True)
+                    if not available_keys:
+                        logger.warning("No valid API keys available for refill cycle. Waiting...")
+                        await asyncio.sleep(15)
+                        continue
 
-                # 处理验证结果
-                success_count = 0
-                for result in results:
-                    if isinstance(result, str):  # 验证成功
-                        if len(self.valid_keys) < self.pool_size:
-                            key_obj = ValidKeyWithTTL(result, self.ttl_hours)
-                            self.valid_keys.append(key_obj)
-                            self._pool_keys_set.add(key_obj.key)
-                            success_count += 1
-                            logger.info(f"Background refill: added key {redact_key_for_logging(result)} to pool")
-                        else:
-                            logger.warning("Pool size limit reached during background refill, stopping.")
-                            break
-                
-                if success_count > 0:
-                    self.stats["emergency_refill_count"] += 1
-                
-                refill_time = time.time() - refill_start
-                logger.info(f"Background emergency refill finished in {refill_time:.3f}s. "
-                           f"Successfully added {success_count}/{len(selected_keys)} keys. "
-                           f"Pool size is now {len(self.valid_keys)}.")
+                    selected_keys = random.sample(available_keys, min(refill_count, len(available_keys)))
+                    logger.info(f"Refill cycle: selected {len(selected_keys)} keys for verification.")
 
-            except Exception as e:
-                logger.error(f"An error occurred during background emergency refill: {e}", exc_info=True)
+                    # 并发验证
+                    tasks = [self._verify_key_for_emergency(key) for key in selected_keys]
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def emergency_refill_async(self) -> None:
-        """
-        异步紧急补充，不返回密钥，只补充池子
-        """
-        # 使用信号量控制并发验证
-        async with self.verification_semaphore:
-            try:
-                min_threshold = int(getattr(settings, 'POOL_MIN_THRESHOLD', 10))
-                current_size = len(self.valid_keys)
-                needed = min_threshold - current_size
+                    # 处理结果
+                    success_count = 0
+                    for result in results:
+                        if isinstance(result, str):  # 验证成功返回密钥
+                            if len(self.valid_keys) >= self.pool_size:
+                                logger.warning(f"Pool size limit reached ({self.pool_size}), stopping this refill cycle.")
+                                break
+                            
+                            if not self._is_key_in_pool(result):
+                                key_obj = ValidKeyWithTTL(result, self.ttl_hours)
+                                self.valid_keys.append(key_obj)
+                                self._pool_keys_set.add(key_obj.key)
+                                success_count += 1
 
-                if needed <= 0:
-                    return
+                    logger.info(f"Refill cycle completed: added {success_count} keys, pool size now: {len(self.valid_keys)}.")
 
-                logger.info(f"Starting emergency async refill: need {needed} keys to reach threshold {min_threshold}")
+                    # 如果没有成功添加任何密钥，并且池仍然需要补充，则等待
+                    if success_count == 0 and len(self.valid_keys) < min_threshold:
+                        logger.info("No keys were added in this cycle. Waiting before next attempt.")
+                        await asyncio.sleep(15)
 
-                # 并发验证多个密钥
-                refill_count = min(int(settings.EMERGENCY_REFILL_COUNT), needed)
+                except Exception as e:
+                    logger.error(f"An error occurred during persistent refill cycle: {e}", exc_info=True)
+                    await asyncio.sleep(15)  # 发生异常后也等待
 
-                # 获取可能有效的密钥列表
-                available_keys = []
-                for key in self.key_manager.api_keys:
-                    if await self.key_manager.is_key_valid(key):
-                        available_keys.append(key)
-
-                if not available_keys:
-                    logger.warning("No valid API keys available for emergency async refill")
-                    return
-
-                selected_keys = random.sample(available_keys, min(refill_count, len(available_keys)))
-                logger.info(f"Emergency async refill: selected {len(selected_keys)} keys for verification")
-
-                # 并发验证
-                tasks = [self._verify_key_for_emergency(key) for key in selected_keys]
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                # 处理结果
-                success_count = 0
-                for result in results:
-                    if isinstance(result, str):  # 验证成功返回密钥
-                        # 检查池大小限制
-                        if len(self.valid_keys) >= self.pool_size:
-                            logger.warning(f"Pool size limit reached ({self.pool_size}), skipping additional keys in emergency async refill")
-                            break
-
-                        key_obj = ValidKeyWithTTL(result, self.ttl_hours)
-                        self.valid_keys.append(key_obj)
-                        self._pool_keys_set.add(key_obj.key)
-                        success_count += 1
-
-                logger.info(f"Emergency async refill completed: added {success_count} keys, pool size now: {len(self.valid_keys)}")
-
-            except Exception as e:
-                logger.error(f"Emergency async refill failed: {e}")
+            logger.info(f"Persistent emergency refill task finished. Pool size {len(self.valid_keys)} has reached threshold {min_threshold}.")
 
     async def _validate_pool_keys(self) -> None:
         """
@@ -936,7 +894,7 @@ class ValidKeyPool:
         if len(self.valid_keys) < min_threshold:
             logger.warning(f"Pool size after preload ({len(self.valid_keys)}) is below the minimum threshold ({min_threshold}). "
                            f"Triggering an emergency async refill.")
-            asyncio.create_task(self.emergency_refill_async())
+            asyncio.create_task(self._persistent_emergency_refill())
 
         return len(self.valid_keys)
 
