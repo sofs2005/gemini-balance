@@ -1936,7 +1936,8 @@ async function executeDeleteSelectedKeys(type) {
 
     if (response.success) {
       // 批量删除成功后，从DOM中移除对应的行
-      const listElement = document.getElementById(`${type}Keys`);
+      const listId = type === 'attention' ? 'attentionKeysList' : `${type}Keys`;
+      const listElement = document.getElementById(listId);
       if (listElement) {
           selectedKeys.forEach(key => {
             const listItem = listElement.querySelector(`li[data-key="${key}"]`);
