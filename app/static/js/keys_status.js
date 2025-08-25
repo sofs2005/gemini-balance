@@ -33,47 +33,40 @@ async function fetchAPI(url, options = {}) {
     const response = await fetch(url, options);
 
     if (response.status === 204) {
-      return null; // Indicate success with no content for DELETE etc.
+      return null;
     }
 
+    // First, get the response body as text, as this is the most robust method.
+    const responseText = await response.text();
+
+    // Now, try to parse the text as JSON.
     let responseData;
     try {
-      // Clone the response to allow reading it multiple times if needed (e.g., for text fallback)
-      const clonedResponse = response.clone();
-      responseData = await response.json();
+        responseData = JSON.parse(responseText);
     } catch (e) {
-      // If JSON parsing fails, try to get text, especially if response wasn't ok
-      if (!response.ok) {
-        const textResponse = await response.text(); // Use original response for text
-        throw new Error(
-          textResponse ||
-            `HTTP error! status: ${response.status} - ${response.statusText}`
-        );
-      }
-      // If response is ok but not JSON, maybe return raw text or handle differently
-      console.warn("Response was not JSON for URL:", url);
-      // Consider returning text or null based on expected non-JSON success cases
-      return await response.text(); // Example: return text for non-JSON success
+        // If JSON parsing fails and the response was not OK, throw the raw text as the error.
+        if (!response.ok) {
+            throw new Error(responseText || `HTTP error! status: ${response.status} - ${response.statusText}`);
+        }
+        // If the response was OK but not valid JSON, it might be an intentional text response.
+        console.warn("Response was not JSON for URL:", url);
+        return responseText; // Return the raw text.
     }
 
     if (!response.ok) {
-      // Prefer error message from API response body (already parsed as JSON)
+      // If the response is not OK, use the parsed JSON for a detailed error message if available.
       let message = responseData?.detail || responseData?.message || responseData?.error;
-
-      // 如果 message 是对象，尝试转换为字符串
       if (typeof message === 'object' && message !== null) {
         message = JSON.stringify(message);
       }
-
-      // 如果还是没有有效消息，使用默认错误信息
       if (!message || typeof message !== 'string') {
-        message = `HTTP error! status: ${response.status}`;
+        // Fallback to the raw text or status code if no detailed message is found.
+        message = responseText || `HTTP error! status: ${response.status}`;
       }
-
       throw new Error(message);
     }
 
-    return responseData; // Return parsed JSON data
+    return responseData; // On success, return the parsed JSON.
   } catch (error) {
     console.error(
       "API Call Failed:",

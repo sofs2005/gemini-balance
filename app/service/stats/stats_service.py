@@ -138,15 +138,17 @@ class StatsService:
                 "calls_month": default_stat.copy(),
             }
 
-    async def get_api_call_details(self, period: str) -> list[dict]:
+    async def get_api_call_details(self, period: str, page: int = 1, limit: int = 100) -> list[dict]:
         """
-        获取指定时间段内的 API 调用详情
+        获取指定时间段内的 API 调用详情 (支持分页)
 
         Args:
-            period: 时间段标识 ('1m', '1h', '24h')
+            period: 时间段标识 ('1m', '1h', '8h', '24h')
+            page: 页码 (从1开始)
+            limit: 每页数量
 
         Returns:
-            包含调用详情的字典列表，每个字典包含 timestamp, key, model, status, status_code, latency_ms, error_log_id(可选)
+            包含调用详情的字典列表
 
         Raises:
             ValueError: 如果 period 无效
@@ -163,6 +165,8 @@ class StatsService:
         else:
             raise ValueError(f"无效的时间段标识: {period}")
 
+        offset = (page - 1) * limit
+
         try:
             query = (
                 select(
@@ -174,12 +178,11 @@ class StatsService:
                 )
                 .where(RequestLog.request_time >= start_time)
                 .order_by(RequestLog.request_time.desc())
+                .limit(limit)
+                .offset(offset)
             )
 
             results = await database.fetch_all(query)
-
-            # 为失败调用尝试查找匹配的错误日志ID（时间窗口 +/- 5 分钟）
-            from app.database.models import ErrorLog  # 延迟导入避免循环依赖
 
             details: list[dict] = []
             for row in results:
@@ -195,40 +198,15 @@ class StatsService:
                     "status_code": row["status_code"],
                     "latency_ms": row["latency_ms"],
                 }
-
-                # 如果失败，尝试附带一个相关的错误日志ID，便于前端拉取详情
-                if status == "failure" and row["key"]:
-                    try:
-                        ts = row["timestamp"]
-                        start_win = ts - datetime.timedelta(minutes=5)
-                        end_win = ts + datetime.timedelta(minutes=5)
-                        err_query = (
-                            select(ErrorLog.id)
-                            .where(
-                                ErrorLog.gemini_key == row["key"],
-                                ErrorLog.request_time >= start_win,
-                                ErrorLog.request_time <= end_win,
-                            )
-                            .order_by(ErrorLog.request_time.desc())
-                            .limit(1)
-                        )
-                        err = await database.fetch_one(err_query)
-                        if err:
-                            record["error_log_id"] = err["id"]
-                    except Exception as _e:
-                        logger.debug(
-                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
-                        )
-
                 details.append(record)
 
             logger.info(
-                f"Retrieved {len(details)} API call details for period '{period}'"
+                f"Retrieved {len(details)} API call details for period '{period}', page {page}"
             )
             return details
 
         except Exception as e:
-            logger.error(f"Failed to get API call details for period '{period}': {e}")
+            logger.error(f"Failed to get API call details for period '{period}', page {page}: {e}")
             raise
 
     async def get_key_call_details(self, key: str, period: str) -> list[dict]:
