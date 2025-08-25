@@ -1,14 +1,12 @@
 # app/services/chat_service.py
 
-import datetime
 import json
 import re
+import datetime
 import time
 from typing import Any, AsyncGenerator, Dict, List
-
 from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
-from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
 from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
@@ -17,6 +15,8 @@ from app.handler.stream_optimizer import gemini_optimizer
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
+import asyncio
+from app.database.services import add_error_log, add_request_log, get_file_api_key
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
@@ -45,9 +45,7 @@ def _extract_file_references(contents: List[Dict[str, Any]]) -> List[str]:
                 file_uri = file_data["fileUri"]
                 # 從 URI 中提取文件名
                 # 1. https://generativelanguage.googleapis.com/v1beta/files/{file_id}
-                match = re.match(
-                    rf"{re.escape(settings.BASE_URL)}/(files/.*)", file_uri
-                )
+                match = re.match(rf"{re.escape(settings.BASE_URL)}/(files/.*)", file_uri)
                 if not match:
                     logger.warning(f"Invalid file URI: {file_uri}")
                     continue
@@ -60,15 +58,15 @@ def _clean_json_schema_properties(obj: Any) -> Any:
     """清理JSON Schema中Gemini API不支持的字段"""
     if not isinstance(obj, dict):
         return obj
-    
+
     # Gemini API不支持的JSON Schema字段
     unsupported_fields = {
-        "exclusiveMaximum", "exclusiveMinimum", "const", "examples", 
+        "exclusiveMaximum", "exclusiveMinimum", "const", "examples",
         "contentEncoding", "contentMediaType", "if", "then", "else",
         "allOf", "anyOf", "oneOf", "not", "definitions", "$schema",
         "$id", "$ref", "$comment", "readOnly", "writeOnly"
     }
-    
+
     cleaned = {}
     for key, value in obj.items():
         if key in unsupported_fields:
@@ -79,13 +77,13 @@ def _clean_json_schema_properties(obj: Any) -> Any:
             cleaned[key] = [_clean_json_schema_properties(item) for item in value]
         else:
             cleaned[key] = value
-    
+
     return cleaned
 
 
 def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """构建工具"""
-    
+
     def _has_function_call(contents: List[Dict[str, Any]]) -> bool:
         """检查内容中是否包含 functionCall"""
         if not contents or not isinstance(contents, list):
@@ -100,7 +98,7 @@ def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                 if isinstance(part, dict) and "functionCall" in part:
                     return True
         return False
-    
+
     def _merge_tools(tools: List[Dict[str, Any]]) -> Dict[str, Any]:
         record = dict()
         for item in tools:
@@ -124,7 +122,7 @@ def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
                     record[k] = v
         return record
 
-    def _is_structured_output_request(payload: Dict[str, Any]) -> bool:
+    def _is_structured_output_request(payload: Dict[str, Any]]) -> bool:
         """检查请求是否要求结构化JSON输出"""
         try:
             generation_config = payload.get("generationConfig", {})
@@ -151,10 +149,10 @@ def _build_tools(model: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
             and not _has_image_parts(payload.get("contents", []))
         ):
             tool["codeExecution"] = {}
-            
+
         if model.endswith("-search"):
             tool["googleSearch"] = {}
-            
+
         real_model = _get_real_model(model)
         if real_model in settings.URL_CONTEXT_MODELS and settings.URL_CONTEXT_ENABLED:
             tool["urlContext"] = {}
@@ -233,44 +231,35 @@ def _build_payload(model: str, request: GeminiRequest) -> Dict[str, Any]:
         # 非TTS模型使用完整的payload
         payload = {
             "contents": _filter_empty_parts(request_dict.get("contents", [])),
+            "tools": _build_tools(model, request_dict),
+            "safetySettings": _get_safety_settings(model),
+            "generationConfig": request_dict.get("generationConfig"),
+            "systemInstruction": request_dict.get("systemInstruction"),
         }
 
-        # 只有在提供了相应配置时才添加到payload中
-        if tools := _build_tools(model, request_dict):
-            payload["tools"] = tools
-        
-        if safety_settings := _get_safety_settings(model):
-            payload["safetySettings"] = safety_settings
-            
-        if generation_config := request_dict.get("generationConfig"):
-            payload["generationConfig"] = generation_config
-        
-        if system_instruction := request_dict.get("systemInstruction"):
-            payload["systemInstruction"] = system_instruction
-
-    # 确保 generationConfig 存在且不为 None
-    if "generationConfig" not in payload or payload["generationConfig"] is None:
+    # 确保 generationConfig 不为 None
+    if payload["generationConfig"] is None:
         payload["generationConfig"] = {}
 
     if model.endswith("-image") or model.endswith("-image-generation"):
         payload.pop("systemInstruction")
         payload["generationConfig"]["responseModalities"] = ["Text", "Image"]
-    
+
     # 处理思考配置：优先使用客户端提供的配置，否则使用默认配置
     client_thinking_config = None
     if request.generationConfig and request.generationConfig.thinkingConfig:
         client_thinking_config = request.generationConfig.thinkingConfig
-    
+
     if client_thinking_config is not None:
         # 客户端提供了思考配置，直接使用
         payload["generationConfig"]["thinkingConfig"] = client_thinking_config
     else:
-        # 客户端没有提供思考配置，使用默认配置    
+        # 客户端没有提供思考配置，使用默认配置
         if model.endswith("-non-thinking"):
             if "gemini-2.5-pro" in model:
                 payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 128}
             else:
-                payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0} 
+                payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
         elif _get_real_model(model) in settings.THINKING_BUDGET_MAP:
             if settings.SHOW_THINKING_PROCESS:
                 payload["generationConfig"]["thinkingConfig"] = {
@@ -362,7 +351,7 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
-            
+
             # 错误日志将由 handle_api_error_and_get_next_key 统一处理
 
             raise e
@@ -376,7 +365,7 @@ class GeminiChatService:
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime,
+                request_time=request_datetime
             ))
 
     @RetryHandler()
@@ -412,7 +401,7 @@ class GeminiChatService:
                 status_code = int(match.group(1))
             else:
                 status_code = 500
-            
+
             # 错误日志将由 handle_api_error_and_get_next_key 统一处理
 
             raise e
@@ -426,7 +415,7 @@ class GeminiChatService:
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime,
+                request_time=request_datetime
             ))
 
     async def stream_generate_content(
@@ -443,7 +432,7 @@ class GeminiChatService:
                 api_key = file_api_key  # 使用文件的 API key
             else:
                 logger.warning(f"No API key found for file {file_names[0]}, using default key: {redact_key_for_logging(api_key)}")
-                
+
         retries = 0
         max_retries = settings.MAX_RETRIES
         payload = _build_payload(model, request)
@@ -510,7 +499,9 @@ class GeminiChatService:
                     break
 
                 if retries >= max_retries:
-                    logger.error(f"Max retries ({max_retries}) reached for streaming.")
+                    logger.error(
+                        f"Max retries ({max_retries}) reached for streaming."
+                    )
                     break
             finally:
                 end_time = time.perf_counter()
@@ -521,5 +512,5 @@ class GeminiChatService:
                     is_success=is_success,
                     status_code=status_code,
                     latency_ms=latency_ms,
-                    request_time=request_datetime,
+                    request_time=request_datetime
                 ))
