@@ -293,7 +293,7 @@ class KeyManager:
             tz = pytz.utc
 
         now = datetime.now(tz)
-        reset_hour = settings.GEMINI_QUOTA_RESET_HOUR
+        reset_hour = int(settings.GEMINI_QUOTA_RESET_HOUR)
         
         # 计算下一个重置时间
         reset_time_today = now.replace(hour=reset_hour, minute=0, second=0, microsecond=0)
