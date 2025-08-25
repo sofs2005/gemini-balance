@@ -355,7 +355,9 @@ class GeminiChatService:
                 status_code = 500
             
             # 错误日志将由 handle_api_error_and_get_next_key 统一处理
-            
+            await handle_api_error_and_get_next_key(
+                self.key_manager, e, final_api_key, model
+            )
             raise e
         finally:
             # 记录请求日志
