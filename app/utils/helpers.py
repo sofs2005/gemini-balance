@@ -207,6 +207,5 @@ def is_image_upload_configured() -> bool:
         return all([
             getattr(settings, "CLOUDFLARE_IMGBED_URL", ""),
             getattr(settings, "CLOUDFLARE_IMGBED_AUTH_CODE", ""),
-            getattr(settings, "CLOUDFLARE_IMGBED_UPLOAD_FOLDER", ""),
         ])
     return False
