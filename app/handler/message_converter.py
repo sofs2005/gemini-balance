@@ -27,7 +27,7 @@ class MessageConverter(ABC):
 
     @abstractmethod
     def convert(
-        self, messages: List[Dict[str, Any]]
+        self, messages: List[Dict[str, Any]], model: str
     ) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         pass
 
@@ -84,7 +84,7 @@ def _convert_image_to_base64(url: str) -> str:
         raise Exception(f"Failed to fetch image: {response.status_code}")
 
 
-def _process_text_with_image(text: str) -> List[Dict[str, Any]]:
+def _process_text_with_image(text: str, model: str) -> List[Dict[str, Any]]:
     """
     处理可能包含图片URL的文本，提取图片并转换为base64
 
@@ -94,17 +94,31 @@ def _process_text_with_image(text: str) -> List[Dict[str, Any]]:
     Returns:
         List[Dict[str, Any]]: 包含文本和图片的部分列表
     """
+    # 如果模型名中没有包含image，当作普通文本处理
+    if "image" not in model:
+        return [{"text": text}]
     parts = []
     img_url_match = re.search(IMAGE_URL_PATTERN, text)
     if img_url_match:
         # 提取URL
         img_url = img_url_match.group(2)
-        # 将URL对应的图片转换为base64
+        # 先判断是否是base64url如果是，直接用，不过不是，再将URL对应的图片转换为base64
         try:
-            base64_data = _convert_image_to_base64(img_url)
-            parts.append(
-                {"inline_data": {"mimeType": "image/png", "data": base64_data}}
-            )
+            base64_url_match = re.search(DATA_URL_PATTERN, img_url)
+            if base64_url_match:
+                parts.append(
+                    {
+                        "inline_data": {
+                            "mimeType": base64_url_match.group(1),
+                            "data": base64_url_match.group(2),
+                        }
+                    }
+                )
+            else:
+                base64_data = _convert_image_to_base64(img_url)
+                parts.append(
+                    {"inline_data": {"mimeType": "image/png", "data": base64_data}}
+                )
         except Exception:
             # 如果转换失败，回退到文本模式
             parts.append({"text": text})
@@ -145,7 +159,7 @@ class OpenAIMessageConverter(MessageConverter):
             raise
 
     def convert(
-        self, messages: List[Dict[str, Any]]
+        self, messages: List[Dict[str, Any]], model: str
     ) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         converted_messages = []
         system_instruction_parts = []
@@ -296,7 +310,7 @@ class OpenAIMessageConverter(MessageConverter):
             elif (
                 "content" in msg and isinstance(msg["content"], str) and msg["content"]
             ):
-                parts.extend(_process_text_with_image(msg["content"]))
+                parts.extend(_process_text_with_image(msg["content"], model))
             elif "tool_calls" in msg and isinstance(msg["tool_calls"], list):
                 # Keep existing tool call processing
                 for tool_call in msg["tool_calls"]:

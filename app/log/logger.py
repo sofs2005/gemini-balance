@@ -1,9 +1,8 @@
 import logging
 import platform
-import sys
 import re
+import sys
 from typing import Dict, Optional
-from app.utils.helpers import redact_key_for_logging as _redact_key_for_logging
 
 # ANSI转义序列颜色代码
 COLORS = {
@@ -13,7 +12,6 @@ COLORS = {
     "ERROR": "\033[31m",  # 红色
     "CRITICAL": "\033[1;31m",  # 红色加粗
 }
-
 
 
 # Windows系统启用ANSI支持
@@ -46,14 +44,16 @@ class AccessLogFormatter(logging.Formatter):
 
     # API key patterns to match in URLs
     API_KEY_PATTERNS = [
-        r'\bAIza[0-9A-Za-z_-]{35}',  # Google API keys (like Gemini)
-        r'\bsk-[0-9A-Za-z_-]{20,}',  # OpenAI and general sk- prefixed keys
+        r"\bAIza[0-9A-Za-z_-]{35}",  # Google API keys (like Gemini)
+        r"\bsk-[0-9A-Za-z_-]{20,}",  # OpenAI and general sk- prefixed keys
     ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Compile regex patterns for better performance
-        self.compiled_patterns = [re.compile(pattern) for pattern in self.API_KEY_PATTERNS]
+        self.compiled_patterns = [
+            re.compile(pattern) for pattern in self.API_KEY_PATTERNS
+        ]
 
     def format(self, record):
         # Format the record normally first
@@ -68,9 +68,10 @@ class AccessLogFormatter(logging.Formatter):
         """
         try:
             for pattern in self.compiled_patterns:
+
                 def replace_key(match):
                     key = match.group(0)
-                    return _redact_key_for_logging(key)
+                    return redact_key_for_logging(key)
 
                 message = pattern.sub(replace_key, message)
 
@@ -78,9 +79,29 @@ class AccessLogFormatter(logging.Formatter):
         except Exception as e:
             # Log the error but don't expose the original message in case it contains keys
             import logging
+
             logger = logging.getLogger(__name__)
             logger.error(f"Error redacting API keys in access log: {e}")
             return "[LOG_REDACTION_ERROR]"
+
+
+def redact_key_for_logging(key: str) -> str:
+    """
+    Redacts API key for secure logging by showing only first and last 6 characters.
+
+    Args:
+        key: API key to redact
+
+    Returns:
+        str: Redacted key in format "first6...last6" or descriptive placeholder for edge cases
+    """
+    if not key:
+        return key
+
+    if len(key) <= 12:
+        return f"{key[:3]}...{key[-3:]}"
+    else:
+        return f"{key[:6]}...{key[-6:]}"
 
 
 # 日志格式 - 使用 fileloc 并设置固定宽度 (例如 30)

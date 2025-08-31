@@ -286,7 +286,9 @@ class OpenAIChatService:
         api_key: str,
     ) -> Union[Dict[str, Any], AsyncGenerator[str, None]]:
         """创建聊天完成"""
-        messages, instruction = self.message_converter.convert(request.messages)
+        messages, instruction = self.message_converter.convert(
+            request.messages, request.model
+        )
 
         payload = _build_payload(request, messages, instruction)
 

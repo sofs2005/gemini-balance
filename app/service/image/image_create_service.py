@@ -9,8 +9,8 @@ from app.config.config import settings
 from app.core.constants import VALID_IMAGE_RATIOS
 from app.domain.openai_models import ImageGenerationRequest
 from app.log.logger import get_image_create_logger
-from app.utils.uploader import ImageUploaderFactory
 from app.utils.helpers import is_image_upload_configured
+from app.utils.uploader import ImageUploaderFactory
 
 logger = get_image_create_logger()
 
@@ -99,7 +99,10 @@ class ImageCreateService:
                 image_uploader = None
 
                 # Return base64 if explicitly requested or if no uploader is configured
-                if request.response_format == "b64_json" or not is_image_upload_configured():
+                if (
+                    request.response_format == "b64_json"
+                    or not is_image_upload_configured(settings)
+                ):
                     base64_image = base64.b64encode(image_data).decode("utf-8")
                     images_data.append(
                         {"b64_json": base64_image, "revised_prompt": request.prompt}

@@ -8,9 +8,9 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from app.config.config import settings
-from app.utils.uploader import ImageUploaderFactory
 from app.log.logger import get_openai_logger
 from app.utils.helpers import is_image_upload_configured
+from app.utils.uploader import ImageUploaderFactory
 
 logger = get_openai_logger()
 
@@ -33,7 +33,11 @@ class GeminiResponseHandler(ResponseHandler):
         self.thinking_status = False
 
     def handle_response(
-        self, response: Dict[str, Any], model: str, stream: bool = False, usage_metadata: Optional[Dict[str, Any]] = None
+        self,
+        response: Dict[str, Any],
+        model: str,
+        stream: bool = False,
+        usage_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if stream:
             return _handle_gemini_stream_response(response, model, stream)
@@ -41,7 +45,10 @@ class GeminiResponseHandler(ResponseHandler):
 
 
 def _handle_openai_stream_response(
-    response: Dict[str, Any], model: str, finish_reason: str, usage_metadata: Optional[Dict[str, Any]]
+    response: Dict[str, Any],
+    model: str,
+    finish_reason: str,
+    usage_metadata: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     choices = []
     candidates = response.get("candidates", [])
@@ -55,15 +62,15 @@ def _handle_openai_stream_response(
         if not text and not tool_calls and not reasoning_content:
             delta = {}
         else:
-            delta = {"content": text, "reasoning_content": reasoning_content, "role": "assistant"}
+            delta = {
+                "content": text,
+                "reasoning_content": reasoning_content,
+                "role": "assistant",
+            }
             if tool_calls:
                 delta["tool_calls"] = tool_calls
-        
-        choice = {
-            "index": index,
-            "delta": delta,
-            "finish_reason": finish_reason
-        }
+
+        choice = {"index": index, "delta": delta, "finish_reason": finish_reason}
         choices.append(choice)
 
     template_chunk = {
@@ -74,16 +81,23 @@ def _handle_openai_stream_response(
         "choices": choices,
     }
     if usage_metadata:
-        template_chunk["usage"] = {"prompt_tokens": usage_metadata.get("promptTokenCount", 0), "completion_tokens": usage_metadata.get("candidatesTokenCount",0), "total_tokens": usage_metadata.get("totalTokenCount", 0)}
+        template_chunk["usage"] = {
+            "prompt_tokens": usage_metadata.get("promptTokenCount", 0),
+            "completion_tokens": usage_metadata.get("candidatesTokenCount", 0),
+            "total_tokens": usage_metadata.get("totalTokenCount", 0),
+        }
     return template_chunk
 
 
 def _handle_openai_normal_response(
-    response: Dict[str, Any], model: str, finish_reason: str, usage_metadata: Optional[Dict[str, Any]]
+    response: Dict[str, Any],
+    model: str,
+    finish_reason: str,
+    usage_metadata: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     choices = []
     candidates = response.get("candidates", [])
-    
+
     for i, candidate in enumerate(candidates):
         text, reasoning_content, tool_calls, _ = _extract_result(
             {"candidates": [candidate]}, model, stream=False, gemini_format=False
@@ -106,7 +120,11 @@ def _handle_openai_normal_response(
         "created": int(time.time()),
         "model": model,
         "choices": choices,
-        "usage": {"prompt_tokens": usage_metadata.get("promptTokenCount", 0), "completion_tokens": usage_metadata.get("candidatesTokenCount",0), "total_tokens": usage_metadata.get("totalTokenCount", 0)},
+        "usage": {
+            "prompt_tokens": usage_metadata.get("promptTokenCount", 0),
+            "completion_tokens": usage_metadata.get("candidatesTokenCount", 0),
+            "total_tokens": usage_metadata.get("totalTokenCount", 0),
+        },
     }
 
 
@@ -127,8 +145,12 @@ class OpenAIResponseHandler(ResponseHandler):
         usage_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         if stream:
-            return _handle_openai_stream_response(response, model, finish_reason, usage_metadata)
-        return _handle_openai_normal_response(response, model, finish_reason, usage_metadata)
+            return _handle_openai_stream_response(
+                response, model, finish_reason, usage_metadata
+            )
+        return _handle_openai_normal_response(
+            response, model, finish_reason, usage_metadata
+        )
 
     def handle_image_chat_response(
         self, image_str: str, model: str, stream=False, finish_reason="stop"
@@ -182,7 +204,7 @@ def _extract_result(
     gemini_format: bool = False,
 ) -> tuple[str, Optional[str], List[Dict[str, Any]], Optional[bool]]:
     text, reasoning_content, tool_calls, thought = "", "", [], None
-    
+
     if stream:
         if response.get("candidates"):
             candidate = response["candidates"][0]
@@ -191,7 +213,7 @@ def _extract_result(
             if not parts:
                 logger.warning("No parts found in stream response")
                 return "", None, [], None
-            
+
             if "text" in parts[0]:
                 text = parts[0].get("text")
                 if "thought" in parts[0]:
@@ -217,13 +239,13 @@ def _extract_result(
         if response.get("candidates"):
             candidate = response["candidates"][0]
             text, reasoning_content = "", ""
-            
+
             # 使用安全的访问方式
             content = candidate.get("content", {})
-            
+
             if content and isinstance(content, dict):
                 parts = content.get("parts", [])
-                
+
                 if parts:
                     for part in parts:
                         if "text" in part:
@@ -241,14 +263,14 @@ def _extract_result(
                 logger.error(f"Invalid content structure for model: {model}")
 
             text = _add_search_link_text(model, candidate, text)
-            
+
             # 安全地获取 parts 用于工具调用提取
             parts = candidate.get("content", {}).get("parts", [])
             tool_calls = _extract_tool_calls(parts, gemini_format)
         else:
             logger.warning(f"No candidates found in response for model: {model}")
             text = "暂无返回"
-    
+
     return text, reasoning_content, tool_calls, thought
 
 
@@ -264,10 +286,6 @@ def _has_inline_image_part(response: Dict[str, Any]) -> bool:
 
 
 def _extract_image_data(part: dict) -> str:
-    # Return empty string if no uploader is configured
-    if not is_image_upload_configured():
-        return ""
-    
     image_uploader = None
     if settings.UPLOAD_PROVIDER == "smms":
         image_uploader = ImageUploaderFactory.create(
@@ -289,13 +307,17 @@ def _extract_image_data(part: dict) -> str:
     current_date = time.strftime("%Y/%m/%d")
     filename = f"{current_date}/{uuid.uuid4().hex[:8]}.png"
     base64_data = part["inlineData"]["data"]
+    mime_type = part["inlineData"]["mimeType"]
     # 将base64_data转成bytes数组
+    # Return empty string if no uploader is configured
+    if not is_image_upload_configured(settings):
+        return f"\n\n![image](data:{mime_type};base64,{base64_data})\n\n"
     bytes_data = base64.b64decode(base64_data)
     upload_response = image_uploader.upload(bytes_data, filename)
     if upload_response.success:
         text = f"\n\n![image]({upload_response.data.url})\n\n"
     else:
-        text = ""
+        text = f"\n\n![image](data:{mime_type};base64,{base64_data})\n\n"
     return text
 
 
@@ -308,7 +330,7 @@ def _extract_tool_calls(
 
     letters = string.ascii_lowercase + string.digits
     tool_calls = list()
-    
+
     for i in range(len(parts)):
         part = parts[i]
         if not part or not isinstance(part, dict):
@@ -317,7 +339,7 @@ def _extract_tool_calls(
         item = part.get("functionCall", {})
         if not item or not isinstance(item, dict):
             continue
-        
+
         if gemini_format:
             tool_calls.append(part)
         else:
@@ -341,9 +363,9 @@ def _handle_gemini_stream_response(
     response: Dict[str, Any], model: str, stream: bool
 ) -> Dict[str, Any]:
     # Early return raw Gemini response if no uploader configured and contains inline images
-    if not is_image_upload_configured() and _has_inline_image_part(response):
+    if not is_image_upload_configured(settings) and _has_inline_image_part(response):
         return response
-    
+
     text, reasoning_content, tool_calls, thought = _extract_result(
         response, model, stream=stream, gemini_format=True
     )
@@ -362,9 +384,9 @@ def _handle_gemini_normal_response(
     response: Dict[str, Any], model: str, stream: bool
 ) -> Dict[str, Any]:
     # Early return raw Gemini response if no uploader configured and contains inline images
-    if not is_image_upload_configured() and _has_inline_image_part(response):
+    if not is_image_upload_configured(settings) and _has_inline_image_part(response):
         return response
-    
+
     text, reasoning_content, tool_calls, thought = _extract_result(
         response, model, stream=stream, gemini_format=True
     )
@@ -373,7 +395,7 @@ def _handle_gemini_normal_response(
         parts = tool_calls
     else:
         if thought is not None:
-            parts.append({"text": reasoning_content,"thought": thought})
+            parts.append({"text": reasoning_content, "thought": thought})
         part = {"text": text}
         parts.append(part)
     content = {"parts": parts, "role": "model"}
