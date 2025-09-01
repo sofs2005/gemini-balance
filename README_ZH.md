@@ -166,6 +166,74 @@ app/
 - **配置管理**: `http://localhost:8000/config`
 - **错误日志**: `http://localhost:8000/error_logs`
 
+<<<<<<< HEAD
+=======
+| 配置项 | 说明 | 默认值 |
+| :--- | :--- | :--- |
+| **数据库配置** | | |
+| `DATABASE_TYPE` | 数据库类型: `mysql` 或 `sqlite` | `mysql` |
+| `SQLITE_DATABASE` | 当使用 `sqlite` 时必填，SQLite 数据库文件路径 | `default_db` |
+| `MYSQL_HOST` | 当使用 `mysql` 时必填，MySQL 数据库主机地址 | `localhost` |
+| `MYSQL_SOCKET` | 可选，MySQL 数据库 socket 地址 | `/var/run/mysqld/mysqld.sock` |
+| `MYSQL_PORT` | 当使用 `mysql` 时必填，MySQL 数据库端口 | `3306` |
+| `MYSQL_USER` | 当使用 `mysql` 时必填，MySQL 数据库用户名 | `your_db_user` |
+| `MYSQL_PASSWORD` | 当使用 `mysql` 时必填，MySQL 数据库密码 | `your_db_password` |
+| `MYSQL_DATABASE` | 当使用 `mysql` 时必填，MySQL 数据库名称 | `defaultdb` |
+| **API 相关配置** | | |
+| `API_KEYS` | **必填**, Gemini API 密钥列表，用于负载均衡 | `[]` |
+| `ALLOWED_TOKENS` | **必填**, 允许访问的 Token 列表 | `[]` |
+| `AUTH_TOKEN` | 超级管理员 Token，不填则使用 `ALLOWED_TOKENS` 的第一个 | `sk-123456` |
+| `TEST_MODEL` | 用于测试密钥可用性的模型 | `gemini-1.5-flash` |
+| `IMAGE_MODELS` | 支持绘图功能的模型列表 | `["gemini-2.0-flash-exp"]` |
+| `SEARCH_MODELS` | 支持搜索功能的模型列表 | `["gemini-2.0-flash-exp"]` |
+| `FILTERED_MODELS` | 被禁用的模型列表 | `[]` |
+| `TOOLS_CODE_EXECUTION_ENABLED` | 是否启用代码执行工具 | `false` |
+| `SHOW_SEARCH_LINK` | 是否在响应中显示搜索结果链接 | `true` |
+| `SHOW_THINKING_PROCESS` | 是否显示模型思考过程 | `true` |
+| `THINKING_MODELS` | 支持思考功能的模型列表 | `[]` |
+| `THINKING_BUDGET_MAP` | 思考功能预算映射 (模型名:预算值) | `{}` |
+| `URL_NORMALIZATION_ENABLED` | 是否启用智能路由映射功能 | `false` |
+| `URL_CONTEXT_ENABLED` | 是否启用URL上下文理解功能 | `false` |
+| `URL_CONTEXT_MODELS` | 支持URL上下文理解功能的模型列表 | `[]` |
+| `BASE_URL` | Gemini API 基础 URL | `https://generativelanguage.googleapis.com/v1beta` |
+| `MAX_FAILURES` | 单个 Key 允许的最大失败次数 | `3` |
+| `MAX_RETRIES` | API 请求失败时的最大重试次数 | `3` |
+| `CHECK_INTERVAL_HOURS` | 禁用 Key 恢复检查间隔 (小时) | `1` |
+| `TIMEZONE` | 应用程序使用的时区 | `Asia/Shanghai` |
+| `TIME_OUT` | 请求超时时间 (秒) | `300` |
+| `PROXIES` | 代理服务器列表 (例如 `http://user:pass@host:port`) | `[]` |
+| **日志与安全** | | |
+| `LOG_LEVEL` | 日志级别: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `AUTO_DELETE_ERROR_LOGS_ENABLED` | 是否自动删除错误日志 | `true` |
+| `AUTO_DELETE_ERROR_LOGS_DAYS` | 错误日志保留天数 | `7` |
+| `AUTO_DELETE_REQUEST_LOGS_ENABLED`| 是否自动删除请求日志 | `false` |
+| `AUTO_DELETE_REQUEST_LOGS_DAYS` | 请求日志保留天数 | `30` |
+| `SAFETY_SETTINGS` | 内容安全阈值 (JSON 字符串) | `[{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "OFF"}, ...]` |
+| **TTS 相关** | | |
+| `TTS_MODEL` | TTS 模型名称 | `gemini-2.5-flash-preview-tts` |
+| `TTS_VOICE_NAME` | TTS 语音名称 | `Zephyr` |
+| `TTS_SPEED` | TTS 语速 | `normal` |
+| **图像生成相关** | | |
+| `PAID_KEY` | 付费版API Key，用于图片生成等高级功能 | `your-paid-api-key` |
+| `CREATE_IMAGE_MODEL` | 图片生成模型 | `imagen-3.0-generate-002` |
+| `UPLOAD_PROVIDER` | 图片上传提供商: `smms`, `picgo`, `cloudflare_imgbed` | `smms` |
+| `SMMS_SECRET_TOKEN` | SM.MS图床的API Token | `your-smms-token` |
+| `PICGO_API_KEY` | [PicoGo](https://www.picgo.net/)图床的API Key | `your-picogo-apikey` |
+| `PICGO_API_URL` | [PicoGo](https://www.picgo.net/)图床的API服务器地址 | `https://www.picgo.net/api/1/upload` |
+| `CLOUDFLARE_IMGBED_URL` | [CloudFlare](https://github.com/MarSeventh/CloudFlare-ImgBed) 图床上传地址 | `https://xxxxxxx.pages.dev/upload` |
+| `CLOUDFLARE_IMGBED_AUTH_CODE`| CloudFlare图床的鉴权key | `your-cloudflare-imgber-auth-code` |
+| `CLOUDFLARE_IMGBED_UPLOAD_FOLDER`| CloudFlare图床的上传文件夹路径 | `""` |
+| **流式优化器相关** | | |
+| `STREAM_OPTIMIZER_ENABLED` | 是否启用流式输出优化 | `false` |
+| `STREAM_MIN_DELAY` | 流式输出最小延迟 | `0.016` |
+| `STREAM_MAX_DELAY` | 流式输出最大延迟 | `0.024` |
+| `STREAM_SHORT_TEXT_THRESHOLD`| 短文本阈值 | `10` |
+| `STREAM_LONG_TEXT_THRESHOLD` | 长文本阈值 | `50` |
+| `STREAM_CHUNK_SIZE` | 流式输出块大小 | `5` |
+| **伪流式 (Fake Stream) 相关** | | |
+| `FAKE_STREAM_ENABLED` | 是否启用伪流式传输 | `false` |
+| `FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS` | 伪流式传输时发送心跳空数据的间隔秒数 | `5` |
+>>>>>>> 5f6eba6 (feat: 增加配置页面的picgo 自定义url, 处理自定义picgo的返回结果)
 
 
 ## 🎁 项目支持

@@ -1886,6 +1886,23 @@ endblock %} {% block head_extra_styles %}
           <small class="text-gray-500 mt-1 block">SM.MS图床的密钥</small>
         </div>
 
+        <!-- PicGo API URL -->
+        <div class="mb-6 provider-config" data-provider="picgo">
+          <label
+            for="PICGO_API_URL"
+            class="block font-semibold mb-2 text-gray-700"
+            >PicGo API地址</label
+          >
+          <input
+            type="text"
+            id="PICGO_API_URL"
+            name="PICGO_API_URL"
+            placeholder="https://www.picgo.net/api/1/upload"
+            class="w-full px-4 py-3 rounded-lg form-input-themed"
+          />
+          <small class="text-gray-500 mt-1 block">PicGo服务器的API地址，默认为 https://www.picgo.net/api/1/upload</small>
+        </div>
+
         <!-- PicGo API密钥 -->
         <div class="mb-6 provider-config" data-provider="picgo">
           <label

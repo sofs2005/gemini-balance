@@ -179,9 +179,22 @@ class PicGoUploader(ImageUploader):
         """
         try:
             # 准备请求头
-            headers = {
-                "X-API-Key": self.api_key
-            }
+            headers = {}
+            
+            # 构建请求URL
+            request_url = self.api_url
+            
+            # 判断是否为默认PicGo URL，如果是则使用header认证，否则使用URL参数认证
+            if self.api_url == "https://www.picgo.net/api/1/upload":
+                headers["X-API-Key"] = self.api_key
+            else:
+                # 对于自定义URL，将API key作为查询参数添加到URL中
+                from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+                parsed_url = urlparse(request_url)
+                query_params = parse_qs(parsed_url.query)
+                query_params["key"] = self.api_key
+                new_query = urlencode(query_params, doseq=True)
+                request_url = urlunparse(parsed_url._replace(query=new_query))
             
             # 准备文件数据
             files = {
@@ -190,7 +203,7 @@ class PicGoUploader(ImageUploader):
             
             # 发送请求
             response = requests.post(
-                self.api_url,
+                request_url,
                 headers=headers,
                 files=files
             )
@@ -201,6 +214,34 @@ class PicGoUploader(ImageUploader):
             # 解析响应
             result = response.json()
             
+            # 处理自定义PicGo服务器的响应格式
+            if "success" in result and "result" in result:
+                # 自定义PicGo服务器格式: {"success": true, "result": ["url"]}
+                if result["success"]:
+                    image_url = result["result"][0] if result["result"] and len(result["result"]) > 0 else ""
+                    image_metadata = ImageMetadata(
+                        width=0,
+                        height=0,
+                        filename=filename,
+                        size=0,
+                        url=image_url,
+                        delete_url=None
+                    )
+                    return UploadResponse(
+                        success=True,
+                        code="success",
+                        message="Upload success",
+                        data=image_metadata
+                    )
+                else:
+                    raise UploadError(
+                        message="Upload failed",
+                        error_type=UploadErrorType.SERVER_ERROR,
+                        status_code=400,
+                        details=result
+                    )
+            
+            # 处理官方PicGo服务器的响应格式
             # 验证上传是否成功
             if result.get("status_code") != 200:
                 error_message = "Upload failed"

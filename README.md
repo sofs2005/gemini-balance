@@ -161,10 +161,120 @@ This endpoint is directly forwarded to official OpenAI Compatible API format end
 
 ### Web Interface
 
+<<<<<<< HEAD
 - **Main Interface**: `http://localhost:8000`
 - **Key Management**: `http://localhost:8000/keys_status`
 - **Configuration**: `http://localhost:8000/config`
 - **Error Logs**: `http://localhost:8000/error_logs`
+=======
+<details>
+<summary>📋 View Full Configuration List</summary>
+
+| Configuration Item | Description | Default Value |
+| :--- | :--- | :--- |
+| **Database** | | |
+| `DATABASE_TYPE` | `mysql` or `sqlite` | `mysql` |
+| `SQLITE_DATABASE` | Path for SQLite database file | `default_db` |
+| `MYSQL_HOST` | MySQL host address | `localhost` |
+| `MYSQL_SOCKET` | MySQL socket address | `/var/run/mysqld/mysqld.sock` |
+| `MYSQL_PORT` | MySQL port | `3306` |
+| `MYSQL_USER` | MySQL username | `your_db_user` |
+| `MYSQL_PASSWORD` | MySQL password | `your_db_password` |
+| `MYSQL_DATABASE` | MySQL database name | `defaultdb` |
+| **API** | | |
+| `API_KEYS` | **Required**, list of Gemini API keys | `[]` |
+| `ALLOWED_TOKENS` | **Required**, list of access tokens | `[]` |
+| `AUTH_TOKEN` | Super admin token, defaults to the first of `ALLOWED_TOKENS` | `sk-123456` |
+| `ADMIN_SESSION_EXPIRE` | Admin session expiration time in seconds (5 minutes to 24 hours) | `3600` |
+| `TEST_MODEL` | Model for testing key validity | `gemini-1.5-flash` |
+| `IMAGE_MODELS` | Models supporting image generation | `["gemini-2.0-flash-exp"]` |
+| `SEARCH_MODELS` | Models supporting web search | `["gemini-2.0-flash-exp"]` |
+| `FILTERED_MODELS` | Disabled models | `[]` |
+| `TOOLS_CODE_EXECUTION_ENABLED` | Enable code execution tool | `false` |
+| `SHOW_SEARCH_LINK` | Display search result links in response | `true` |
+| `SHOW_THINKING_PROCESS` | Display model's thinking process | `true` |
+| `THINKING_MODELS` | Models supporting thinking process | `[]` |
+| `THINKING_BUDGET_MAP` | Budget map for thinking function (model:budget) | `{}` |
+| `URL_NORMALIZATION_ENABLED` | Enable smart URL routing | `false` |
+| `URL_CONTEXT_ENABLED` | Enable URL context understanding | `false` |
+| `URL_CONTEXT_MODELS` | Models supporting URL context | `[]` |
+| `BASE_URL` | Gemini API base URL | `https://generativelanguage.googleapis.com/v1beta` |
+| `MAX_FAILURES` | Max failures allowed per key | `3` |
+| `MAX_RETRIES` | Max retries for failed API requests | `3` |
+| `CHECK_INTERVAL_HOURS` | Interval (hours) to re-check disabled keys | `1` |
+| `TIMEZONE` | Application timezone | `Asia/Shanghai` |
+| `TIME_OUT` | Request timeout (seconds) | `300` |
+| `PROXIES` | List of proxy servers | `[]` |
+| **Logging & Security** | | |
+| `LOG_LEVEL` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `AUTO_DELETE_ERROR_LOGS_ENABLED` | Auto-delete error logs | `true` |
+| `AUTO_DELETE_ERROR_LOGS_DAYS` | Error log retention period (days) | `7` |
+| `AUTO_DELETE_REQUEST_LOGS_ENABLED`| Auto-delete request logs | `false` |
+| `AUTO_DELETE_REQUEST_LOGS_DAYS` | Request log retention period (days) | `30` |
+| `SAFETY_SETTINGS` | Content safety thresholds (JSON string) | `[{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "OFF"}, ...]` |
+| **TTS** | | |
+| `TTS_MODEL` | TTS model name | `gemini-2.5-flash-preview-tts` |
+| `TTS_VOICE_NAME` | TTS voice name | `Zephyr` |
+| `TTS_SPEED` | TTS speed | `normal` |
+| **Image Generation** | | |
+| `PAID_KEY` | Paid API Key for advanced features | `your-paid-api-key` |
+| `CREATE_IMAGE_MODEL` | Image generation model | `imagen-3.0-generate-002` |
+| `UPLOAD_PROVIDER` | Image upload provider: `smms`, `picgo`, `cloudflare_imgbed` | `smms` |
+| `SMMS_SECRET_TOKEN` | SM.MS API Token | `your-smms-token` |
+| `PICGO_API_KEY` | PicoGo API Key | `your-picogo-apikey` |
+| `PICGO_API_URL` | PicoGo API Server URL | `https://www.picgo.net/api/1/upload` |
+| `CLOUDFLARE_IMGBED_URL` | CloudFlare ImgBed upload URL | `https://xxxxxxx.pages.dev/upload` |
+| `CLOUDFLARE_IMGBED_AUTH_CODE`| CloudFlare ImgBed auth key | `your-cloudflare-imgber-auth-code` |
+| `CLOUDFLARE_IMGBED_UPLOAD_FOLDER`| CloudFlare ImgBed upload folder | `""` |
+| **Stream Optimizer** | | |
+| `STREAM_OPTIMIZER_ENABLED` | Enable stream output optimization | `false` |
+| `STREAM_MIN_DELAY` | Minimum stream output delay | `0.016` |
+| `STREAM_MAX_DELAY` | Maximum stream output delay | `0.024` |
+| `STREAM_SHORT_TEXT_THRESHOLD`| Short text threshold | `10` |
+| `STREAM_LONG_TEXT_THRESHOLD` | Long text threshold | `50` |
+| `STREAM_CHUNK_SIZE` | Stream output chunk size | `5` |
+| **Fake Stream** | | |
+| `FAKE_STREAM_ENABLED` | Enable fake streaming | `false` |
+| `FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS` | Heartbeat interval for fake streaming (seconds) | `5` |
+
+</details>
+
+---
+
+## 🤝 Contributing
+
+Pull Requests or Issues are welcome.
+
+[![Contributors](https://contrib.rocks/image?repo=snailyp/gemini-balance)](https://github.com/snailyp/gemini-balance/graphs/contributors)
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=snailyp/gemini-balance&type=Date)](https://star-history.com/#snailyp/gemini-balance&Date)
+
+## 🎉 Special Thanks
+
+*   [PicGo](https://www.picgo.net/)
+*   [SM.MS](https://smms.app/)
+*   [CloudFlare-ImgBed](https://github.com/MarSeventh/CloudFlare-ImgBed)
+
+## 🙏 Our Supporters
+
+A special shout-out to [DigitalOcean](https://m.do.co/c/b249dd7f3b4c) for providing the rock-solid and dependable cloud infrastructure that keeps this project humming!
+
+<a href="https://m.do.co/c/b249dd7f3b4c">
+  <img src="files/dataocean.svg" alt="DigitalOcean Logo" width="200"/>
+</a>
+
+CDN acceleration and security protection for this project are sponsored by [Tencent EdgeOne](https://edgeone.ai/?from=github).
+
+<a href="https://edgeone.ai/?from=github">
+  <img src="https://edgeone.ai/media/34fe3a45-492d-4ea4-ae5d-ea1087ca7b4b.png" alt="EdgeOne Logo" width="200"/>
+</a>
+
+## 💖 Friendly Projects
+
+*   **[OneLine](https://github.com/chengtx809/OneLine)** by [chengtx809](https://github.com/chengtx809) - AI-driven hot event timeline generation tool.
+>>>>>>> 5f6eba6 (feat: 增加配置页面的picgo 自定义url, 处理自定义picgo的返回结果)
 
 ## 🎁 Project Support
 
