@@ -999,8 +999,9 @@ endblock %} {% block head_extra_styles %}
         <!-- API密钥列表 -->
         <div class="mb-6">
           <label for="API_KEYS" class="block font-semibold mb-2 text-gray-800"
-            >API密钥列表</label
-          >
+            >API密钥列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Gemini API密钥列表，每行一个"></i>
+          </label>
           <div class="mb-2">
             <input
               type="search"
@@ -1051,9 +1052,7 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加密钥
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >Gemini API密钥列表，每行一个</small
-          >
+          </div>
         </div>
 
         <!-- 允许的令牌列表 -->
