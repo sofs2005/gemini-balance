@@ -186,9 +186,9 @@ This endpoint is directly forwarded to official OpenAI Compatible API format end
 | `ALLOWED_TOKENS` | **Required**, list of access tokens | `[]` |
 | `AUTH_TOKEN` | Super admin token, defaults to the first of `ALLOWED_TOKENS` | `sk-123456` |
 | `ADMIN_SESSION_EXPIRE` | Admin session expiration time in seconds (5 minutes to 24 hours) | `3600` |
-| `TEST_MODEL` | Model for testing key validity | `gemini-1.5-flash` |
-| `IMAGE_MODELS` | Models supporting image generation | `["gemini-2.0-flash-exp"]` |
-| `SEARCH_MODELS` | Models supporting web search | `["gemini-2.0-flash-exp"]` |
+| `TEST_MODEL` | Model for testing key validity | `gemini-2.5-flash-lite` |
+| `IMAGE_MODELS` | Models supporting image generation | `["gemini-2.0-flash-exp", "gemini-2.5-flash-image-preview"]` |
+| `SEARCH_MODELS` | Models supporting web search | `["gemini-2.5-flash","gemini-2.5-pro"]` |
 | `FILTERED_MODELS` | Disabled models | `[]` |
 | `TOOLS_CODE_EXECUTION_ENABLED` | Enable code execution tool | `false` |
 | `SHOW_SEARCH_LINK` | Display search result links in response | `true` |

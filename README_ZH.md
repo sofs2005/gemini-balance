@@ -183,9 +183,9 @@ app/
 | `API_KEYS` | **必填**, Gemini API 密钥列表，用于负载均衡 | `[]` |
 | `ALLOWED_TOKENS` | **必填**, 允许访问的 Token 列表 | `[]` |
 | `AUTH_TOKEN` | 超级管理员 Token，不填则使用 `ALLOWED_TOKENS` 的第一个 | `sk-123456` |
-| `TEST_MODEL` | 用于测试密钥可用性的模型 | `gemini-1.5-flash` |
-| `IMAGE_MODELS` | 支持绘图功能的模型列表 | `["gemini-2.0-flash-exp"]` |
-| `SEARCH_MODELS` | 支持搜索功能的模型列表 | `["gemini-2.0-flash-exp"]` |
+| `TEST_MODEL` | 用于测试密钥可用性的模型 | `gemini-2.5-flash-lite` |
+| `IMAGE_MODELS` | 支持绘图功能的模型列表 | `["gemini-2.0-flash-exp", "gemini-2.5-flash-image-preview"]` |
+| `SEARCH_MODELS` | 支持搜索功能的模型列表 | `["gemini-2.5-flash","gemini-2.5-pro"]` |
 | `FILTERED_MODELS` | 被禁用的模型列表 | `[]` |
 | `TOOLS_CODE_EXECUTION_ENABLED` | 是否启用代码执行工具 | `false` |
 | `SHOW_SEARCH_LINK` | 是否在响应中显示搜索结果链接 | `true` |

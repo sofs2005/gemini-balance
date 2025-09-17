@@ -9,7 +9,7 @@ MAX_RETRIES = 3  # 最大重试次数
 
 # 模型相关常量
 SUPPORTED_ROLES = ["user", "model", "system"]
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash-lite"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 8192
 DEFAULT_TOP_P = 0.9
