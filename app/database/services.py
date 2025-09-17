@@ -2,6 +2,7 @@
 数据库服务模块
 """
 
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Union
@@ -453,24 +454,50 @@ async def delete_error_log_by_id(log_id: int) -> bool:
 
 async def delete_all_error_logs() -> int:
     """
-    删除所有错误日志条目。
+    分批删除所有错误日志，以避免大数据量下的超时和性能问题。
 
     Returns:
-        int: 被删除的错误日志数量。如果使用的数据库驱动不支持返回受影响行数，则返回 -1 表示操作成功。
+        int: 被删除的错误日志总数。
     """
+    total_deleted_count = 0
+    # SQLite 对 SQL 参数数量有上限（常见为 999），IN 子句中过多参数会报错
+    # 统一使用 500，兼容 SQLite/MySQL，必要时可在配置中暴露该值
+    batch_size = 500
+
     try:
-        # 直接执行删除操作，避免不必要的查询
-        delete_query = delete(ErrorLog)
-        await database.execute(delete_query)
+        while True:
+            # 1) 读取一批待删除的ID，仅选择ID列以提升效率
+            id_query = select(ErrorLog.id).order_by(ErrorLog.id).limit(batch_size)
+            rows = await database.fetch_all(id_query)
+            if not rows:
+                break
 
-        logger.info("Successfully deleted all error logs.")
+            ids = [row["id"] for row in rows]
 
-        # 由于 databases 库的 execute 方法不返回受影响的行数，
-        # 返回 -1 表示删除操作成功执行，但具体删除数量未知
-        # 这比先查询再删除的方式更高效
-        return -1
+            # 2) 按ID批量删除
+            delete_query = delete(ErrorLog).where(ErrorLog.id.in_(ids))
+            await database.execute(delete_query)
+
+            deleted_in_batch = len(ids)
+            total_deleted_count += deleted_in_batch
+
+            logger.debug(f"Deleted a batch of {deleted_in_batch} error logs.")
+
+            # 若不足一个批次，说明已删除完成
+            if deleted_in_batch < batch_size:
+                break
+
+            # 3) 将控制权交还事件循环，缓解长时间占用
+            await asyncio.sleep(0)
+
+        logger.info(
+            f"Successfully deleted all error logs in batches. Total deleted: {total_deleted_count}"
+        )
+        return total_deleted_count
     except Exception as e:
-        logger.error(f"Failed to delete all error logs: {str(e)}", exc_info=True)
+        logger.error(
+            f"Failed to delete all error logs in batches: {str(e)}", exc_info=True
+        )
         raise
 
 
