@@ -1,22 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
-from copy import deepcopy
-import json
 import asyncio
-import re
+from copy import deepcopy
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, StreamingResponse
+
 from app.config.config import settings
-from app.log.logger import get_gemini_logger
+from app.core.constants import API_VERSION
 from app.core.security import SecurityService
-from app.domain.gemini_models import GeminiContent, GeminiRequest, ResetSelectedKeysRequest, VerifySelectedKeysRequest, GeminiEmbedRequest, GeminiBatchEmbedRequest
+from app.domain.gemini_models import (
+    GeminiBatchEmbedRequest,
+    GeminiContent,
+    GeminiEmbedRequest,
+    GeminiRequest,
+    ResetSelectedKeysRequest,
+    VerifySelectedKeysRequest,
+)
+from app.handler.error_handler import handle_route_errors
+from app.handler.retry_handler import RetryHandler
+from app.log.logger import get_gemini_logger
 from app.service.chat.gemini_chat_service import GeminiChatService
 from app.service.embedding.gemini_embedding_service import GeminiEmbeddingService
 from app.service.key.key_manager import KeyManager, get_key_manager_instance
-from app.service.tts.native.tts_routes import get_tts_chat_service
 from app.service.model.model_service import ModelService
+from app.service.tts.native.tts_routes import get_tts_chat_service
 from app.handler.error_processor import handle_api_error_and_get_next_key, log_api_error
-from app.handler.retry_handler import RetryHandler
-from app.handler.error_handler import handle_route_errors
-from app.core.constants import API_VERSION
 from app.utils.helpers import redact_key_for_logging
 
 router = APIRouter(prefix=f"/gemini/{API_VERSION}")
@@ -37,13 +44,6 @@ async def get_next_working_key(key_manager: KeyManager = Depends(get_key_manager
     return await key_manager.get_next_working_key()
 
 
-async def get_next_working_key_for_model(
-    model_name: str, key_manager: KeyManager = Depends(get_key_manager)
-):
-    """获取下一个对特定模型可用的API密钥"""
-    return await key_manager.get_next_working_key(model_name=model_name)
-
-
 async def get_chat_service(key_manager: KeyManager = Depends(get_key_manager)):
     """获取Gemini聊天服务实例"""
     return GeminiChatService(settings.BASE_URL, key_manager)
@@ -57,8 +57,8 @@ async def get_embedding_service(key_manager: KeyManager = Depends(get_key_manage
 @router.get("/models")
 @router_v1beta.get("/models")
 async def list_models(
-    _=Depends(security_service.verify_key_or_goog_api_key),
-    key_manager: KeyManager = Depends(get_key_manager)
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
+    key_manager: KeyManager = Depends(get_key_manager),
 ):
     """获取可用的 Gemini 模型列表，并根据配置添加衍生模型（搜索、图像、非思考）。"""
     operation_name = "list_gemini_models"
@@ -68,20 +68,30 @@ async def list_models(
     try:
         api_key = await key_manager.get_random_valid_key()
         if not api_key:
-            raise HTTPException(status_code=503, detail="No valid API keys available to fetch models.")
+            raise HTTPException(
+                status_code=503, detail="No valid API keys available to fetch models."
+            )
+        logger.info(f"Using allowed token: {allowed_token}")
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         models_data = await model_service.get_gemini_models(api_key)
         if not models_data or "models" not in models_data:
-            raise HTTPException(status_code=500, detail="Failed to fetch base models list.")
+            raise HTTPException(
+                status_code=500, detail="Failed to fetch base models list."
+            )
 
         models_json = deepcopy(models_data)
-        model_mapping = {x.get("name", "").split("/", maxsplit=1)[-1]: x for x in models_json.get("models", [])}
+        model_mapping = {
+            x.get("name", "").split("/", maxsplit=1)[-1]: x
+            for x in models_json.get("models", [])
+        }
 
         def add_derived_model(base_name, suffix, display_suffix):
             model = model_mapping.get(base_name)
             if not model:
-                logger.warning(f"Base model '{base_name}' not found for derived model '{suffix}'.")
+                logger.warning(
+                    f"Base model '{base_name}' not found for derived model '{suffix}'."
+                )
                 return
             item = deepcopy(model)
             item["name"] = f"models/{base_name}{suffix}"
@@ -95,7 +105,7 @@ async def list_models(
                 add_derived_model(name, "-search", " For Search")
         if settings.IMAGE_MODELS:
             for name in settings.IMAGE_MODELS:
-                 add_derived_model(name, "-image", " For Image")
+                add_derived_model(name, "-image", " For Image")
         if settings.THINKING_MODELS:
             for name in settings.THINKING_MODELS:
                 add_derived_model(name, "-non-thinking", " Non Thinking")
@@ -107,7 +117,8 @@ async def list_models(
     except Exception as e:
         logger.error(f"Error getting Gemini models list: {str(e)}")
         raise HTTPException(
-            status_code=500, detail="Internal server error while fetching Gemini models list"
+            status_code=500,
+            detail="Internal server error while fetching Gemini models list",
         ) from e
 
 
@@ -117,15 +128,19 @@ async def list_models(
 async def generate_content(
     model_name: str,
     request: GeminiRequest,
-    _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key_for_model),
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
+    api_key: str = Depends(get_next_working_key),
     key_manager: KeyManager = Depends(get_key_manager),
-    chat_service: GeminiChatService = Depends(get_chat_service)
+    chat_service: GeminiChatService = Depends(get_chat_service),
 ):
     """处理 Gemini 非流式内容生成请求。"""
     operation_name = "gemini_generate_content"
-    async with handle_route_errors(logger, operation_name, failure_message="Content generation failed"):
-        logger.info(f"Handling Gemini content generation request for model: {model_name}")
+    async with handle_route_errors(
+        logger, operation_name, failure_message="Content generation failed"
+    ):
+        logger.info(
+            f"Handling Gemini content generation request for model: {model_name}"
+        )
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
 
         # 检测是否为原生Gemini TTS请求
@@ -142,10 +157,13 @@ async def generate_content(
                 logger.info(f"TTS responseModalities: {response_modalities}")
                 logger.info(f"TTS speechConfig: {speech_config}")
 
+        logger.info(f"Using allowed token: {allowed_token}")
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
-            raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
+            raise HTTPException(
+                status_code=400, detail=f"Model {model_name} is not supported"
+            )
 
         # 所有原生TTS请求都使用TTS增强服务
         if is_native_tts:
@@ -153,19 +171,17 @@ async def generate_content(
                 logger.info("Using native TTS enhanced service")
                 tts_service = await get_tts_chat_service(key_manager)
                 response = await tts_service.generate_content(
-                    model=model_name,
-                    request=request,
-                    api_key=api_key
+                    model=model_name, request=request, api_key=api_key
                 )
                 return response
             except Exception as e:
-                logger.warning(f"Native TTS processing failed, falling back to standard service: {e}")
+                logger.warning(
+                    f"Native TTS processing failed, falling back to standard service: {e}"
+                )
 
         # 使用标准服务处理所有其他请求（非TTS）
         response = await chat_service.generate_content(
-            model=model_name,
-            request=request,
-            api_key=api_key
+            model=model_name, request=request, api_key=api_key
         )
         return response
 
@@ -176,59 +192,53 @@ async def generate_content(
 async def stream_generate_content(
     model_name: str,
     request: GeminiRequest,
-    _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key_for_model),
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
+    api_key: str = Depends(get_next_working_key),
     key_manager: KeyManager = Depends(get_key_manager),
     chat_service: GeminiChatService = Depends(get_chat_service),
 ):
     """处理 Gemini 流式内容生成请求。"""
     operation_name = "gemini_stream_generate_content"
-    async with handle_route_errors(logger, operation_name, failure_message="Streaming request initiation failed"):
-        logger.info(f"Handling Gemini streaming content generation for model: {model_name}")
+    async with handle_route_errors(
+        logger, operation_name, failure_message="Streaming request initiation failed"
+    ):
+        logger.info(
+            f"Handling Gemini streaming content generation for model: {model_name}"
+        )
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        logger.info(f"Using allowed token: {allowed_token}")
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
-            raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
+            raise HTTPException(
+                status_code=400, detail=f"Model {model_name} is not supported"
+            )
 
         raw_stream = chat_service.stream_generate_content(
-            model=model_name,
-            request=request,
-            api_key=api_key
+            model=model_name, request=request, api_key=api_key
         )
         try:
             # 尝试获取第一条数据，判断是正常 SSE（data: 前缀）还是错误 JSON
             first_chunk = await raw_stream.__anext__()
         except StopAsyncIteration:
             # 如果流直接结束，退回标准 SSE 输出
-            async def empty_stream():
-                yield ""
-            return StreamingResponse(empty_stream(), media_type="text/event-stream")
+            return StreamingResponse(raw_stream, media_type="text/event-stream")
         except Exception as e:
             # 初始化流异常，直接返回 500 错误
             return JSONResponse(
-                content={"error": {"code": 500, "message": str(e)}},
-                status_code=500
+                content={"error": {"code": e.args[0], "message": e.args[1]}},
+                status_code=e.args[0],
             )
 
         # 如果以 "data:" 开头，代表正常 SSE，将首块和后续块一起发送
         if isinstance(first_chunk, str) and first_chunk.startswith("data:"):
+
             async def combined():
                 yield first_chunk
                 async for chunk in raw_stream:
                     yield chunk
 
             return StreamingResponse(combined(), media_type="text/event-stream")
-
-        # 否则把首块当作错误 JSON 处理
-        try:
-            err = json.loads(first_chunk)
-            code = err.get("error", {}).get("code", 500)
-        except json.JSONDecodeError:
-            err = {"error": {"code": 500, "message": first_chunk}}
-            code = 500
-
-        return JSONResponse(content=err, status_code=code)
 
 
 @router.post("/models/{model_name}:countTokens")
@@ -237,41 +247,112 @@ async def stream_generate_content(
 async def count_tokens(
     model_name: str,
     request: GeminiRequest,
-    _=Depends(security_service.verify_key_or_goog_api_key),
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
     api_key: str = Depends(get_next_working_key),
     key_manager: KeyManager = Depends(get_key_manager),
-    chat_service: GeminiChatService = Depends(get_chat_service)
+    chat_service: GeminiChatService = Depends(get_chat_service),
 ):
     """处理 Gemini token 计数请求。"""
     operation_name = "gemini_count_tokens"
-    async with handle_route_errors(logger, operation_name, failure_message="Token counting failed"):
+    async with handle_route_errors(
+        logger, operation_name, failure_message="Token counting failed"
+    ):
         logger.info(f"Handling Gemini token count request for model: {model_name}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        logger.info(f"Using allowed token: {allowed_token}")
         logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
 
         if not await model_service.check_model_support(model_name):
-            raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
+            raise HTTPException(
+                status_code=400, detail=f"Model {model_name} is not supported"
+            )
 
         response = await chat_service.count_tokens(
-            model=model_name,
-            request=request,
-            api_key=api_key
+            model=model_name, request=request, api_key=api_key
+        )
+        return response
+
+
+@router.post("/models/{model_name}:embedContent")
+@router_v1beta.post("/models/{model_name}:embedContent")
+@RetryHandler(key_arg="api_key")
+async def embed_content(
+    model_name: str,
+    request: GeminiEmbedRequest,
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
+    api_key: str = Depends(get_next_working_key),
+    key_manager: KeyManager = Depends(get_key_manager),
+    embedding_service: GeminiEmbeddingService = Depends(get_embedding_service),
+):
+    """处理 Gemini 单一嵌入请求"""
+    operation_name = "gemini_embed_content"
+    async with handle_route_errors(
+        logger, operation_name, failure_message="Embedding content generation failed"
+    ):
+        logger.info(f"Handling Gemini embedding request for model: {model_name}")
+        logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        logger.info(f"Using allowed token: {allowed_token}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
+
+        if not await model_service.check_model_support(model_name):
+            raise HTTPException(
+                status_code=400, detail=f"Model {model_name} is not supported"
+            )
+
+        response = await embedding_service.embed_content(
+            model=model_name, request=request, api_key=api_key
+        )
+        return response
+
+
+@router.post("/models/{model_name}:batchEmbedContents")
+@router_v1beta.post("/models/{model_name}:batchEmbedContents")
+@RetryHandler(key_arg="api_key")
+async def batch_embed_contents(
+    model_name: str,
+    request: GeminiBatchEmbedRequest,
+    allowed_token=Depends(security_service.verify_key_or_goog_api_key),
+    api_key: str = Depends(get_next_working_key),
+    key_manager: KeyManager = Depends(get_key_manager),
+    embedding_service: GeminiEmbeddingService = Depends(get_embedding_service),
+):
+    """处理 Gemini 批量嵌入请求"""
+    operation_name = "gemini_batch_embed_contents"
+    async with handle_route_errors(
+        logger,
+        operation_name,
+        failure_message="Batch embedding content generation failed",
+    ):
+        logger.info(f"Handling Gemini batch embedding request for model: {model_name}")
+        logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        logger.info(f"Using allowed token: {allowed_token}")
+        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
+
+        if not await model_service.check_model_support(model_name):
+            raise HTTPException(
+                status_code=400, detail=f"Model {model_name} is not supported"
+            )
+
+        response = await embedding_service.batch_embed_contents(
+            model=model_name, request=request, api_key=api_key
         )
         return response
 
 
 @router.post("/reset-all-fail-counts")
-async def reset_all_key_fail_counts(key_type: str = None, key_manager: KeyManager = Depends(get_key_manager)):
+async def reset_all_key_fail_counts(
+    key_type: str = None, key_manager: KeyManager = Depends(get_key_manager)
+):
     """批量重置Gemini API密钥的失败计数，可选择性地仅重置有效或无效密钥"""
     logger.info("-" * 50 + "reset_all_gemini_key_fail_counts" + "-" * 50)
     logger.info(f"Received reset request with key_type: {key_type}")
-    
+
     try:
         # 获取分类后的密钥
         keys_by_status = await key_manager.get_keys_by_status()
         valid_keys = keys_by_status.get("valid_keys", {})
         invalid_keys = keys_by_status.get("invalid_keys", {})
-        
+
         # 根据类型选择要重置的密钥
         keys_to_reset = []
         if key_type == "valid":
@@ -283,35 +364,45 @@ async def reset_all_key_fail_counts(key_type: str = None, key_manager: KeyManage
         else:
             # 重置所有密钥
             await key_manager.reset_failure_counts()
-            return JSONResponse({"success": True, "message": "所有密钥的失败计数已重置"})
-        
+            return JSONResponse(
+                {"success": True, "message": "所有密钥的失败计数已重置"}
+            )
+
         # 批量重置指定类型的密钥
         for key in keys_to_reset:
             await key_manager.reset_key_failure_count(key)
-        
-        return JSONResponse({
-            "success": True,
-            "message": f"{key_type}密钥的失败计数已重置",
-            "reset_count": len(keys_to_reset)
-        })
+
+        return JSONResponse(
+            {
+                "success": True,
+                "message": f"{key_type}密钥的失败计数已重置",
+                "reset_count": len(keys_to_reset),
+            }
+        )
     except Exception as e:
         logger.error(f"Failed to reset key failure counts: {str(e)}")
-        return JSONResponse({"success": False, "message": f"批量重置失败: {str(e)}"}, status_code=500)
-    
-    
+        return JSONResponse(
+            {"success": False, "message": f"批量重置失败: {str(e)}"}, status_code=500
+        )
+
+
 @router.post("/reset-selected-fail-counts")
 async def reset_selected_key_fail_counts(
     request: ResetSelectedKeysRequest,
-    key_manager: KeyManager = Depends(get_key_manager)
+    key_manager: KeyManager = Depends(get_key_manager),
 ):
     """批量重置选定Gemini API密钥的失败计数"""
     logger.info("-" * 50 + "reset_selected_gemini_key_fail_counts" + "-" * 50)
     keys_to_reset = request.keys
     key_type = request.key_type
-    logger.info(f"Received reset request for {len(keys_to_reset)} selected {key_type} keys.")
+    logger.info(
+        f"Received reset request for {len(keys_to_reset)} selected {key_type} keys."
+    )
 
     if not keys_to_reset:
-        return JSONResponse({"success": False, "message": "没有提供需要重置的密钥"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "没有提供需要重置的密钥"}, status_code=400
+        )
 
     reset_count = 0
     errors = []
@@ -323,53 +414,79 @@ async def reset_selected_key_fail_counts(
                 if result:
                     reset_count += 1
                 else:
-                    logger.warning(f"Key not found during selective reset: {redact_key_for_logging(key)}")
+                    logger.warning(
+                        f"Key not found during selective reset: {redact_key_for_logging(key)}"
+                    )
             except Exception as key_error:
-                logger.error(f"Error resetting key {redact_key_for_logging(key)}: {str(key_error)}")
+                logger.error(
+                    f"Error resetting key {redact_key_for_logging(key)}: {str(key_error)}"
+                )
                 errors.append(f"Key {key}: {str(key_error)}")
 
         if errors:
-             error_message = f"批量重置完成，但出现错误: {'; '.join(errors)}"
-             final_success = reset_count > 0
-             status_code = 207 if final_success and errors else 500
-             return JSONResponse({
-                 "success": final_success,
-                 "message": error_message,
-                 "reset_count": reset_count
-             }, status_code=status_code)
+            error_message = f"批量重置完成，但出现错误: {'; '.join(errors)}"
+            final_success = reset_count > 0
+            status_code = 207 if final_success and errors else 500
+            return JSONResponse(
+                {
+                    "success": final_success,
+                    "message": error_message,
+                    "reset_count": reset_count,
+                },
+                status_code=status_code,
+            )
 
-        return JSONResponse({
-            "success": True,
-            "message": f"成功重置 {reset_count} 个选定 {key_type} 密钥的失败计数",
-            "reset_count": reset_count
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "message": f"成功重置 {reset_count} 个选定 {key_type} 密钥的失败计数",
+                "reset_count": reset_count,
+            }
+        )
     except Exception as e:
-        logger.error(f"Failed to process reset selected key failure counts request: {str(e)}")
-        return JSONResponse({"success": False, "message": f"批量重置处理失败: {str(e)}"}, status_code=500)
+        logger.error(
+            f"Failed to process reset selected key failure counts request: {str(e)}"
+        )
+        return JSONResponse(
+            {"success": False, "message": f"批量重置处理失败: {str(e)}"},
+            status_code=500,
+        )
 
 
 @router.post("/reset-fail-count/{api_key}")
-async def reset_key_fail_count(api_key: str, key_manager: KeyManager = Depends(get_key_manager)):
+async def reset_key_fail_count(
+    api_key: str, key_manager: KeyManager = Depends(get_key_manager)
+):
     """重置指定Gemini API密钥的失败计数"""
     logger.info("-" * 50 + "reset_gemini_key_fail_count" + "-" * 50)
-    logger.info(f"Resetting failure count for API key: {redact_key_for_logging(api_key)}")
-    
+    logger.info(
+        f"Resetting failure count for API key: {redact_key_for_logging(api_key)}"
+    )
+
     try:
         result = await key_manager.reset_key_failure_count(api_key)
         if result:
             return JSONResponse({"success": True, "message": "失败计数已重置"})
-        return JSONResponse({"success": False, "message": "未找到指定密钥"}, status_code=404)
+        return JSONResponse(
+            {"success": False, "message": "未找到指定密钥"}, status_code=404
+        )
     except Exception as e:
         logger.error(f"Failed to reset key failure count: {str(e)}")
-        return JSONResponse({"success": False, "message": f"重置失败: {str(e)}"}, status_code=500)
+        return JSONResponse(
+            {"success": False, "message": f"重置失败: {str(e)}"}, status_code=500
+        )
 
 
 @router.post("/verify-key/{api_key}")
-async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get_chat_service), key_manager: KeyManager = Depends(get_key_manager)):
+async def verify_key(
+    api_key: str,
+    chat_service: GeminiChatService = Depends(get_chat_service),
+    key_manager: KeyManager = Depends(get_key_manager),
+):
     """验证Gemini API密钥的有效性"""
     logger.info("-" * 50 + "verify_gemini_key" + "-" * 50)
     logger.info("Verifying API key validity")
-    
+
     try:
         gemini_request = GeminiRequest(
             contents=[
@@ -378,26 +495,24 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
                     parts=[{"text": "hi"}],
                 )
             ],
-            generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
+            generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10},
         )
-        
+
         response = await chat_service.generate_content(
-            settings.TEST_MODEL,
-            gemini_request,
-            api_key
+            settings.TEST_MODEL, gemini_request, api_key
         )
-        
+
         if response:
             # 如果密钥验证成功，则重置其失败计数
             await key_manager.reset_key_failure_count(api_key)
             return JSONResponse({"status": "valid"})
     except Exception as e:
         logger.error(f"Key verification failed: {str(e)}")
-        # Use the centralized error handler to update key status, but ignore the returned new_key
+        # Use centralized error handler to update key status, but ignore returned new_key
         await handle_api_error_and_get_next_key(
             key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
         )
-        # Also log the error to the database
+        # Also log error to database
         await log_api_error(
             api_key=api_key,
             error=e,
@@ -411,15 +526,19 @@ async def verify_key(api_key: str, chat_service: GeminiChatService = Depends(get
 async def verify_selected_keys(
     request: VerifySelectedKeysRequest,
     chat_service: GeminiChatService = Depends(get_chat_service),
-    key_manager: KeyManager = Depends(get_key_manager)
+    key_manager: KeyManager = Depends(get_key_manager),
 ):
     """批量验证选定Gemini API密钥的有效性"""
     logger.info("-" * 50 + "verify_selected_gemini_keys" + "-" * 50)
     keys_to_verify = request.keys
-    logger.info(f"Received verification request for {len(keys_to_verify)} selected keys.")
+    logger.info(
+        f"Received verification request for {len(keys_to_verify)} selected keys."
+    )
 
     if not keys_to_verify:
-        return JSONResponse({"success": False, "message": "没有提供需要验证的密钥"}, status_code=400)
+        return JSONResponse(
+            {"success": False, "message": "没有提供需要验证的密钥"}, status_code=400
+        )
 
     successful_keys = []
     failed_keys = {}
@@ -430,12 +549,14 @@ async def verify_selected_keys(
         try:
             gemini_request = GeminiRequest(
                 contents=[GeminiContent(role="user", parts=[{"text": "hi"}])],
-                generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
+                generation_config={
+                    "temperature": 0.7,
+                    "topP": 1.0,
+                    "maxOutputTokens": 10,
+                },
             )
             await chat_service.generate_content(
-                settings.TEST_MODEL,
-                gemini_request,
-                api_key
+                settings.TEST_MODEL, gemini_request, api_key
             )
             successful_keys.append(api_key)
             # 如果密钥验证成功，则重置其失败计数
@@ -443,12 +564,14 @@ async def verify_selected_keys(
             return api_key, "valid", None
         except Exception as e:
             error_message = str(e)
-            logger.warning(f"Key verification failed for {redact_key_for_logging(api_key)}: {error_message}")
-            # Use the centralized error handler to update key status
+            logger.warning(
+                f"Key verification failed for {redact_key_for_logging(api_key)}: {error_message}"
+            )
+            # Use centralized error handler to update key status
             await handle_api_error_and_get_next_key(
                 key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
             )
-            # Also log the error to the database
+            # Also log error to database
             await log_api_error(
                 api_key=api_key,
                 error=e,
@@ -463,152 +586,42 @@ async def verify_selected_keys(
 
     for result in results:
         if isinstance(result, Exception):
-            logger.error(f"An unexpected error occurred during bulk verification task: {result}")
+            logger.error(
+                f"An unexpected error occurred during bulk verification task: {result}"
+            )
         elif result:
-             if not isinstance(result, Exception) and result:
-                 key, status, error = result
-             elif isinstance(result, Exception):
-                 logger.error(f"Task execution error during bulk verification: {result}")
+            if not isinstance(result, Exception) and result:
+                key, status, error = result
+            elif isinstance(result, Exception):
+                logger.error(f"Task execution error during bulk verification: {result}")
 
     valid_count = len(successful_keys)
     invalid_count = len(failed_keys)
-    logger.info(f"Bulk verification finished. Valid: {valid_count}, Invalid: {invalid_count}")
+    logger.info(
+        f"Bulk verification finished. Valid: {valid_count}, Invalid: {invalid_count}"
+    )
 
     if failed_keys:
         message = f"批量验证完成。成功: {valid_count}, 失败: {invalid_count}。"
-        return JSONResponse({
-            "success": True,
-            "message": message,
-            "successful_keys": successful_keys,
-            "failed_keys": failed_keys,
-            "valid_count": valid_count,
-            "invalid_count": invalid_count
-        })
+        return JSONResponse(
+            {
+                "success": True,
+                "message": message,
+                "successful_keys": successful_keys,
+                "failed_keys": failed_keys,
+                "valid_count": valid_count,
+                "invalid_count": invalid_count,
+            }
+        )
     else:
         message = f"批量验证成功完成。所有 {valid_count} 个密钥均有效。"
-        return JSONResponse({
-            "success": True,
-            "message": message,
-            "successful_keys": successful_keys,
-            "failed_keys": {},
-            "valid_count": valid_count,
-            "invalid_count": 0
-        })
-
-
-async def _stateless_verify_single_key(api_key: str, chat_service: GeminiChatService):
-    """一个独立的、无状态的密钥验证函数，不与KeyManager交互"""
-    try:
-        gemini_request = GeminiRequest(
-            contents=[GeminiContent(role="user", parts=[{"text": "hi"}])],
-            generation_config={"temperature": 0.7, "topP": 1.0, "maxOutputTokens": 10}
+        return JSONResponse(
+            {
+                "success": True,
+                "message": message,
+                "successful_keys": successful_keys,
+                "failed_keys": {},
+                "valid_count": valid_count,
+                "invalid_count": 0,
+            }
         )
-        await chat_service.generate_content(
-            settings.TEST_MODEL,
-            gemini_request,
-            api_key
-        )
-        return {"key": api_key, "status": "valid", "error": None}
-    except Exception as e:
-        error_message = str(e)
-        logger.warning(f"Stateless verification failed for {redact_key_for_logging(api_key)}: {error_message}")
-        return {"key": api_key, "status": "invalid", "error": error_message}
-
-@router_v1beta.post("/batch-verify-stateless")
-async def batch_verify_stateless(
-    request: VerifySelectedKeysRequest,
-    chat_service: GeminiChatService = Depends(get_chat_service)
-):
-    """独立的、无状态的批量密钥验证，不影响系统密钥状态"""
-    logger.info("-" * 50 + "batch_verify_stateless" + "-" * 50)
-    keys_to_verify = request.keys
-    logger.info(f"Received stateless verification request for {len(keys_to_verify)} keys.")
-
-    if not keys_to_verify:
-        return JSONResponse({"error": "No keys provided"}, status_code=400)
-
-    CONCURRENT_LIMIT = 20  # 设置并发请求的上限
-    semaphore = asyncio.Semaphore(CONCURRENT_LIMIT)
-    
-    async def controlled_verify(key):
-        async with semaphore:
-            return await _stateless_verify_single_key(key, chat_service)
-
-    tasks = [controlled_verify(key) for key in keys_to_verify]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    successful_keys = []
-    failed_keys = {}
-    for result in results:
-        if isinstance(result, Exception):
-            # This case should ideally not happen as _stateless_verify_single_key catches exceptions
-            logger.error(f"Unexpected error during stateless verification task: {result}")
-        elif result.get("status") == "valid":
-            successful_keys.append(result["key"])
-        else:
-            failed_keys[result["key"]] = result["error"]
-
-    return {
-        "successful_keys": successful_keys,
-        "failed_keys": failed_keys,
-        "valid_count": len(successful_keys),
-        "invalid_count": len(failed_keys)
-    }
-
-
-@router.post("/models/{model_name}:embedContent")
-@router_v1beta.post("/models/{model_name}:embedContent")
-@RetryHandler(key_arg="api_key")
-async def embed_content(
-    model_name: str,
-    request: GeminiEmbedRequest,
-    _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
-    key_manager: KeyManager = Depends(get_key_manager),
-    embedding_service: GeminiEmbeddingService = Depends(get_embedding_service)
-):
-    """处理 Gemini 单一嵌入请求"""
-    operation_name = "gemini_embed_content"
-    async with handle_route_errors(logger, operation_name, failure_message="Embedding content generation failed"):
-        logger.info(f"Handling Gemini embedding request for model: {model_name}")
-        logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
-
-        if not await model_service.check_model_support(model_name):
-            raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
-
-        response = await embedding_service.embed_content(
-            model=model_name,
-            request=request,
-            api_key=api_key
-        )
-        return response
-
-
-@router.post("/models/{model_name}:batchEmbedContents")
-@router_v1beta.post("/models/{model_name}:batchEmbedContents")
-@RetryHandler(key_arg="api_key")
-async def batch_embed_contents(
-    model_name: str,
-    request: GeminiBatchEmbedRequest,
-    _=Depends(security_service.verify_key_or_goog_api_key),
-    api_key: str = Depends(get_next_working_key),
-    key_manager: KeyManager = Depends(get_key_manager),
-    embedding_service: GeminiEmbeddingService = Depends(get_embedding_service)
-):
-    """处理 Gemini 批量嵌入请求"""
-    operation_name = "gemini_batch_embed_contents"
-    async with handle_route_errors(logger, operation_name, failure_message="Batch embedding content generation failed"):
-        logger.info(f"Handling Gemini batch embedding request for model: {model_name}")
-        logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
-        logger.info(f"Using API key: {redact_key_for_logging(api_key)}")
-
-        if not await model_service.check_model_support(model_name):
-            raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
-
-        response = await embedding_service.batch_embed_contents(
-            model=model_name,
-            request=request,
-            api_key=api_key
-        )
-        return response

@@ -1,7 +1,6 @@
 # app/service/embedding/gemini_embedding_service.py
 
 import datetime
-import re
 import time
 from typing import Any, Dict
 
@@ -69,13 +68,9 @@ class GeminiEmbeddingService:
             return response
         except Exception as e:
             is_success = False
-            error_log_msg = str(e)
+            status_code = e.args[0]
+            error_log_msg = e.args[1]
             logger.error(f"Single embedding API call failed: {error_log_msg}")
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
 
             await add_error_log(
                 gemini_key=api_key,
@@ -119,13 +114,9 @@ class GeminiEmbeddingService:
             return response
         except Exception as e:
             is_success = False
-            error_log_msg = str(e)
+            status_code = e.args[0]
+            error_log_msg = e.args[1]
             logger.error(f"Batch embedding API call failed: {error_log_msg}")
-            match = re.search(r"status code (\d+)", error_log_msg)
-            if match:
-                status_code = int(match.group(1))
-            else:
-                status_code = 500
 
             await add_error_log(
                 gemini_key=api_key,
