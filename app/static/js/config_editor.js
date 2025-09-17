@@ -769,6 +769,10 @@ async function initConfig() {
     if (typeof config.AUTO_DELETE_ERROR_LOGS_DAYS === "undefined") {
       config.AUTO_DELETE_ERROR_LOGS_DAYS = 7;
     }
+    // 错误日志是否记录请求体（默认不记录）
+    if (typeof config.ERROR_LOG_RECORD_REQUEST_BODY === "undefined") {
+      config.ERROR_LOG_RECORD_REQUEST_BODY = false;
+    }
     // --- 结束：处理自动删除错误日志配置的默认值 ---
 
     // --- 新增：处理自动删除请求日志配置的默认值 ---

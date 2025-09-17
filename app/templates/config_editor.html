@@ -2287,6 +2287,34 @@ endblock %} {% block head_extra_styles %}
           >
         </div>
 
+        <!-- 错误日志记录请求体 -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between">
+            <label
+              for="ERROR_LOG_RECORD_REQUEST_BODY"
+              class="font-semibold text-gray-700"
+              >错误日志记录请求体</label
+            >
+            <div
+              class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
+            >
+              <input
+                type="checkbox"
+                name="ERROR_LOG_RECORD_REQUEST_BODY"
+                id="ERROR_LOG_RECORD_REQUEST_BODY"
+                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+              />
+              <label
+                for="ERROR_LOG_RECORD_REQUEST_BODY"
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
+              ></label>
+            </div>
+          </div>
+          <small class="text-gray-500 mt-1 block"
+            >关闭可避免敏感数据入库，默认关闭。</small
+          >
+        </div>
+
         <!-- 自动删除错误日志 -->
         <div class="mb-6">
           <div class="flex items-center justify-between">

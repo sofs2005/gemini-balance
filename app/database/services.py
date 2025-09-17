@@ -130,16 +130,19 @@ async def add_error_log(
             logger.error("Database is not connected when trying to add error log")
             return False
 
-        # 如果request_msg是字典，则转换为JSON字符串
-        if isinstance(request_msg, dict):
-            request_msg_json = request_msg
-        elif isinstance(request_msg, str):
-            try:
-                request_msg_json = json.loads(request_msg)
-            except json.JSONDecodeError:
-                request_msg_json = {"message": request_msg}
-        else:
+        if request_msg is None:
             request_msg_json = None
+        else:
+            # 如果request_msg是字典，则转换为JSON字符串
+            if isinstance(request_msg, dict):
+                request_msg_json = request_msg
+            elif isinstance(request_msg, str):
+                try:
+                    request_msg_json = json.loads(request_msg)
+                except json.JSONDecodeError:
+                    request_msg_json = {"message": request_msg}
+            else:
+                request_msg_json = None
 
         # 插入错误日志
         query = insert(ErrorLog).values(
@@ -462,7 +465,7 @@ async def delete_all_error_logs() -> int:
     total_deleted_count = 0
     # SQLite 对 SQL 参数数量有上限（常见为 999），IN 子句中过多参数会报错
     # 统一使用 500，兼容 SQLite/MySQL，必要时可在配置中暴露该值
-    batch_size = 500
+    batch_size = 200
 
     try:
         while True:

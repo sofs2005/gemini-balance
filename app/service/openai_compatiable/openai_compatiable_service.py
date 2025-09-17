@@ -146,7 +146,9 @@ class OpenAICompatiableService:
                     error_type="openai-chat-stream",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=payload,
+                    request_msg=(
+                        payload if settings.ERROR_LOG_RECORD_REQUEST_BODY else None
+                    ),
                     request_datetime=request_datetime,
                 )
 

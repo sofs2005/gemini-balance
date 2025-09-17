@@ -204,6 +204,7 @@ app/
 | `PROXIES` | 代理服务器列表 (例如 `http://user:pass@host:port`) | `[]` |
 | **日志与安全** | | |
 | `LOG_LEVEL` | 日志级别: `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `ERROR_LOG_RECORD_REQUEST_BODY` | 是否记录错误日志的请求体（可能包含敏感信息） | `false` |
 | `AUTO_DELETE_ERROR_LOGS_ENABLED` | 是否自动删除错误日志 | `true` |
 | `AUTO_DELETE_ERROR_LOGS_DAYS` | 错误日志保留天数 | `7` |
 | `AUTO_DELETE_REQUEST_LOGS_ENABLED`| 是否自动删除请求日志 | `false` |
@@ -216,7 +217,13 @@ app/
 | **图像生成相关** | | |
 | `PAID_KEY` | 付费版API Key，用于图片生成等高级功能 | `your-paid-api-key` |
 | `CREATE_IMAGE_MODEL` | 图片生成模型 | `imagen-3.0-generate-002` |
-| `UPLOAD_PROVIDER` | 图片上传提供商: `smms`, `picgo`, `cloudflare_imgbed` | `smms` |
+| `UPLOAD_PROVIDER` | 图片上传提供商: `smms`, `picgo`, `cloudflare_imgbed`, `aliyun_oss` | `smms` |
+| `OSS_ENDPOINT` | 阿里云 OSS 公网 Endpoint | `oss-cn-shanghai.aliyuncs.com` |
+| `OSS_ENDPOINT_INNER` | 阿里云 OSS 内网 Endpoint（同 VPC 内网访问） | `oss-cn-shanghai-internal.aliyuncs.com` |
+| `OSS_ACCESS_KEY` | 阿里云 AccessKey ID | `LTAI5txxxxxxxxxxxxxxxx` |
+| `OSS_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | `yXxxxxxxxxxxxxxxxxxxxxx` |
+| `OSS_BUCKET_NAME` | 阿里云 OSS Bucket 名称 | `your-bucket-name` |
+| `OSS_REGION` | 阿里云 OSS 区域 Region | `cn-shanghai` |
 | `SMMS_SECRET_TOKEN` | SM.MS图床的API Token | `your-smms-token` |
 | `PICGO_API_KEY` | [PicoGo](https://www.picgo.net/)图床的API Key | `your-picogo-apikey` |
 | `PICGO_API_URL` | [PicoGo](https://www.picgo.net/)图床的API服务器地址 | `https://www.picgo.net/api/1/upload` |

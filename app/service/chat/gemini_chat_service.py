@@ -353,7 +353,15 @@ class GeminiChatService:
                 status_code = 500
 
             # 错误日志将由 handle_api_error_and_get_next_key 统一处理
-
+            await add_error_log(
+                gemini_key=api_key,
+                model_name=model,
+                error_type="gemini-chat-non-stream",
+                error_log=error_log_msg,
+                error_code=status_code,
+                request_msg=payload if settings.ERROR_LOG_RECORD_REQUEST_BODY else None,
+                request_datetime=request_datetime,
+            )
             raise e
         finally:
             # 记录请求日志
@@ -408,7 +416,7 @@ class GeminiChatService:
                 error_type="gemini-count-tokens",
                 error_log=error_log_msg,
                 error_code=status_code,
-                request_msg=payload,
+                request_msg=payload if settings.ERROR_LOG_RECORD_REQUEST_BODY else None,
             )
             raise e
         finally:
@@ -499,7 +507,9 @@ class GeminiChatService:
                     error_type="gemini-chat-stream",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=payload,
+                    request_msg=(
+                        payload if settings.ERROR_LOG_RECORD_REQUEST_BODY else None
+                    ),
                     request_datetime=request_datetime,
                 )
 
