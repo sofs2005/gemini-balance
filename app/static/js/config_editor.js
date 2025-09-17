@@ -104,6 +104,24 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // 检查间隔小时数输入控制
+  const checkIntervalInput = document.getElementById("CHECK_INTERVAL_HOURS");
+  if (checkIntervalInput) {
+    checkIntervalInput.addEventListener("input", function () {
+      let value = parseFloat(this.value);
+      if (isNaN(value) || value < 0) {
+        this.value = 0;
+      }
+    });
+    
+    checkIntervalInput.addEventListener("change", function () {
+      let value = parseFloat(this.value);
+      if (isNaN(value) || value < 0) {
+        this.value = 0;
+      }
+    });
+  }
+
   // Toggle switch events
   const toggleSwitches = document.querySelectorAll(".toggle-switch");
   toggleSwitches.forEach((toggleSwitch) => {

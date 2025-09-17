@@ -1479,25 +1479,31 @@ endblock %} {% block head_extra_styles %}
         </div>
 
         <!-- 启用代码执行工具 -->
-        <div class="mb-6 flex items-center justify-between">
-          <label
-            for="TOOLS_CODE_EXECUTION_ENABLED"
-            class="font-semibold text-gray-700"
-            >启用代码执行工具</label
-          >
-          <div
-            class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
-          >
-            <input
-              type="checkbox"
-              name="TOOLS_CODE_EXECUTION_ENABLED"
-              id="TOOLS_CODE_EXECUTION_ENABLED"
-              class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-            />
+        <div class="mb-6">
+          <div class="flex items-center justify-between">
             <label
               for="TOOLS_CODE_EXECUTION_ENABLED"
-              class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
-            ></label>
+              class="font-semibold text-gray-700"
+              >启用代码执行工具</label
+            >
+            <div
+              class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
+            >
+              <input
+                type="checkbox"
+                name="TOOLS_CODE_EXECUTION_ENABLED"
+                id="TOOLS_CODE_EXECUTION_ENABLED"
+                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+              />
+              <label
+                for="TOOLS_CODE_EXECUTION_ENABLED"
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
+              ></label>
+            </div>
+          </div>
+          <div class="warning-text">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>启用代码执行工具与大多数工具调用冲突，不建议开启</span>
           </div>
         </div>
 
@@ -2086,25 +2092,31 @@ endblock %} {% block head_extra_styles %}
         </h2>
 
         <!-- 启用流式输出优化 -->
-        <div class="mb-6 flex items-center justify-between">
-          <label
-            for="STREAM_OPTIMIZER_ENABLED"
-            class="font-semibold text-gray-700"
-            >启用流式输出优化</label
-          >
-          <div
-            class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
-          >
-            <input
-              type="checkbox"
-              name="STREAM_OPTIMIZER_ENABLED"
-              id="STREAM_OPTIMIZER_ENABLED"
-              class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-            />
+        <div class="mb-6">
+          <div class="flex items-center justify-between">
             <label
               for="STREAM_OPTIMIZER_ENABLED"
-              class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
-            ></label>
+              class="font-semibold text-gray-700"
+              >启用流式输出优化</label
+            >
+            <div
+              class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
+            >
+              <input
+                type="checkbox"
+                name="STREAM_OPTIMIZER_ENABLED"
+                id="STREAM_OPTIMIZER_ENABLED"
+                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
+              />
+              <label
+                for="STREAM_OPTIMIZER_ENABLED"
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
+              ></label>
+            </div>
+          </div>
+          <div class="warning-text">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>开启流式优化会在一定程度上减速返回，不建议开启</span>
           </div>
         </div>
 
@@ -2256,6 +2268,25 @@ endblock %} {% block head_extra_styles %}
       </div>
 
 
+<!-- 检查间隔 -->
+        <div class="mb-6">
+          <label
+            for="CHECK_INTERVAL_HOURS"
+            class="block font-semibold mb-2 text-gray-700"
+            >检查间隔（小时）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="定时检查密钥状态的间隔时间（单位：小时），设置为0时不进行定时检查"></i>
+          </label>
+          <input
+            type="number"
+            id="CHECK_INTERVAL_HOURS"
+            name="CHECK_INTERVAL_HOURS"
+            min="0"
+            step="1"
+            class="w-full px-4 py-3 rounded-lg form-input-themed"
+          />
+        </div>
+
+      </div>
 
       <!-- 日志配置 -->
       <div class="config-section" id="logging-section">

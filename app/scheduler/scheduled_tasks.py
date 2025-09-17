@@ -1,12 +1,12 @@
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.config.config import settings
 from app.log.logger import Logger
 from app.service.error_log.error_log_service import delete_old_error_logs
+from app.service.files.files_service import get_files_service
 from app.service.key.key_manager import get_key_manager_instance
 from app.service.request_log.request_log_service import delete_old_request_logs_task
-from app.service.files.files_service import get_files_service
+from app.utils.helpers import redact_key_for_logging
 
 logger = Logger.setup_logger("scheduler")
 
@@ -61,7 +61,8 @@ async def cleanup_expired_files():
 
     except Exception as e:
         logger.error(
-            f"An error occurred during the scheduled file cleanup: {str(e)}", exc_info=True
+            f"An error occurred during the scheduled file cleanup: {str(e)}",
+            exc_info=True,
         )
 
 
@@ -103,37 +104,46 @@ async def maintain_valid_key_pool():
 def setup_scheduler():
     """设置并启动 APScheduler"""
     scheduler = AsyncIOScheduler(timezone=str(settings.TIMEZONE))  # 从配置读取时区
-    # 原有的检查失败密钥的定时任务已移除
-    # 现在使用ValidKeyPool的定期维护机制来管理密钥有效性
-    logger.info("Legacy key check job disabled - using ValidKeyPool maintenance instead")
+    # 添加检查失败密钥的定时任务
+    if settings.CHECK_INTERVAL_HOURS != 0:
+        scheduler.add_job(
+            check_failed_keys,
+            "interval",
+            hours=settings.CHECK_INTERVAL_HOURS,
+            id="check_failed_keys_job",
+            name="Check Failed API Keys",
+        )
+        logger.info(
+            f"Key check job scheduled to run every {settings.CHECK_INTERVAL_HOURS} hour(s)."
+        )
 
-    # 新增：添加自动删除错误日志的定时任务，每天凌晨3点执行
+    # 新增：添加自动删除错误日志的定时任务，每天凌晨0点执行
     scheduler.add_job(
         delete_old_error_logs,
         "cron",
-        hour=3,
+        hour=0,
         minute=0,
         id="delete_old_error_logs_job",
         name="Delete Old Error Logs",
     )
     logger.info("Auto-delete error logs job scheduled to run daily at 3:00 AM.")
 
-    # 新增：添加自动删除请求日志的定时任务，每天凌晨3点05分执行
+    # 新增：添加自动删除请求日志的定时任务，每天凌晨0点执行
     scheduler.add_job(
         delete_old_request_logs_task,
         "cron",
-        hour=3,
-        minute=5,
+        hour=0,
+        minute=0,
         id="delete_old_request_logs_job",
         name="Delete Old Request Logs",
     )
     logger.info(
         f"Auto-delete request logs job scheduled to run daily at 3:05 AM, if enabled and AUTO_DELETE_REQUEST_LOGS_DAYS is set to {settings.AUTO_DELETE_REQUEST_LOGS_DAYS} days."
     )
-    
+
     # 新增：添加文件过期清理的定时任务，每小时执行一次
-    if getattr(settings, 'FILES_CLEANUP_ENABLED', True):
-        cleanup_interval = getattr(settings, 'FILES_CLEANUP_INTERVAL_HOURS', 1)
+    if getattr(settings, "FILES_CLEANUP_ENABLED", True):
+        cleanup_interval = getattr(settings, "FILES_CLEANUP_INTERVAL_HOURS", 1)
         scheduler.add_job(
             cleanup_expired_files,
             "interval",

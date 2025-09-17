@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete, func, select
@@ -28,7 +28,7 @@ async def delete_old_error_logs():
         )
         return
 
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    cutoff_date = datetime.now() - timedelta(days=days_to_keep)
 
     logger.info(
         f"Attempting to delete error logs older than {days_to_keep} days (before {cutoff_date.strftime('%Y-%m-%d %H:%M:%S %Z')})."
