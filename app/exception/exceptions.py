@@ -130,11 +130,6 @@ def setup_exception_handlers(app: FastAPI) -> None:
         """处理通用异常"""
         logger.exception(f"Unhandled Exception: {str(exc)}")
         return JSONResponse(
-            status_code=exc.args[0],
-            content={
-                "error": {
-                    "code": exc.args[0],
-                    "message": exc.args[1],
-                }
-            },
+            status_code=500,
+            content=str(exc),
         )

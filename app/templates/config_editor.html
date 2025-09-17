@@ -83,15 +83,22 @@ endblock %} {% block head_extra_styles %}
     outline: none !important; /* 确保没有outline */
   }
 
-  /* 对于在包装器内的输入框，移除边框 */
-  .flex.items-center .form-input-themed,
+  /* 对于在数组容器内的输入框，移除边框 */
   .array-container .form-input-themed {
-    border: none !important; /* 在包装器内的输入框移除边框 */
+    border: none !important; /* 在数组容器内的输入框移除边框 */
   }
 
-  .flex.items-center .form-input-themed:focus,
   .array-container .form-input-themed:focus {
     border: none !important; /* 确保focus时也没有边框 */
+  }
+
+  /* 为独立的模型选择输入框保留边框 */
+  .flex.items-center .form-input-themed {
+    border: 1px solid rgba(0, 0, 0, 0.12) !important; /* 保留边框 */
+  }
+
+  .flex.items-center .form-input-themed:focus {
+    border-color: #3b82f6 !important; /* focus时改变边框颜色 */
   }
 
   /* Theming for select fields - 改进下拉框样式 */
@@ -304,49 +311,6 @@ endblock %} {% block head_extra_styles %}
 
   .action-btn:hover#resetBtn {
     box-shadow: 0 8px 20px rgba(107, 114, 128, 0.4) !important; /* 灰色阴影 */
-  }
-
-  /* 悬浮保存按钮样式 */
-  .floating-save-btn {
-    position: fixed;
-    right: 24px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 1000;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-    border: none;
-    border-radius: 50px;
-    padding: 16px 24px;
-    font-size: 14px;
-    font-weight: 600;
-    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
-    transition: all 0.3s ease;
-    cursor: pointer;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .floating-save-btn:hover {
-    transform: translateY(-50%) scale(1.05);
-    box-shadow: 0 12px 35px rgba(59, 130, 246, 0.6);
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  }
-
-  .floating-save-btn:active {
-    transform: translateY(-50%) scale(0.95);
-  }
-
-  .floating-save-btn i {
-    margin-right: 8px;
-  }
-
-  /* 响应式设计 - 在小屏幕上隐藏悬浮按钮 */
-  @media (max-width: 768px) {
-    .floating-save-btn {
-      display: none;
-    }
   }
 
   /* 刷新按钮样式 - 与监控面板页面保持一致 */
@@ -845,7 +809,7 @@ endblock %} {% block head_extra_styles %}
 
     <h1 class="text-3xl font-extrabold text-center text-gray-800 mb-4">
       <img
-        src="/static/icons/logo.png"
+        src="{{ static_url('icons/logo.png') }}"
         alt="Gemini Balance Logo"
         class="h-9 inline-block align-middle mr-2"
       />
@@ -869,13 +833,6 @@ endblock %} {% block head_extra_styles %}
         style="background-color: rgba(229, 231, 235, 0.8)"
       >
         <i class="fas fa-tachometer-alt"></i> 监控面板
-      </a>
-      <a
-        href="/batch-verify"
-        class="nav-link whitespace-nowrap flex items-center justify-center gap-2 px-6 py-3 font-medium rounded-lg text-gray-700 hover:text-gray-900 transition-all duration-200"
-        style="background-color: rgba(229, 231, 235, 0.8)"
-      >
-        <i class="fas fa-tasks"></i> 批量检测
       </a>
       <a
         href="/logs"
@@ -955,7 +912,19 @@ endblock %} {% block head_extra_styles %}
       >
         流式输出
       </button>
-
+      <button
+        class="tab-btn px-5 py-2 rounded-full font-medium text-sm transition-all duration-200"
+        data-tab="scheduler"
+        style="
+          background-color: #f8fafc !important;
+          color: #64748b !important;
+          border: 2px solid #e2e8f0 !important;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+          font-weight: 500 !important;
+        "
+      >
+        定时任务
+      </button>
       <button
         class="tab-btn px-5 py-2 rounded-full font-medium text-sm transition-all duration-200"
         data-tab="logging"
@@ -968,19 +937,6 @@ endblock %} {% block head_extra_styles %}
         "
       >
         日志配置
-      </button>
-      <button
-        class="tab-btn px-5 py-2 rounded-full font-medium text-sm transition-all duration-200"
-        data-tab="keypool"
-        style="
-          background-color: #f8fafc !important;
-          color: #64748b !important;
-          border: 2px solid #e2e8f0 !important;
-          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
-          font-weight: 500 !important;
-        "
-      >
-        智能密钥池
       </button>
     </div>
 
@@ -1052,7 +1008,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加密钥
             </button>
           </div>
-          </div>
         </div>
 
         <!-- 允许的令牌列表 -->
@@ -1060,8 +1015,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="ALLOWED_TOKENS"
             class="block font-semibold mb-2 text-gray-800"
-            >允许的令牌列表</label
-          >
+            >允许的令牌列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="允许访问API的令牌列表"></i>
+          </label>
           <div class="array-container" id="ALLOWED_TOKENS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1074,14 +1030,14 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加令牌
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">允许访问API的令牌列表</small>
         </div>
 
         <!-- 认证令牌 -->
         <div class="mb-6">
           <label for="AUTH_TOKEN" class="block font-semibold mb-2 text-gray-800"
-            >认证令牌</label
-          >
+            >认证令牌
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于API认证的令牌"></i>
+          </label>
           <div class="flex items-center">
             <div
               class="flex items-center flex-grow border rounded-md focus-within:border-blue-500"
@@ -1105,14 +1061,14 @@ endblock %} {% block head_extra_styles %}
               </button>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block">用于API认证的令牌</small>
         </div>
 
         <!-- API基础URL -->
         <div class="mb-6">
           <label for="BASE_URL" class="block font-semibold mb-2 text-gray-700"
-            >API基础URL</label
-          >
+            >API基础URL
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Gemini API的基础URL"></i>
+          </label>
           <input
             type="text"
             id="BASE_URL"
@@ -1120,7 +1076,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="https://generativelanguage.googleapis.com/v1beta"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">Gemini API的基础URL</small>
         </div>
 
         <!-- 自定义Headers -->
@@ -1128,8 +1083,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="CUSTOM_HEADERS"
             class="block font-semibold mb-2 text-gray-700"
-            >自定义Headers</label
-          >
+            >自定义Headers
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="在这里添加的键值对将被添加到所有出站API请求的Header中"></i>
+          </label>
           <div
             class="bg-white rounded-lg border border-gray-200 p-4 mb-2 space-y-3"
             id="CUSTOM_HEADERS_container"
@@ -1153,9 +1109,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加Header
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >在这里添加的键值对将被添加到所有出站API请求的Header中。</small
-          >
         </div>
 
         <!-- Vertex Express API密钥列表 -->
@@ -1163,8 +1116,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="VERTEX_API_KEYS"
             class="block font-semibold mb-2 text-gray-700"
-            >Vertex Express API密钥列表</label
-          >
+            >Vertex Express API密钥列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Vertex AI Platform API密钥列表。点击按钮可批量添加或删除"></i>
+          </label>
           <div class="array-container" id="VERTEX_API_KEYS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1184,9 +1138,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加Vertex密钥
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >Vertex AI Platform API密钥列表。点击按钮可批量添加或删除。</small
-          >
         </div>
 
         <!-- Vertex Express API基础URL -->
@@ -1194,8 +1145,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="VERTEX_EXPRESS_BASE_URL"
             class="block font-semibold mb-2 text-gray-700"
-            >Vertex Express API基础URL</label
-          >
+            >Vertex Express API基础URL
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Vertex Express API的基础URL"></i>
+          </label>
           <input
             type="text"
             id="VERTEX_EXPRESS_BASE_URL"
@@ -1203,9 +1155,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="https://aiplatform.googleapis.com/v1beta1/publishers/google/models"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >Vertex Express API的基础URL</small
-          >
         </div>
         <!-- 智能路由配置 -->
         <div class="mb-6">
@@ -1213,8 +1162,9 @@ endblock %} {% block head_extra_styles %}
             <label
               for="URL_NORMALIZATION_ENABLED"
               class="font-semibold text-gray-700"
-              >启用智能路由映射</label
-            >
+              >启用智能路由映射
+              <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="自动客户端请求的url拼接为正确格式（仅保证正常聊天，出现问题请关闭）"></i>
+            </label>
             <div
               class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
             >
@@ -1230,17 +1180,15 @@ endblock %} {% block head_extra_styles %}
               ></label>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block">
-            自动客户端请求的url拼接为正确格式（仅保证正常聊天，出现问题请关闭）
-          </small>
         </div>
         <!-- 最大失败次数 -->
         <div class="mb-6">
           <label
             for="MAX_FAILURES"
             class="block font-semibold mb-2 text-gray-700"
-            >最大失败次数</label
-          >
+            >最大失败次数
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="API密钥失败后标记为无效的次数"></i>
+          </label>
           <input
             type="number"
             id="MAX_FAILURES"
@@ -1249,16 +1197,14 @@ endblock %} {% block head_extra_styles %}
             max="100"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >API密钥失败后标记为无效的次数</small
-          >
         </div>
 
         <!-- 请求超时时间 -->
         <div class="mb-6">
           <label for="TIME_OUT" class="block font-semibold mb-2 text-gray-700"
-            >请求超时时间（秒）</label
-          >
+            >请求超时时间（秒）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="API请求的超时时间"></i>
+          </label>
           <input
             type="number"
             id="TIME_OUT"
@@ -1267,7 +1213,6 @@ endblock %} {% block head_extra_styles %}
             max="600"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">API请求的超时时间</small>
         </div>
 
         <!-- 最大重试次数 -->
@@ -1275,8 +1220,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="MAX_RETRIES"
             class="block font-semibold mb-2 text-gray-700"
-            >最大重试次数</label
-          >
+            >最大重试次数
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="API请求失败后的最大重试次数"></i>
+          </label>
           <input
             type="number"
             id="MAX_RETRIES"
@@ -1285,15 +1231,13 @@ endblock %} {% block head_extra_styles %}
             max="10"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >API请求失败后的最大重试次数</small
-          >
         </div>
         <!-- 代理服务器列表 -->
         <div class="mb-6">
           <label for="PROXIES" class="block font-semibold mb-2 text-gray-700"
-            >代理服务器列表</label
-          >
+            >代理服务器列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="代理服务器列表，支持 http 和 socks5 格式，例如: http://user:pass@host:port 或 socks5://host:port。点击按钮可批量添加或删除"></i>
+          </label>
           <div class="array-container" id="PROXIES_container">
             <!-- 代理项将在这里动态添加 -->
           </div>
@@ -1320,11 +1264,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加代理
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >代理服务器列表，支持 http 和 socks5 格式，例如:
-            http://user:pass@host:port 或
-            socks5://host:port。点击按钮可批量添加或删除。</small
-          >
         </div>
         <!-- 代理使用策略 -->
         <div class="mb-6">
@@ -1332,8 +1271,9 @@ endblock %} {% block head_extra_styles %}
             <label
               for="PROXIES_USE_CONSISTENCY_HASH_BY_API_KEY"
               class="font-semibold text-gray-700"
-              >是否开启固定代理策略</label
-            >
+              >是否开启固定代理策略
+              <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="开启后，对于每一个API_KEY将根据算法从代理列表中选取同一个代理IP，防止一个API_KEY同时被多个IP访问，也同时防止了一个IP访问了过多的API_KEY"></i>
+            </label>
             <div
               class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
             >
@@ -1349,9 +1289,6 @@ endblock %} {% block head_extra_styles %}
               ></label>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >开启后，对于每一个API_KEY将根据算法从代理列表中选取同一个代理IP，防止一个API_KEY同时被多个IP访问，也同时防止了一个IP访问了过多的API_KEY。</small
-          >
         </div>
       </div>
 
@@ -1366,8 +1303,9 @@ endblock %} {% block head_extra_styles %}
         <!-- 测试模型 -->
         <div class="mb-6">
           <label for="TEST_MODEL" class="block font-semibold mb-2 text-gray-700"
-            >测试模型</label
-          >
+            >测试模型
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于测试API密钥的模型"></i>
+          </label>
           <div class="flex items-center gap-2">
             <input
               type="text"
@@ -1385,7 +1323,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-list-ul"></i>
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">用于测试API密钥的模型</small>
         </div>
 
         <!-- 图像模型列表 -->
@@ -1393,8 +1330,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="IMAGE_MODELS"
             class="block font-semibold mb-2 text-gray-700"
-            >图像模型列表</label
-          >
+            >图像模型列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="支持图像处理的模型列表"></i>
+          </label>
           <div class="array-container" id="IMAGE_MODELS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1415,7 +1353,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加模型
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">支持图像处理的模型列表</small>
         </div>
 
         <!-- 搜索模型列表 -->
@@ -1423,8 +1360,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="SEARCH_MODELS"
             class="block font-semibold mb-2 text-gray-700"
-            >搜索模型列表</label
-          >
+            >搜索模型列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="支持搜索功能的模型列表"></i>
+          </label>
           <div class="array-container" id="SEARCH_MODELS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1445,7 +1383,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加模型
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">支持搜索功能的模型列表</small>
         </div>
 
         <!-- 过滤模型列表 -->
@@ -1453,8 +1390,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="FILTERED_MODELS"
             class="block font-semibold mb-2 text-gray-700"
-            >过滤模型列表</label
-          >
+            >过滤模型列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="需要过滤的模型列表"></i>
+          </label>
           <div class="array-container" id="FILTERED_MODELS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1475,7 +1413,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加模型
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">需要过滤的模型列表</small>
         </div>
 
         <!-- 启用代码执行工具 -->
@@ -1533,8 +1470,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="URL_CONTEXT_MODELS"
             class="block font-semibold mb-2 text-gray-700"
-            >网址上下文模型列表</label
-          >
+            >网址上下文模型列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="支持网址上下文功能的模型列表"></i>
+          </label>
           <div class="array-container" id="URL_CONTEXT_MODELS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1555,9 +1493,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加模型
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >支持网址上下文功能的模型列表</small
-          >
         </div>
 
         <!-- 显示搜索链接 -->
@@ -1607,8 +1542,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="THINKING_MODELS"
             class="block font-semibold mb-2 text-gray-700"
-            >思考模型列表</label
-          >
+            >思考模型列表
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于思考过程的模型列表"></i>
+          </label>
           <div class="array-container" id="THINKING_MODELS_container">
             <!-- 数组项将在这里动态添加 -->
           </div>
@@ -1629,9 +1565,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加模型
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >用于"思考过程"的模型列表</small
-          >
         </div>
 
         <!-- 思考模型预算映射 -->
@@ -1639,8 +1572,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="THINKING_BUDGET_MAP"
             class="block font-semibold mb-2 text-gray-700"
-            >思考模型预算映射</label
-          >
+            >思考模型预算映射
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="为每个思考模型设置预算（-1为auto，最大值32767），此项与上方模型列表自动关联"></i>
+          </label>
           <div
             class="bg-white rounded-lg border border-gray-200 p-4 mb-2 space-y-3"
             id="THINKING_BUDGET_MAP_container"
@@ -1661,18 +1595,15 @@ endblock %} {% block head_extra_styles %}
                                 <i class="fas fa-plus"></i> 添加预算映射
                             </button>
                         </div> -->
-          <small class="text-gray-500 mt-1 block"
-            >为每个思考模型设置预算（-1为auto，最大值
-            32767），此项与上方模型列表自动关联。</small
-          >
         </div>
         <!-- 安全设置 -->
         <div class="mb-6">
           <label
             for="SAFETY_SETTINGS"
             class="block font-semibold mb-2 text-gray-700"
-            >安全设置 (Safety Settings)</label
-          >
+            >安全设置 (Safety Settings)
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="配置模型的安全过滤级别，例如 HARM_CATEGORY_HARASSMENT: BLOCK_NONE"></i>
+          </label>
           <div
             class="bg-white rounded-lg border border-gray-200 p-4 mb-2 space-y-3"
             id="SAFETY_SETTINGS_container"
@@ -1696,10 +1627,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-plus"></i> 添加安全设置
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >配置模型的安全过滤级别，例如 HARM_CATEGORY_HARASSMENT:
-            BLOCK_NONE。</small
-          >
           <div class="warning-text">
             <i class="fas fa-exclamation-triangle"></i>
             <span
@@ -1720,8 +1647,9 @@ endblock %} {% block head_extra_styles %}
         <!-- TTS 模型 -->
         <div class="mb-6">
           <label for="TTS_MODEL" class="block font-semibold mb-2 text-gray-700"
-            >TTS 模型</label
-          >
+            >TTS 模型
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于TTS的模型"></i>
+          </label>
           <select
             id="TTS_MODEL"
             name="TTS_MODEL"
@@ -1734,7 +1662,6 @@ endblock %} {% block head_extra_styles %}
               gemini-2.5-pro-preview-tts
             </option>
           </select>
-          <small class="text-gray-500 mt-1 block">用于TTS的模型</small>
         </div>
 
         <!-- TTS 语音名称 -->
@@ -1742,8 +1669,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="TTS_VOICE_NAME"
             class="block font-semibold mb-2 text-gray-700"
-            >TTS 语音名称</label
-          >
+            >TTS 语音名称
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="TTS 的语音名称，控制风格、语调、口音和节奏"></i>
+          </label>
           <select
             id="TTS_VOICE_NAME"
             name="TTS_VOICE_NAME"
@@ -1780,16 +1708,14 @@ endblock %} {% block head_extra_styles %}
             <option value="Sadaltager">Sadaltager (博学)</option>
             <option value="Sulafat">Sulafat (温暖)</option>
           </select>
-          <small class="text-gray-500 mt-1 block"
-            >TTS 的语音名称，控制风格、语调、口音和节奏</small
-          >
         </div>
 
         <!-- TTS 语速 -->
         <div class="mb-6">
           <label for="TTS_SPEED" class="block font-semibold mb-2 text-gray-700"
-            >TTS 语速</label
-          >
+            >TTS 语速
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="选择 TTS 的语速"></i>
+          </label>
           <select
             id="TTS_SPEED"
             name="TTS_SPEED"
@@ -1799,7 +1725,6 @@ endblock %} {% block head_extra_styles %}
             <option value="normal">正常</option>
             <option value="fast">快</option>
           </select>
-          <small class="text-gray-500 mt-1 block">选择 TTS 的语速</small>
         </div>
       </div>
 
@@ -1814,8 +1739,9 @@ endblock %} {% block head_extra_styles %}
         <!-- 付费API密钥 -->
         <div class="mb-6">
           <label for="PAID_KEY" class="block font-semibold mb-2 text-gray-700"
-            >付费API密钥</label
-          >
+            >付费API密钥
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于图像生成的付费API密钥"></i>
+          </label>
           <input
             type="text"
             id="PAID_KEY"
@@ -1823,9 +1749,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="AIzaSyxxxxxxxxxxxxxxxxxxx"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >用于图像生成的付费API密钥</small
-          >
         </div>
 
         <!-- 图像生成模型 -->
@@ -1833,8 +1756,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="CREATE_IMAGE_MODEL"
             class="block font-semibold mb-2 text-gray-700"
-            >图像生成模型</label
-          >
+            >图像生成模型
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="用于图像生成的模型"></i>
+          </label>
           <div class="flex items-center gap-2">
             <input
               type="text"
@@ -1852,7 +1776,6 @@ endblock %} {% block head_extra_styles %}
               <i class="fas fa-list-ul"></i>
             </button>
           </div>
-          <small class="text-gray-500 mt-1 block">用于图像生成的模型</small>
         </div>
 
         <!-- 上传提供商 -->
@@ -1860,8 +1783,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="UPLOAD_PROVIDER"
             class="block font-semibold mb-2 text-gray-700"
-            >上传提供商</label
-          >
+            >上传提供商
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="图片上传服务提供商"></i>
+          </label>
           <select
             id="UPLOAD_PROVIDER"
             name="UPLOAD_PROVIDER"
@@ -1872,7 +1796,6 @@ endblock %} {% block head_extra_styles %}
             <option value="cloudflare_imgbed">Cloudflare</option>
             <option value="aliyun_oss">阿里云OSS</option>
           </select>
-          <small class="text-gray-500 mt-1 block">图片上传服务提供商</small>
         </div>
 
         <!-- SM.MS密钥 -->
@@ -1880,8 +1803,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="SMMS_SECRET_TOKEN"
             class="block font-semibold mb-2 text-gray-700"
-            >SM.MS密钥</label
-          >
+            >SM.MS密钥
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="SM.MS图床的密钥"></i>
+          </label>
           <input
             type="text"
             id="SMMS_SECRET_TOKEN"
@@ -1889,7 +1813,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">SM.MS图床的密钥</small>
         </div>
 
         <!-- PicGo API URL -->
@@ -1897,8 +1820,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="PICGO_API_URL"
             class="block font-semibold mb-2 text-gray-700"
-            >PicGo API地址</label
-          >
+            >PicGo API地址
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="PicGo服务器的API地址，默认为 https://www.picgo.net/api/1/upload"></i>
+          </label>
           <input
             type="text"
             id="PICGO_API_URL"
@@ -1906,7 +1830,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="https://www.picgo.net/api/1/upload"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">PicGo服务器的API地址，默认为 https://www.picgo.net/api/1/upload</small>
         </div>
 
         <!-- PicGo API密钥 -->
@@ -1914,8 +1837,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="PICGO_API_KEY"
             class="block font-semibold mb-2 text-gray-700"
-            >PicGo API密钥</label
-          >
+            >PicGo API密钥
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="PicGo的API密钥"></i>
+          </label>
           <input
             type="text"
             id="PICGO_API_KEY"
@@ -1923,7 +1847,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="xxxx"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">PicGo的API密钥</small>
         </div>
 
         <!-- Cloudflare图床URL -->
@@ -1931,8 +1854,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="CLOUDFLARE_IMGBED_URL"
             class="block font-semibold mb-2 text-gray-700"
-            >Cloudflare图床URL</label
-          >
+            >Cloudflare图床URL
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Cloudflare图床的URL"></i>
+          </label>
           <input
             type="text"
             id="CLOUDFLARE_IMGBED_URL"
@@ -1940,7 +1864,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="https://xxxxxxx.pages.dev/upload"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">Cloudflare图床的URL</small>
         </div>
 
         <!-- Cloudflare认证码 -->
@@ -1948,8 +1871,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="CLOUDFLARE_IMGBED_AUTH_CODE"
             class="block font-semibold mb-2 text-gray-700"
-            >Cloudflare认证码</label
-          >
+            >Cloudflare认证码
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Cloudflare图床的认证码"></i>
+          </label>
           <input
             type="text"
             id="CLOUDFLARE_IMGBED_AUTH_CODE"
@@ -1957,7 +1881,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="xxxxxxxxx"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">Cloudflare图床的认证码</small>
         </div>
 
         <!-- Cloudflare上传文件夹 -->
@@ -1965,8 +1888,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="CLOUDFLARE_IMGBED_UPLOAD_FOLDER"
             class="block font-semibold mb-2 text-gray-700"
-            >Cloudflare上传文件夹</label
-          >
+            >Cloudflare上传文件夹
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="Cloudflare图床的上传文件夹路径（可选）"></i>
+          </label>
           <input
             type="text"
             id="CLOUDFLARE_IMGBED_UPLOAD_FOLDER"
@@ -1974,9 +1898,6 @@ endblock %} {% block head_extra_styles %}
             placeholder=""
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >Cloudflare图床的上传文件夹路径（可选）</small
-          >
         </div>
 
         <!-- 阿里云OSS配置 -->
@@ -1985,8 +1906,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_ENDPOINT"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS Endpoint</label
-          >
+            >OSS Endpoint
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的Endpoint地址"></i>
+          </label>
           <input
             type="text"
             id="OSS_ENDPOINT"
@@ -1994,7 +1916,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="oss-cn-shanghai.aliyuncs.com"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的Endpoint地址</small>
         </div>
 
         <!-- OSS Access Key -->
@@ -2002,8 +1923,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_ACCESS_KEY"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS Access Key</label
-          >
+            >OSS Access Key
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的Access Key ID"></i>
+          </label>
           <input
             type="text"
             id="OSS_ACCESS_KEY"
@@ -2011,7 +1933,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="LTAI5txxxxxxxxxx"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的Access Key ID</small>
         </div>
 
         <!-- OSS Access Key Secret -->
@@ -2019,8 +1940,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_ACCESS_KEY_SECRET"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS Access Key Secret</label
-          >
+            >OSS Access Key Secret
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的Access Key Secret"></i>
+          </label>
           <input
             type="password"
             id="OSS_ACCESS_KEY_SECRET"
@@ -2028,7 +1950,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="yXxxxxxxxxxxxx"
             class="w-full px-4 py-3 rounded-lg sensitive-input form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的Access Key Secret</small>
         </div>
 
         <!-- OSS Bucket Name -->
@@ -2036,8 +1957,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_BUCKET_NAME"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS Bucket名称</label
-          >
+            >OSS Bucket名称
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的Bucket名称"></i>
+          </label>
           <input
             type="text"
             id="OSS_BUCKET_NAME"
@@ -2045,7 +1967,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="your-bucket-name"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的Bucket名称</small>
         </div>
 
         <!-- OSS Region -->
@@ -2053,8 +1974,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_REGION"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS Region</label
-          >
+            >OSS Region
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的Region区域"></i>
+          </label>
           <input
             type="text"
             id="OSS_REGION"
@@ -2062,7 +1984,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="cn-shanghai"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的Region区域</small>
         </div>
 
         <!-- OSS Internal Endpoint (可选) -->
@@ -2070,8 +1991,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="OSS_ENDPOINT_INNER"
             class="block font-semibold mb-2 text-gray-700"
-            >OSS内网Endpoint（可选）</label
-          >
+            >OSS内网Endpoint（可选）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="阿里云OSS的内网Endpoint地址（可选）"></i>
+          </label>
           <input
             type="text"
             id="OSS_ENDPOINT_INNER"
@@ -2079,7 +2001,6 @@ endblock %} {% block head_extra_styles %}
             placeholder="oss-cn-shanghai-internal.aliyuncs.com"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">阿里云OSS的内网Endpoint地址（可选）</small>
         </div>
       </div>
 
@@ -2125,8 +2046,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="STREAM_MIN_DELAY"
             class="block font-semibold mb-2 text-gray-700"
-            >最小延迟（秒）</label
-          >
+            >最小延迟（秒）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="流式输出的最小延迟时间"></i>
+          </label>
           <input
             type="number"
             id="STREAM_MIN_DELAY"
@@ -2136,7 +2058,6 @@ endblock %} {% block head_extra_styles %}
             step="0.001"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">流式输出的最小延迟时间</small>
         </div>
 
         <!-- 最大延迟 -->
@@ -2144,8 +2065,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="STREAM_MAX_DELAY"
             class="block font-semibold mb-2 text-gray-700"
-            >最大延迟（秒）</label
-          >
+            >最大延迟（秒）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="流式输出的最大延迟时间"></i>
+          </label>
           <input
             type="number"
             id="STREAM_MAX_DELAY"
@@ -2155,7 +2077,6 @@ endblock %} {% block head_extra_styles %}
             step="0.001"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">流式输出的最大延迟时间</small>
         </div>
 
         <!-- 短文本阈值 -->
@@ -2163,8 +2084,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="STREAM_SHORT_TEXT_THRESHOLD"
             class="block font-semibold mb-2 text-gray-700"
-            >短文本阈值</label
-          >
+            >短文本阈值
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="短文本的字符阈值"></i>
+          </label>
           <input
             type="number"
             id="STREAM_SHORT_TEXT_THRESHOLD"
@@ -2173,7 +2095,6 @@ endblock %} {% block head_extra_styles %}
             max="100"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">短文本的字符阈值</small>
         </div>
 
         <!-- 长文本阈值 -->
@@ -2181,8 +2102,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="STREAM_LONG_TEXT_THRESHOLD"
             class="block font-semibold mb-2 text-gray-700"
-            >长文本阈值</label
-          >
+            >长文本阈值
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="长文本的字符阈值"></i>
+          </label>
           <input
             type="number"
             id="STREAM_LONG_TEXT_THRESHOLD"
@@ -2191,7 +2113,6 @@ endblock %} {% block head_extra_styles %}
             max="1000"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">长文本的字符阈值</small>
         </div>
 
         <!-- 分块大小 -->
@@ -2199,8 +2120,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="STREAM_CHUNK_SIZE"
             class="block font-semibold mb-2 text-gray-700"
-            >分块大小</label
-          >
+            >分块大小
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="流式输出的分块大小"></i>
+          </label>
           <input
             type="number"
             id="STREAM_CHUNK_SIZE"
@@ -2209,7 +2131,6 @@ endblock %} {% block head_extra_styles %}
             max="100"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block">流式输出的分块大小</small>
         </div>
 
         <!-- Fake Streaming Configuration -->
@@ -2223,8 +2144,9 @@ endblock %} {% block head_extra_styles %}
         <!-- 启用假流式输出 -->
         <div class="mb-6 flex items-center justify-between">
           <label for="FAKE_STREAM_ENABLED" class="font-semibold text-gray-700"
-            >启用假流式输出</label
-          >
+            >启用假流式输出
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="当启用时，将调用非流式接口，并在等待响应期间发送空数据以维持连接"></i>
+          </label>
           <div
             class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
           >
@@ -2240,17 +2162,15 @@ endblock %} {% block head_extra_styles %}
             ></label>
           </div>
         </div>
-        <small class="text-gray-500 mt-1 block mb-4"
-          >当启用时，将调用非流式接口，并在等待响应期间发送空数据以维持连接。</small
-        >
 
         <!-- 假流式发送空数据的间隔时间 -->
         <div class="mb-6">
           <label
             for="FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS"
             class="block font-semibold mb-2 text-gray-700"
-            >假流式空数据发送间隔（秒）</label
-          >
+            >假流式空数据发送间隔（秒）
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="在启用假流式输出时，向客户端发送空数据以维持连接状态的时间间隔（建议 3-10 秒）"></i>
+          </label>
           <input
             type="number"
             id="FAKE_STREAM_EMPTY_DATA_INTERVAL_SECONDS"
@@ -2260,15 +2180,18 @@ endblock %} {% block head_extra_styles %}
             step="1"
             class="w-full px-4 py-3 rounded-lg form-input-themed"
           />
-          <small class="text-gray-500 mt-1 block"
-            >在启用假流式输出时，向客户端发送空数据以维持连接状态的时间间隔（建议
-            3-10 秒）。</small
-          >
         </div>
       </div>
 
+      <!-- 定时任务配置 -->
+      <div class="config-section" id="scheduler-section">
+        <h2
+          class="text-xl font-bold mb-6 pb-3 border-b flex items-center gap-2 text-gray-800 border-violet-300 border-opacity-30"
+        >
+          <i class="fas fa-clock text-violet-400"></i> 定时任务配置
+        </h2>
 
-<!-- 检查间隔 -->
+        <!-- 检查间隔 -->
         <div class="mb-6">
           <label
             for="CHECK_INTERVAL_HOURS"
@@ -2299,8 +2222,9 @@ endblock %} {% block head_extra_styles %}
         <!-- 日志级别 -->
         <div class="mb-6">
           <label for="LOG_LEVEL" class="block font-semibold mb-2 text-gray-700"
-            >日志级别</label
-          >
+            >日志级别
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="设置应用程序的日志记录详细程度"></i>
+          </label>
           <select
             id="LOG_LEVEL"
             name="LOG_LEVEL"
@@ -2312,9 +2236,6 @@ endblock %} {% block head_extra_styles %}
             <option value="ERROR">ERROR</option>
             <option value="CRITICAL">CRITICAL</option>
           </select>
-          <small class="text-gray-500 mt-1 block"
-            >设置应用程序的日志记录详细程度</small
-          >
         </div>
 
         <!-- 错误日志记录请求体 -->
@@ -2323,8 +2244,9 @@ endblock %} {% block head_extra_styles %}
             <label
               for="ERROR_LOG_RECORD_REQUEST_BODY"
               class="font-semibold text-gray-700"
-              >错误日志记录请求体</label
-            >
+              >错误日志记录请求体
+              <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="关闭可避免敏感数据入库，默认关闭"></i>
+            </label>
             <div
               class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
             >
@@ -2340,9 +2262,6 @@ endblock %} {% block head_extra_styles %}
               ></label>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >关闭可避免敏感数据入库，默认关闭。</small
-          >
         </div>
 
         <!-- 自动删除错误日志 -->
@@ -2351,8 +2270,9 @@ endblock %} {% block head_extra_styles %}
             <label
               for="AUTO_DELETE_ERROR_LOGS_ENABLED"
               class="font-semibold text-gray-700"
-              >是否开启自动删除错误日志</label
-            >
+              >是否开启自动删除错误日志
+              <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="开启后，将自动删除指定天数前的错误日志"></i>
+            </label>
             <div
               class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
             >
@@ -2368,9 +2288,6 @@ endblock %} {% block head_extra_styles %}
               ></label>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >开启后，将自动删除指定天数前的错误日志。</small
-          >
         </div>
 
         <!-- 自动删除日志天数 -->
@@ -2378,8 +2295,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="AUTO_DELETE_ERROR_LOGS_DAYS"
             class="block font-semibold mb-2 text-gray-700"
-            >自动删除多少天前的错误日志</label
-          >
+            >自动删除多少天前的错误日志
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="选择自动删除错误日志的天数"></i>
+          </label>
           <select
             id="AUTO_DELETE_ERROR_LOGS_DAYS"
             name="AUTO_DELETE_ERROR_LOGS_DAYS"
@@ -2389,9 +2307,6 @@ endblock %} {% block head_extra_styles %}
             <option value="7">7 天</option>
             <option value="30">30 天</option>
           </select>
-          <small class="text-gray-500 mt-1 block"
-            >选择自动删除错误日志的天数。</small
-          >
         </div>
 
         <!-- 自动删除请求日志 -->
@@ -2400,8 +2315,9 @@ endblock %} {% block head_extra_styles %}
             <label
               for="AUTO_DELETE_REQUEST_LOGS_ENABLED"
               class="font-semibold text-gray-700"
-              >是否开启自动删除请求日志</label
-            >
+              >是否开启自动删除请求日志
+              <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="开启后，将自动删除指定天数前的请求日志"></i>
+            </label>
             <div
               class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
             >
@@ -2417,9 +2333,6 @@ endblock %} {% block head_extra_styles %}
               ></label>
             </div>
           </div>
-          <small class="text-gray-500 mt-1 block"
-            >开启后，将自动删除指定天数前的请求日志。</small
-          >
         </div>
 
         <!-- 自动删除请求日志天数 -->
@@ -2427,8 +2340,9 @@ endblock %} {% block head_extra_styles %}
           <label
             for="AUTO_DELETE_REQUEST_LOGS_DAYS"
             class="block font-semibold mb-2 text-gray-700"
-            >自动删除多少天前的请求日志</label
-          >
+            >自动删除多少天前的请求日志
+            <i class="fas fa-question-circle text-gray-400 ml-1 cursor-help" title="选择自动删除请求日志的天数"></i>
+          </label>
           <select
             id="AUTO_DELETE_REQUEST_LOGS_DAYS"
             name="AUTO_DELETE_REQUEST_LOGS_DAYS"
@@ -2438,220 +2352,6 @@ endblock %} {% block head_extra_styles %}
             <option value="7">7 天</option>
             <option value="30">30 天</option>
           </select>
-          <small class="text-gray-500 mt-1 block"
-            >选择自动删除请求日志的天数。</small
-          >
-        </div>
-      </div>
-
-      <!-- 智能密钥池配置 -->
-      <div class="config-section" id="keypool-section">
-        <h2
-          class="text-xl font-bold mb-6 pb-3 border-b flex items-center gap-2 text-gray-800 border-violet-300 border-opacity-30"
-        >
-          <i class="fas fa-swimming-pool text-violet-400"></i> 智能密钥池配置
-        </h2>
-
-        <!-- 启用密钥池 -->
-        <div class="mb-6">
-          <div class="flex items-center justify-between">
-            <label
-              for="VALID_KEY_POOL_ENABLED"
-              class="font-semibold text-gray-700"
-              >启用智能密钥池</label
-            >
-            <div
-              class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in"
-            >
-              <input
-                type="checkbox"
-                name="VALID_KEY_POOL_ENABLED"
-                id="VALID_KEY_POOL_ENABLED"
-                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"
-              />
-              <label
-                for="VALID_KEY_POOL_ENABLED"
-                class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"
-              ></label>
-            </div>
-          </div>
-          <small class="text-gray-500 mt-1 block"
-            >启用后，系统将维护一个预验证的密钥池，显著提升API响应速度</small
-          >
-        </div>
-
-        <!-- 密钥池大小 -->
-        <div class="mb-6">
-          <label
-            for="VALID_KEY_POOL_SIZE"
-            class="block font-semibold mb-2 text-gray-700"
-            >密钥池大小</label
-          >
-          <select
-            id="VALID_KEY_POOL_SIZE"
-            name="VALID_KEY_POOL_SIZE"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="20">20 个密钥</option>
-            <option value="30">30 个密钥</option>
-            <option value="50">50 个密钥</option>
-            <option value="80">80 个密钥</option>
-            <option value="100">100 个密钥</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >池中同时维护的已验证密钥数量，越大响应越快但占用更多资源</small
-          >
-        </div>
-
-        <!-- 密钥TTL时间 -->
-        <div class="mb-6">
-          <label
-            for="KEY_TTL_HOURS"
-            class="block font-semibold mb-2 text-gray-700"
-            >密钥生存时间 (小时)</label
-          >
-          <select
-            id="KEY_TTL_HOURS"
-            name="KEY_TTL_HOURS"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="1">1 小时</option>
-            <option value="2">2 小时</option>
-            <option value="4">4 小时</option>
-            <option value="6">6 小时</option>
-            <option value="12">12 小时</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >密钥在池中的有效时间，过期后会被自动清理并重新验证</small
-          >
-        </div>
-
-        <!-- 最小阈值 -->
-        <div class="mb-6">
-          <label
-            for="POOL_MIN_THRESHOLD"
-            class="block font-semibold mb-2 text-gray-700"
-            >池最小阈值</label
-          >
-          <select
-            id="POOL_MIN_THRESHOLD"
-            name="POOL_MIN_THRESHOLD"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="5">5 个密钥</option>
-            <option value="10">10 个密钥</option>
-            <option value="15">15 个密钥</option>
-            <option value="20">20 个密钥</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >当池中密钥数量低于此值时，系统会主动补充新密钥</small
-          >
-        </div>
-
-        <!-- 紧急补充数量 -->
-        <div class="mb-6">
-          <label
-            for="EMERGENCY_REFILL_COUNT"
-            class="block font-semibold mb-2 text-gray-700"
-            >紧急补充数量</label
-          >
-          <select
-            id="EMERGENCY_REFILL_COUNT"
-            name="EMERGENCY_REFILL_COUNT"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="2">2 个密钥</option>
-            <option value="3">3 个密钥</option>
-            <option value="5">5 个密钥</option>
-            <option value="8">8 个密钥</option>
-            <option value="10">10 个密钥</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >当池为空时，同时验证的密钥数量，越大恢复越快但负载越高</small
-          >
-        </div>
-
-        <!-- 维护间隔 -->
-        <div class="mb-6">
-          <label
-            for="POOL_MAINTENANCE_INTERVAL_MINUTES"
-            class="block font-semibold mb-2 text-gray-700"
-            >维护间隔 (分钟)</label
-          >
-          <select
-            id="POOL_MAINTENANCE_INTERVAL_MINUTES"
-            name="POOL_MAINTENANCE_INTERVAL_MINUTES"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="10">10 分钟</option>
-            <option value="20">20 分钟</option>
-            <option value="30">30 分钟</option>
-            <option value="60">60 分钟</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >定期维护密钥池的间隔时间，包括清理过期密钥和主动补充</small
-          >
-        </div>
-
-
-
-        <!-- Gemini配额重置时间 -->
-        <div class="mb-6">
-          <label
-            for="GEMINI_QUOTA_RESET_HOUR"
-            class="block font-semibold mb-2 text-gray-700"
-            >Gemini配额重置时间</label
-          >
-          <select
-            id="GEMINI_QUOTA_RESET_HOUR"
-            name="GEMINI_QUOTA_RESET_HOUR"
-            class="w-full px-4 py-3 rounded-lg form-select-themed"
-          >
-            <option value="0">0点 (午夜)</option>
-            <option value="1">1点</option>
-            <option value="2">2点</option>
-            <option value="3">3点</option>
-            <option value="4">4点</option>
-            <option value="5">5点</option>
-            <option value="6">6点</option>
-            <option value="7">7点</option>
-            <option value="8">8点</option>
-            <option value="9">9点</option>
-            <option value="10">10点</option>
-            <option value="11">11点</option>
-            <option value="12">12点 (中午)</option>
-            <option value="13">13点</option>
-            <option value="14">14点</option>
-            <option value="15">15点</option>
-            <option value="16">16点 (默认)</option>
-            <option value="17">17点</option>
-            <option value="18">18点</option>
-            <option value="19">19点</option>
-            <option value="20">20点</option>
-            <option value="21">21点</option>
-            <option value="22">22点</option>
-            <option value="23">23点</option>
-          </select>
-          <small class="text-gray-500 mt-1 block"
-            >Gemini API配额每日重置的时间点（24小时制），429错误的密钥将冷却到此时间点</small
-          >
-        </div>
-
-        <!-- 时区 -->
-        <div class="mb-6">
-          <label for="TIMEZONE" class="block font-semibold mb-2 text-gray-700"
-            >时区</label
-          >
-          <input
-            type="text"
-            id="TIMEZONE"
-            name="TIMEZONE"
-            placeholder="例如: Asia/Shanghai"
-            class="w-full px-4 py-3 rounded-lg form-input-themed"
-          />
-          <small class="text-gray-500 mt-1 block"
-            >系统使用的时区，格式如 "Asia/Shanghai" 或 "UTC"</small
-          >
         </div>
       </div>
 
@@ -3169,44 +2869,8 @@ endblock %} {% block head_extra_styles %}
   </div>
 </div>
 
-<!-- 悬浮保存按钮 -->
-<button
-  type="button"
-  id="floatingSaveBtn"
-  class="floating-save-btn"
-  title="快速保存配置"
->
-  <i class="fas fa-save"></i>
-  保存
-</button>
-
 {% endblock %} {% block body_scripts %}
-<script src="/static/js/config_editor.js"></script>
-<!-- 悬浮保存按钮功能 -->
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    // 悬浮保存按钮点击事件
-    const floatingSaveBtn = document.getElementById('floatingSaveBtn');
-    const originalSaveBtn = document.getElementById('saveBtn');
-
-    if (floatingSaveBtn && originalSaveBtn) {
-      floatingSaveBtn.addEventListener('click', function() {
-        // 触发原始保存按钮的点击事件
-        originalSaveBtn.click();
-
-        // 添加视觉反馈
-        const icon = this.querySelector('i');
-        const originalClass = icon.className;
-        icon.className = 'fas fa-spinner fa-spin';
-
-        // 2秒后恢复图标
-        setTimeout(() => {
-          icon.className = originalClass;
-        }, 2000);
-      });
-    }
-  });
-</script>
+<script src="{{ static_url('js/config_editor.js') }}"></script>
 <!-- 增强下拉框样式和交互性 -->
 <script>
   document.addEventListener("DOMContentLoaded", function () {
@@ -3314,8 +2978,6 @@ endblock %} {% block head_extra_styles %}
         }, 150);
       });
     });
-
-
   });
 </script>
 {% endblock %}

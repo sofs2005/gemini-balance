@@ -45,6 +45,179 @@ endblock %} {% block head_extra_styles %}
     .search-container {
       grid-template-columns: 1fr;
     }
+    
+    /* 移动端主容器布局 */
+    .mobile-buttons-container {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 1rem !important;
+      align-items: stretch !important;
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+    
+    /* 移动端搜索控件布局优化 */
+    .mobile-search-controls {
+      grid-template-columns: 1fr !important;
+      gap: 0.75rem !important;
+      width: 100% !important;
+      margin-bottom: 0.5rem !important;
+    }
+    
+    /* 按钮容器在移动端的布局 */
+    .buttons-container-responsive {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 0.5rem !important;
+      width: 100% !important;
+      align-items: stretch !important;
+      justify-content: stretch !important;
+    }
+    
+    /* 移动端所有按钮样式 */
+    .buttons-container-responsive button {
+      width: 100% !important;
+      max-width: 100% !important;
+      justify-content: center !important;
+      text-align: center !important;
+      min-width: 0 !important;
+      flex-shrink: 0 !important;
+      box-sizing: border-box !important;
+      padding: 0.5rem 1rem !important;
+      font-size: 0.875rem !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+  }
+  
+  /* 中等屏幕优化 */
+  @media (max-width: 1024px) and (min-width: 769px) {
+    .buttons-container-responsive {
+      flex-wrap: wrap !important;
+      justify-content: center !important;
+    }
+    
+    .buttons-container-responsive button {
+      flex-shrink: 1 !important;
+      min-width: 0 !important;
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+    }
+  }
+  
+  /* 小屏幕(手机)特殊优化 - 确保按钮在边框内 */
+  @media (max-width: 640px) {
+    /* 强制重写主容器布局 */
+    .mobile-buttons-container {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 100% !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      gap: 1rem !important;
+      overflow: visible !important;
+    }
+    
+    /* 搜索区域在移动端占满宽度 */
+    .mobile-search-controls {
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    
+    /* 按钮区域完全重新布局 */
+    .buttons-container-responsive {
+      display: flex !important;
+      flex-direction: column !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      gap: 0.5rem !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+      overflow: visible !important;
+    }
+    
+    /* 所有按钮统一样式 */
+    .buttons-container-responsive button {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      padding: 0.5rem 1rem !important;
+      margin: 0 !important;
+      font-size: 0.875rem !important;
+      line-height: 1.25rem !important;
+      border-radius: 0.5rem !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      flex-shrink: 0 !important;
+    }
+    
+    /* 特别针对清空全部按钮 */
+    #deleteAllLogsBtn {
+      background-color: #f87171 !important;
+      border: 1px solid #f87171 !important;
+    }
+    
+    #deleteAllLogsBtn:hover {
+      background-color: #ef4444 !important;
+      border: 1px solid #ef4444 !important;
+    }
+    
+    /* 确保容器不会溢出父级 */
+    .mobile-buttons-container,
+    .mobile-buttons-container > *,
+    .buttons-container-responsive,
+    .buttons-container-responsive > * {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+    }
+    
+    /* 额外的安全边距控制 */
+    .mobile-buttons-container .grid {
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+    }
+    
+    /* 确保主内容区域有适当的内边距 */
+    .rounded-xl.p-6 {
+      padding-left: 1rem !important;
+      padding-right: 1rem !important;
+    }
+  }
+  
+  /* 超小屏幕额外优化 */
+  @media (max-width: 480px) {
+    .mobile-buttons-container {
+      gap: 0.75rem !important;
+    }
+    
+    .buttons-container-responsive {
+      gap: 0.4rem !important;
+    }
+    
+    .buttons-container-responsive button {
+      padding: 0.4rem 0.8rem !important;
+      font-size: 0.8rem !important;
+    }
+    
+    /* 主容器内边距进一步缩小 */
+    .rounded-xl.p-6 {
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+    }
+    
+    /* 确保清空全部按钮文字不会太挤 */
+    #deleteAllLogsBtn i {
+      margin-right: 0.25rem !important;
+    }
   }
 
   input[type="text"],
@@ -586,7 +759,7 @@ endblock %} {% block head_extra_styles %}
       class="text-3xl font-extrabold text-center text-gray-800 mb-4"
     >
       <img
-        src="/static/icons/logo.png"
+        src="{{ static_url('icons/logo.png') }}"
         alt="Gemini Balance Logo"
         class="h-9 inline-block align-middle mr-2"
       />
@@ -643,10 +816,10 @@ endblock %} {% block head_extra_styles %}
 
       <!-- 搜索与操作控件 -->
       <div
-        class="grid grid-cols-1 lg:grid-cols-[1fr_auto] items-center gap-4 mb-6"
+        class="grid grid-cols-1 lg:grid-cols-[1fr_auto] items-center gap-4 mb-6 mobile-buttons-container"
       >
         <div
-          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full"
+          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full mobile-search-controls"
         >
           <input
             type="text"
@@ -691,7 +864,7 @@ endblock %} {% block head_extra_styles %}
             </div>
           </div>
         </div>
-        <div class="flex items-center gap-3 flex-shrink-0">
+        <div class="flex items-center gap-3 flex-shrink-0 buttons-container-responsive">
           <button
             id="searchBtn"
             class="flex items-center justify-center px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200 shadow-sm hover:shadow-md whitespace-nowrap"
@@ -1048,7 +1221,7 @@ endblock %} {% block head_extra_styles %}
   </div>
 </div>
 {% endblock %} {% block body_scripts %}
-<script src="/static/js/error_logs.js"></script>
+<script src="{{ static_url('js/error_logs.js') }}"></script>
 <script>
   // error_logs.html specific JS initialization (if any)
   // e.g., initialize date pickers or other elements if needed
