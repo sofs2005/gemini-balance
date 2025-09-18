@@ -33,40 +33,40 @@ async function fetchAPI(url, options = {}) {
     const response = await fetch(url, options);
 
     if (response.status === 204) {
-      return null;
+      return null; // Indicate success with no content for DELETE etc.
     }
 
-    // First, get the response body as text, as this is the most robust method.
-    const responseText = await response.text();
-
-    // Now, try to parse the text as JSON.
     let responseData;
     try {
-        responseData = JSON.parse(responseText);
+      // Clone the response to allow reading it multiple times if needed (e.g., for text fallback)
+      const clonedResponse = response.clone();
+      responseData = await response.json();
     } catch (e) {
-        // If JSON parsing fails and the response was not OK, throw the raw text as the error.
-        if (!response.ok) {
-            throw new Error(responseText || `HTTP error! status: ${response.status} - ${response.statusText}`);
-        }
-        // If the response was OK but not valid JSON, it might be an intentional text response.
-        console.warn("Response was not JSON for URL:", url);
-        return responseText; // Return the raw text.
+      // If JSON parsing fails, try to get text, especially if response wasn't ok
+      if (!response.ok) {
+        const textResponse = await response.text(); // Use original response for text
+        throw new Error(
+          textResponse ||
+            `HTTP error! status: ${response.status} - ${response.statusText}`
+        );
+      }
+      // If response is ok but not JSON, maybe return raw text or handle differently
+      console.warn("Response was not JSON for URL:", url);
+      // Consider returning text or null based on expected non-JSON success cases
+      return await response.text(); // Example: return text for non-JSON success
     }
 
     if (!response.ok) {
-      // If the response is not OK, use the parsed JSON for a detailed error message if available.
-      let message = responseData?.detail || responseData?.message || responseData?.error;
-      if (typeof message === 'object' && message !== null) {
-        message = JSON.stringify(message);
-      }
-      if (!message || typeof message !== 'string') {
-        // Fallback to the raw text or status code if no detailed message is found.
-        message = responseText || `HTTP error! status: ${response.status}`;
-      }
+      // Prefer error message from API response body (already parsed as JSON)
+      const message =
+        responseData?.detail ||
+        responseData?.message ||
+        responseData?.error ||
+        `HTTP error! status: ${response.status}`;
       throw new Error(message);
     }
 
-    return responseData; // On success, return the parsed JSON.
+    return responseData; // Return parsed JSON data
   } catch (error) {
     console.error(
       "API Call Failed:",
@@ -149,23 +149,11 @@ function updateBatchActions(type) {
   );
   if (selectAllCheckbox && visibleCheckboxes.length > 0) {
     selectAllCheckbox.checked = count === visibleCheckboxes.length;
+    selectAllCheckbox.indeterminate =
+      count > 0 && count < visibleCheckboxes.length;
   } else if (selectAllCheckbox) {
     selectAllCheckbox.checked = false;
-  }
-}
-
-// 更新卡片头部的密钥计数
-function updateCardHeaderCount(type, delta) {
-  // 直接通过ID定位到计数的<span>元素，例如 'validKeyCount' 或 'invalidKeyCount'
-  const countElementId = `${type}KeyCount`;
-  const countElement = document.getElementById(countElementId);
-
-  if (countElement) {
-    const currentCount = parseInt(countElement.textContent, 10);
-    if (!isNaN(currentCount)) {
-      const newCount = Math.max(0, currentCount + delta); // 确保计数不为负
-      countElement.textContent = newCount;
-    }
+    selectAllCheckbox.indeterminate = false;
   }
 }
 
@@ -240,83 +228,56 @@ function copyKey(key) {
 
 // showCopyStatus 函数已废弃。
 
-// 全局变量用于跟踪延迟刷新操作
-let pendingRefreshTimeout = null;
-
 async function verifyKey(key, button) {
-  button.disabled = true;
-  const originalHtml = button.innerHTML;
-  button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
-
-  // 清除之前的延迟刷新操作，避免竞态条件
-  if (pendingRefreshTimeout) {
-    clearTimeout(pendingRefreshTimeout);
-    pendingRefreshTimeout = null;
-  }
-
-  // 确定当前密钥在哪个列表中
-  const listItem = button.closest('li[data-key]');
-  const isInValidList = listItem && listItem.closest('#validKeys');
-  const isInInvalidList = listItem && listItem.closest('#invalidKeys');
-
-  let needsRefresh = false;
-
   try {
-    const data = await fetchAPI(`/gemini/v1beta/verify-key/${key}`, {
-      method: "POST",
-    });
+    // 禁用按钮并显示加载状态
+    button.disabled = true;
+    const originalHtml = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 验证中';
 
-    if (data && (data.success || data.status === "valid")) {
-      showNotification("密钥验证成功", "success", 3000);
-      // 如果无效密钥验证成功，可能需要移到有效池
-      if (isInInvalidList) {
-        needsRefresh = true;
+    try {
+      const data = await fetchAPI(`/gemini/v1beta/verify-key/${key}`, {
+        method: "POST",
+      });
+
+      // 根据验证结果更新UI并显示模态提示框
+      if (data && (data.success || data.status === "valid")) {
+        // 验证成功，显示成功结果
+        button.style.backgroundColor = "#27ae60";
+        // 使用结果模态框显示成功消息
+        showResultModal(true, "密钥验证成功");
+        // 模态框关闭时会自动刷新页面
+      } else {
+        // 验证失败，显示失败结果
+        const errorMsg = data.error || "密钥无效";
+        button.style.backgroundColor = "#e74c3c";
+        // 使用结果模态框显示失败消息，改为true以在关闭时刷新
+        showResultModal(false, "密钥验证失败: " + errorMsg, true);
       }
-    } else {
-      const errorMsg = data.error || "密钥无效";
-      showNotification(`密钥验证失败: ${errorMsg}`, "error", 7000);
-      // 如果有效密钥验证失败，可能需要移到无效池
-      if (isInValidList) {
-        needsRefresh = true;
-      }
+    } catch (apiError) {
+      console.error("密钥验证 API 请求失败:", apiError);
+      showResultModal(false, `验证请求失败: ${apiError.message}`, true);
+    } finally {
+      // 1秒后恢复按钮原始状态 (如果页面不刷新)
+      // 由于现在成功和失败都会刷新，这部分逻辑可以简化或移除
+      // 但为了防止未来修改刷新逻辑，暂时保留，但可能不会执行
+      setTimeout(() => {
+        if (
+          !document.getElementById("resultModal") ||
+          document.getElementById("resultModal").classList.contains("hidden")
+        ) {
+          button.innerHTML = originalHtml;
+          button.disabled = false;
+          button.style.backgroundColor = "";
+        }
+      }, 1000);
     }
-  } catch (apiError) {
-    console.error("密钥验证 API 请求失败:", apiError);
-    showNotification(`验证请求失败: ${apiError.message}`, "error", 7000);
-    // 请求失败时不刷新，因为无法确定状态变化
-    needsRefresh = false;
-  } finally {
-    // 恢复按钮
-    button.innerHTML = originalHtml;
-    button.disabled = false;
-
-    // 确保卡片上的所有按钮都已启用
-    if (listItem) {
-        const allButtons = listItem.querySelectorAll('button');
-        allButtons.forEach(btn => btn.disabled = false);
-    }
-
-    // 只在可能发生状态变化时才刷新
-    if (needsRefresh) {
-      const scrollY = window.scrollY;
-      pendingRefreshTimeout = setTimeout(async () => {
-          try {
-              // 刷新两个密钥列表以反映状态变化
-              await Promise.all([
-                  fetchAndDisplayKeys('valid'),
-                  fetchAndDisplayKeys('invalid')
-              ]);
-          } catch (refreshError) {
-              console.error("刷新密钥列表失败:", refreshError);
-              showNotification("刷新列表时出错，请稍后手动刷新。", "error", 5000);
-          } finally {
-              // 恢复滚动位置
-              window.scrollTo({ top: scrollY, behavior: 'auto' });
-              // 清除已完成的 timeout
-              pendingRefreshTimeout = null;
-          }
-      }, 2000); // 延迟2秒，让验证结果消息先显示
-    }
+  } catch (error) {
+    console.error("验证失败:", error);
+    // 确保在捕获到错误时恢复按钮状态 (如果页面不刷新)
+    // button.disabled = false; // 由 finally 处理或因刷新而无需处理
+    // button.innerHTML = '<i class="fas fa-check-circle"></i> 验证';
+    showResultModal(false, "验证处理失败: " + error.message, true); // 改为true以在关闭时刷新
   }
 }
 
@@ -333,25 +294,11 @@ async function resetKeyFailCount(key, button) {
 
     // 根据重置结果更新UI
     if (data.success) {
-      showNotification("失败计数重置成功", "success");
+      showNotification("失败计数重置成功");
+      // 成功时保留绿色背景一会儿
       button.style.backgroundColor = "#27ae60";
-
-      // 更新UI中的失败计数
-      const listItem = button.closest('li[data-key]');
-      if (listItem) {
-        const failCountSpan = listItem.querySelector('.bg-amber-50');
-        if (failCountSpan) {
-          failCountSpan.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> 失败: 0';
-        }
-        listItem.dataset.failCount = "0";
-      }
-
-      // 1秒后恢复按钮
-      setTimeout(() => {
-        button.innerHTML = originalHtml;
-        button.disabled = false;
-        button.style.backgroundColor = "";
-      }, 1000);
+      // 稍后刷新页面
+      setTimeout(() => location.reload(), 1000);
     } else {
       const errorMsg = data.message || "重置失败";
       showNotification("重置失败: " + errorMsg, "error");
@@ -425,16 +372,15 @@ function resetAllKeysFailCount(type, event) {
 }
 
 // 关闭模态框并根据参数决定是否刷新页面
-function closeResultModal(reload = false) {
+function closeResultModal(reload = true) {
   document.getElementById("resultModal").classList.add("hidden");
   if (reload) {
-    // 在少数需要显式刷新的地方调用
-    location.reload();
+    location.reload(); // 操作完成后刷新页面
   }
 }
 
 // 显示操作结果模态框 (通用版本)
-function showResultModal(success, message, autoReload = false) {
+function showResultModal(success, message, autoReload = true) {
   const modalElement = document.getElementById("resultModal");
   const titleElement = document.getElementById("resultModalTitle");
   const messageElement = document.getElementById("resultModalMessage");
@@ -472,10 +418,8 @@ function showResultModal(success, message, autoReload = false) {
     messageElement.appendChild(messageDiv);
   }
 
-  // 清除之前的事件监听器并设置新的确认按钮点击事件
-  const newConfirmButton = confirmButton.cloneNode(true);
-  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
-  newConfirmButton.onclick = () => closeResultModal(autoReload);
+  // 设置确认按钮点击事件
+  confirmButton.onclick = () => closeResultModal(autoReload);
 
   // 显示模态框
   modalElement.classList.remove("hidden");
@@ -597,30 +541,13 @@ function showVerificationResultModal(data) {
     const errorGroups = {};
     Object.entries(failedKeys).forEach(([key, error]) => {
       // 提取错误码或使用完整错误信息作为分组键
-      let errorCode = error;
-      
-      // 尝试提取常见的错误码模式
-      const errorCodePatterns = [
-        /status code (\d+)/,
-      ];
-      
-      for (const pattern of errorCodePatterns) {
-        const match = error.match(pattern);
-        if (match) {
-          errorCode = match[1] || match[0];
-          break;
-        }
-      }
-      
-      // 如果没有匹配到特定模式，使用500
-      if (errorCode === error) {
-        errorCode = 500;
-      }
+      let errorCode = error["error_code"];
+      let errorMessage = error["error_message"];
       
       if (!errorGroups[errorCode]) {
         errorGroups[errorCode] = [];
       }
-      errorGroups[errorCode].push({ key, error });
+      errorGroups[errorCode].push({ key, errorMessage });
     });
 
     // 创建分组展示容器
@@ -665,7 +592,7 @@ function showVerificationResultModal(data) {
       const keysList = document.createElement("div");
       keysList.className = "group-keys-list space-y-1";
 
-      keyErrorPairs.forEach(({ key, error }) => {
+      keyErrorPairs.forEach(({ key, errorMessage }) => {
         const keyItem = document.createElement("div");
         keyItem.className = "flex flex-col items-start bg-gray-50 p-2 rounded border";
 
@@ -680,7 +607,7 @@ function showVerificationResultModal(data) {
         const detailsButton = document.createElement("button");
         detailsButton.className = "ml-2 px-2 py-0.5 bg-red-200 hover:bg-red-300 text-red-700 text-xs rounded transition-colors";
         detailsButton.innerHTML = '<i class="fas fa-info-circle mr-1"></i>详情';
-        detailsButton.dataset.error = error;
+        detailsButton.dataset.error = errorMessage;
         detailsButton.onclick = (e) => {
           e.stopPropagation();
           const button = e.currentTarget;
@@ -734,13 +661,7 @@ function showVerificationResultModal(data) {
   }
 
   // 设置确认按钮点击事件 - 总是自动刷新
-  confirmButton.onclick = () => {
-    closeResultModal(false); // 关闭模态框，不刷新页面
-    // 软刷新两个列表以显示最新状态
-    showNotification("正在刷新列表...", "info", 2000);
-    fetchAndDisplayKeys('valid');
-    fetchAndDisplayKeys('invalid');
-  };
+  confirmButton.onclick = () => closeResultModal(true); // Always reload
 
   // 显示模态框
   modalElement.classList.remove("hidden");
@@ -758,7 +679,6 @@ async function executeResetAll(type) {
 
   let successCount = 0;
   let failCount = 0;
-  const successfulKeys = [];
 
   for (let i = 0; i < keysToReset.length; i++) {
     const key = keysToReset[i];
@@ -773,7 +693,6 @@ async function executeResetAll(type) {
       });
       if (data.success) {
         successCount++;
-        successfulKeys.push(key); // 记录成功重置的密钥
         addProgressLog(`✅ ${keyDisplay}: 重置成功`);
       } else {
         failCount++;
@@ -788,25 +707,11 @@ async function executeResetAll(type) {
     }
   }
 
-  // 循环结束后，批量更新UI
-  successfulKeys.forEach(key => {
-    const listItem = document.querySelector(`#${type}Keys li[data-key="${key}"]`);
-    if (listItem) {
-      const failCountSpan = listItem.querySelector('.bg-amber-50');
-      if (failCountSpan) {
-        failCountSpan.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> 失败: 0';
-      }
-      listItem.dataset.failCount = "0";
-    }
-  });
-
   updateProgress(
     keysToReset.length,
     keysToReset.length,
     `重置完成！成功: ${successCount}, 失败: ${failCount}`
   );
-  
-  // 进度模态框的关闭按钮默认不会刷新页面，所以这里的UI更新会保留
 }
 
 function scrollToTop() {
@@ -828,9 +733,6 @@ function refreshPage(button) {
   button.disabled = true;
   const icon = button.querySelector("i");
   if (icon) icon.classList.add("fa-spin"); // Add spin animation
-
-  // 刷新密钥池状态
-  loadPoolStatus();
 
   setTimeout(() => {
     window.location.reload();
@@ -1065,7 +967,6 @@ function initializeGlobalBatchVerificationHandlers() {
     document.getElementById("verifyModal").classList.add("hidden");
   };
 
-  // executeVerifyAll 变为 initializeGlobalBatchVerificationHandlers 的局部函数
   async function executeVerifyAll(type) {
     closeVerifyModal();
     const keysToVerify = getSelectedKeys(type);
@@ -1136,8 +1037,6 @@ function initializeGlobalBatchVerificationHandlers() {
         invalid_count: Object.keys(allFailedKeys).length
     });
   }
-  // The confirmButton.onclick in showVerifyModal (defined earlier in initializeGlobalBatchVerificationHandlers)
-  // will correctly reference this local executeVerifyAll due to closure.
 }
 
 // --- 进度条模态框函数 ---
@@ -1209,9 +1108,27 @@ function initializeKeySelectionListeners() {
       const listItem = event.target.closest("li[data-key]");
       if (!listItem) return;
 
-      // If the click was directly on the checkbox, or on a button/link, let the native behavior handle it.
-      if (event.target.closest("button, a, input[type='button'], input[type='submit'], .key-checkbox")) {
-          return;
+      // Do not toggle if a button, a link, or any element explicitly designed for interaction within the li was clicked
+      if (
+        event.target.closest(
+          "button, a, input[type='button'], input[type='submit']"
+        )
+      ) {
+        let currentTarget = event.target;
+        let isInteractiveElementClick = false;
+        while (currentTarget && currentTarget !== listItem) {
+          if (
+            currentTarget.tagName === "BUTTON" ||
+            currentTarget.tagName === "A" ||
+            (currentTarget.tagName === "INPUT" &&
+              ["button", "submit"].includes(currentTarget.type))
+          ) {
+            isInteractiveElementClick = true;
+            break;
+          }
+          currentTarget = currentTarget.parentElement;
+        }
+        if (isInteractiveElementClick) return;
       }
 
       const checkbox = listItem.querySelector(".key-checkbox");
@@ -1377,12 +1294,6 @@ function createKeyListItem(key, fail_count, type) {
             </div>
         </div>
     `;
-    // 强制确保所有按钮在创建时都是启用的，以防止状态残留问题
-    const buttons = li.querySelectorAll('button');
-    buttons.forEach(btn => {
-        btn.disabled = false;
-    });
-
     return li;
 }
 
@@ -1560,8 +1471,7 @@ function buildChartConfig(labels, successData, failureData) {
 
 async function fetchPeriodDetails(period) {
   // Uses backend endpoint /api/stats/details?period={period}
-  // For chart rendering, always fetch all data for the period.
-  return await fetchAPI(`/api/stats/details?period=${period}&all=true`);
+  return await fetchAPI(`/api/stats/details?period=${period}`);
 }
 
 function bucketizeDetails(period, details) {
@@ -1656,37 +1566,43 @@ async function fetchAndRenderAttentionKeys(statusCode = 429, limit = 10) {
     listEl.innerHTML = '';
     if (!data || (Array.isArray(data) && data.length === 0) || data.error) {
       listEl.innerHTML = '<li class="text-center text-gray-500 py-2">暂无需要注意的Key</li>';
+      updateBatchActions('attention');
       return;
     }
     data.forEach(item => {
       const li = document.createElement('li');
-      li.className = 'flex items-center bg-white rounded border px-3 py-2';
-      li.dataset.key = item.key;
+      li.className = 'flex items-center justify-between bg-white rounded border px-3 py-2';
+      li.dataset.key = item.key || '';
       const masked = item.key ? `${item.key.substring(0,4)}...${item.key.substring(item.key.length-4)}` : 'N/A';
       const code = item.status_code ?? statusCode;
       li.innerHTML = `
-        <input type="checkbox" class="form-checkbox h-5 w-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mr-4 key-checkbox" data-key-type="attention" value="${item.key}">
-        <div class="flex-grow flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <span class="font-mono text-sm">${masked}</span>
-                <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">${code}: ${item.count}</span>
-            </div>
-            <div class="flex items-center gap-2">
-                <button class="px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white" title="验证此Key">验证</button>
-                <button class="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white" title="查看24小时详情">详情</button>
-                <button class="px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white" title="复制Key">复制</button>
-                <button class="px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white" title="删除此Key">删除</button>
-            </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" class="form-checkbox h-4 w-4 text-primary-600 border-gray-300 rounded key-checkbox" value="${item.key || ''}">
+          <span class="font-mono text-sm">${masked}</span>
+          <span class="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded">${code}: ${item.count}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="px-2 py-1 text-xs rounded bg-success-600 hover:bg-success-700 text-white" title="验证此Key">验证</button>
+          <button class="px-2 py-1 text-xs rounded bg-blue-600 hover:bg-blue-700 text-white" title="查看24小时详情">详情</button>
+          <button class="px-2 py-1 text-xs rounded bg-blue-500 hover:bg-blue-600 text-white" title="复制Key">复制</button>
+          <button class="px-2 py-1 text-xs rounded bg-red-800 hover:bg-red-900 text-white" title="删除此Key">删除</button>
         </div>`;
       const [verifyBtn, detailBtn, copyBtn, deleteBtn] = li.querySelectorAll('button');
-      verifyBtn.addEventListener('click', (e) => verifyKey(item.key, e.currentTarget));
-      detailBtn.addEventListener('click', () => window.showKeyUsageDetails(item.key));
-      copyBtn.addEventListener('click', () => copyKey(item.key));
-      deleteBtn.addEventListener('click', (e) => showSingleKeyDeleteConfirmModal(item.key, e.currentTarget));
+      verifyBtn.addEventListener('click', (e) => { e.stopPropagation(); verifyKey(item.key, e.currentTarget); });
+      detailBtn.addEventListener('click', (e) => { e.stopPropagation(); window.showKeyUsageDetails(item.key); });
+      copyBtn.addEventListener('click', (e) => { e.stopPropagation(); copyKey(item.key); });
+      deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); showSingleKeyDeleteConfirmModal(item.key, e.currentTarget); });
+      // Checkbox change updates batch actions
+      const checkbox = li.querySelector('.key-checkbox');
+      if (checkbox) {
+        checkbox.addEventListener('change', () => updateBatchActions('attention'));
+      }
       listEl.appendChild(li);
     });
+    updateBatchActions('attention');
   } catch (e) {
     listEl.innerHTML = `<li class="text-center text-red-500 py-2">加载失败: ${e.message}</li>`;
+    updateBatchActions('attention');
   }
 }
 
@@ -1773,17 +1689,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeKeyPaginationAndSearch(); // This will also handle initial display
   registerServiceWorker();
   initializeDropdownMenu(); // 初始化下拉菜单
-  loadPoolStatus(); // 加载密钥池状态
   initChartControls(); // 初始化图表与时间区间切换
   initAttentionKeysControls(); // 初始化值得注意的Key错误码切换
   fetchAndRenderAttentionKeys(429, 10); // 默认渲染429，数量10
-
-  // 添加定时检查密钥池状态（仅用于调试）
-  console.log("🔍 启动密钥池状态监控（每30秒检查一次）");
-  setInterval(() => {
-    console.log("⏰ 定时检查密钥池状态...");
-    loadPoolStatus();
-  }, 30000); // 每30秒检查一次
 
   // Initial batch actions update might be needed if not covered by displayPage
   // updateBatchActions('valid');
@@ -1808,8 +1716,11 @@ function showSingleKeyDeleteConfirmModal(key, button) {
   titleElement.textContent = "确认删除密钥";
   messageElement.innerHTML = `确定要删除密钥 <span class="font-mono text-amber-300 font-semibold">${keyDisplay}</span> 吗？<br>此操作无法撤销。`;
 
-  // 直接设置onclick，避免cloneNode的问题
-  confirmButton.onclick = () => executeSingleKeyDelete(key, button);
+  // 移除旧的监听器并重新附加，以确保 key 和 button 参数是最新的
+  const newConfirmButton = confirmButton.cloneNode(true);
+  confirmButton.parentNode.replaceChild(newConfirmButton, confirmButton);
+
+  newConfirmButton.onclick = () => executeSingleKeyDelete(key, button);
 
   modalElement.classList.remove("hidden");
 }
@@ -1836,22 +1747,8 @@ async function executeSingleKeyDelete(key, button) {
     });
 
     if (response.success) {
-      // 删除成功后，直接从DOM中移除该行，并显示一个短暂的通知
-      const listItem = button.closest("li[data-key]");
-      if (listItem) {
-        listItem.style.transition = "opacity 0.5s, transform 0.5s";
-        listItem.style.opacity = "0";
-        listItem.style.transform = "translateX(-100%)";
-        setTimeout(() => {
-          listItem.remove();
-          // 因为我们不再刷新页面，需要手动更新各种状态
-          const keyType = listItem.querySelector('.key-checkbox').dataset.keyType;
-          updateBatchActions(keyType);
-          updateCardHeaderCount(keyType, -1);
-        }, 500); // 等待动画完成
-      }
-      showNotification(response.message || "密钥删除成功", "success");
-      // 不再调用会刷新的 showResultModal
+      // 使用 resultModal 并确保刷新
+      showResultModal(true, response.message || "密钥删除成功", true);
     } else {
       // 使用 resultModal，失败时不刷新，以便用户看到错误信息
       showResultModal(false, response.message || "密钥删除失败", false);
@@ -1881,14 +1778,18 @@ function showDeleteConfirmationModal(type, event) {
 
   titleElement.textContent = "确认批量删除";
   if (count > 0) {
-    messageElement.textContent = `确定要批量删除选中的 ${count} 个密钥吗？此操作无法撤销。`;
+    messageElement.textContent = `确定要批量删除选中的 ${count} 个${
+      type === "valid" ? "有效" : "无效"
+    }密钥吗？此操作无法撤销。`;
     confirmButton.disabled = false;
   } else {
-    messageElement.textContent = "没有选中任何密钥。请先选择要删除的密钥。";
+    // 此情况理论上不应发生，因为批量删除按钮在未选中时是禁用的
+    messageElement.textContent = `请先选择要删除的${
+      type === "valid" ? "有效" : "无效"
+    }密钥。`;
     confirmButton.disabled = true;
   }
 
-  // 直接设置onclick，避免cloneNode的问题
   confirmButton.onclick = () => executeDeleteSelectedKeys(type);
   modalElement.classList.remove("hidden");
 }
@@ -1929,41 +1830,13 @@ async function executeDeleteSelectedKeys(type) {
     });
 
     if (response.success) {
-      const message = response.message || `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
-      showNotification(message, "success");
-
-      if (type === 'attention') {
-        // 对于“值得注意的Key”列表，完全重新获取和渲染以确保数据一致性
-        setTimeout(() => {
-          fetchAndRenderAttentionKeys(currentStatus, getLimit());
-          updateBatchActions('attention'); // 重新获取后更新批量操作栏
-        }, 350); // 延迟以显示通知
-      } else {
-        // 对于有效/无效列表，从DOM中移除元素
-        const listId = `${type}Keys`;
-        const listElement = document.getElementById(listId);
-        if (listElement) {
-            selectedKeys.forEach(key => {
-              const listItem = listElement.querySelector(`li[data-key="${key}"]`);
-              if (listItem) {
-                listItem.style.transition = "opacity 0.3s, transform 0.3s";
-                listItem.style.opacity = "0";
-                listItem.style.transform = "scale(0.9)";
-                 setTimeout(() => {
-                    listItem.remove();
-                 }, 300);
-              }
-            });
-        }
-        // 更新卡片头部的计数
-        updateCardHeaderCount(type, -selectedKeys.length);
-        // 短暂延迟后更新批量操作UI
-        setTimeout(() => {
-            updateBatchActions(type);
-        }, 350);
-      }
+      // 使用 resultModal 显示更详细的结果
+      const message =
+        response.message ||
+        `成功删除 ${response.deleted_count || selectedKeys.length} 个密钥。`;
+      showResultModal(true, message, true); // true 表示成功，message，true 表示关闭后刷新
     } else {
-      showResultModal(false, response.message || "批量删除密钥失败", false); // false 表示失败，message，false 表示关闭后不刷新
+      showResultModal(false, response.message || "批量删除密钥失败", true); // false 表示失败，message，true 表示关闭后刷新
     }
   } catch (error) {
     console.error("批量删除 API 请求失败:", error);
@@ -2655,281 +2528,4 @@ function showVerifyModalForAllKeys(allKeys) {
   
   // 显示模态框
   modalElement.classList.remove("hidden");
-}
-
-// 执行验证所有密钥
-async function executeVerifyAllKeys(allKeys) {
-  closeVerifyModal();
-  
-  // 获取批次大小
-  const batchSizeInput = document.getElementById("batchSize");
-  const batchSize = parseInt(batchSizeInput.value, 10) || 10;
-  
-  // 开始批量验证
-  showProgressModal(`批量验证所有 ${allKeys.length} 个密钥`);
-  
-  let allSuccessfulKeys = [];
-  let allFailedKeys = {};
-  let processedCount = 0;
-  
-  for (let i = 0; i < allKeys.length; i += batchSize) {
-    const batch = allKeys.slice(i, i + batchSize);
-    const progressText = `正在验证批次 ${Math.floor(i / batchSize) + 1} / ${Math.ceil(allKeys.length / batchSize)} (密钥 ${i + 1}-${Math.min(i + batchSize, allKeys.length)})`;
-    
-    updateProgress(i, allKeys.length, progressText);
-    addProgressLog(`处理批次: ${batch.length}个密钥...`);
-    
-    try {
-      const options = {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keys: batch }),
-      };
-      const data = await fetchAPI(`/gemini/v1beta/verify-selected-keys`, options);
-      
-      if (data) {
-        if (data.successful_keys && data.successful_keys.length > 0) {
-          allSuccessfulKeys = allSuccessfulKeys.concat(data.successful_keys);
-          addProgressLog(`✅ 批次成功: ${data.successful_keys.length} 个`);
-        }
-        if (data.failed_keys && Object.keys(data.failed_keys).length > 0) {
-          Object.assign(allFailedKeys, data.failed_keys);
-          addProgressLog(`❌ 批次失败: ${Object.keys(data.failed_keys).length} 个`, true);
-        }
-      } else {
-        addProgressLog(`- 批次返回空数据`, true);
-      }
-    } catch (apiError) {
-      addProgressLog(`❌ 批次请求失败: ${apiError.message}`, true);
-      // 将此批次的所有密钥标记为失败
-      batch.forEach(key => {
-        allFailedKeys[key] = apiError.message;
-      });
-    }
-    processedCount += batch.length;
-    updateProgress(processedCount, allKeys.length, progressText);
-  }
-  
-  updateProgress(
-    allKeys.length,
-    allKeys.length,
-    `所有批次验证完成！`
-  );
-  
-  // 关闭进度模态框并显示最终结果
-  closeProgressModal(false);
-  showVerificationResultModal({
-    successful_keys: allSuccessfulKeys,
-    failed_keys: allFailedKeys,
-    valid_count: allSuccessfulKeys.length,
-    invalid_count: Object.keys(allFailedKeys).length
-  });
-}
-
-// --- 密钥池状态相关功能 ---
-
-// 加载密钥池状态
-async function loadPoolStatus() {
-  try {
-    console.log("🔄 开始加载密钥池状态...");
-    const data = await fetchAPI('/api/keys/status');
-
-    console.log("📊 API返回数据:", {
-      hasData: !!data,
-      poolEnabled: data?.pool_enabled,
-      hasPoolStatus: !!data?.pool_status,
-      poolStatusKeys: data?.pool_status ? Object.keys(data.pool_status) : null
-    });
-
-    if (data && data.pool_enabled) {
-      console.log("✅ 密钥池已启用，显示卡片");
-      showPoolStatusCard();
-      if (data.pool_status) {
-        console.log("📊 更新密钥池状态显示");
-        updatePoolStatusDisplay(data.pool_status);
-      } else {
-        console.warn("⚠️ 未获取到密钥池状态数据，但保持卡片可见");
-      }
-    } else {
-      console.log("🔴 密钥池未启用，隐藏卡片");
-      hidePoolStatusCard();
-    }
-  } catch (error) {
-    console.error("❌ 加载密钥池状态时出错:", error);
-    // On API error, we don't hide the card to prevent UI flickering on transient network errors.
-    console.warn("⚠️ API请求失败，但保持密钥池卡片可见以避免闪烁");
-  }
-}
-
-// 更新密钥池状态显示
-function updatePoolStatusDisplay(poolStatus) {
-  // 安全检查
-  if (!poolStatus) {
-    console.error('Pool status is undefined');
-    return;
-  }
-
-  // 基本信息
-  const poolSizeElement = document.getElementById('poolSize');
-  const poolUtilizationElement = document.getElementById('poolUtilization');
-
-  if (poolSizeElement) {
-    poolSizeElement.textContent = `${poolStatus.current_size || 0}/${poolStatus.pool_size || 0}`;
-  }
-  if (poolUtilizationElement) {
-    poolUtilizationElement.textContent = `利用率: ${((poolStatus.utilization || 0) * 100).toFixed(1)}%`;
-  }
-
-  // 主要指标
-  const poolHitRateElement = document.getElementById('poolHitRate');
-  const poolAvgAgeElement = document.getElementById('poolAvgAge');
-
-  if (poolHitRateElement) {
-    poolHitRateElement.textContent = `${((poolStatus.hit_rate || 0) * 100).toFixed(1)}%`;
-  }
-  if (poolAvgAgeElement) {
-    poolAvgAgeElement.textContent = formatDuration(poolStatus.avg_key_age_seconds || 0);
-  }
-
-  // 详细统计
-  const poolVerificationRateElement = document.getElementById('poolVerificationRate');
-  const poolExpiryRateElement = document.getElementById('poolExpiryRate');
-  const poolEmergencyRefillsElement = document.getElementById('poolEmergencyRefills');
-  const poolMaintenanceCountElement = document.getElementById('poolMaintenanceCount');
-
-  if (poolVerificationRateElement) {
-    poolVerificationRateElement.textContent = `${((poolStatus.verification_success_rate || 0) * 100).toFixed(1)}%`;
-  }
-  if (poolExpiryRateElement) {
-    poolExpiryRateElement.textContent = `${((poolStatus.ttl_expiry_rate || 0) * 100).toFixed(1)}%`;
-  }
-  if (poolEmergencyRefillsElement) {
-    poolEmergencyRefillsElement.textContent = (poolStatus.stats && poolStatus.stats.emergency_refill_count) || 0;
-  }
-  if (poolMaintenanceCountElement) {
-    poolMaintenanceCountElement.textContent = (poolStatus.stats && poolStatus.stats.maintenance_count) || 0;
-  }
-
-  // 更新卡片样式
-  updatePoolStatusCardStyle(poolStatus);
-}
-
-// 更新密钥池状态卡片样式
-function updatePoolStatusCardStyle(poolStatus) {
-  if (!poolStatus) {
-    return;
-  }
-
-  const hitRateElement = document.querySelector('#poolStatusCard .stat-success .stat-value');
-  const utilizationElement = document.querySelector('#poolStatusCard .stat-info .stat-value');
-
-  // 根据命中率调整颜色
-  if (hitRateElement) {
-    const hitRate = poolStatus.hit_rate || 0;
-    if (hitRate >= 0.9) {
-      hitRateElement.className = 'stat-value text-green-600';
-    } else if (hitRate >= 0.7) {
-      hitRateElement.className = 'stat-value text-yellow-600';
-    } else {
-      hitRateElement.className = 'stat-value text-red-600';
-    }
-  }
-
-  // 根据利用率调整颜色
-  if (utilizationElement) {
-    const utilization = poolStatus.utilization || 0;
-    if (utilization >= 0.8) {
-      utilizationElement.className = 'stat-value text-green-600';
-    } else if (utilization >= 0.5) {
-      utilizationElement.className = 'stat-value text-yellow-600';
-    } else {
-      utilizationElement.className = 'stat-value text-red-600';
-    }
-  }
-}
-
-// 显示密钥池状态卡片
-function showPoolStatusCard() {
-  const card = document.getElementById('poolStatusCard');
-  if (card) {
-    console.log("🟢 显示密钥池状态卡片");
-    card.style.display = 'block';
-  } else {
-    console.error("❌ 找不到密钥池状态卡片元素");
-  }
-}
-
-// 隐藏密钥池状态卡片
-function hidePoolStatusCard() {
-  const card = document.getElementById('poolStatusCard');
-  if (card) {
-    console.log("🔴 隐藏密钥池状态卡片");
-    card.style.display = 'none';
-  } else {
-    console.error("❌ 找不到密钥池状态卡片元素");
-  }
-}
-
-// 格式化时间长度
-function formatDuration(seconds) {
-  if (seconds < 60) {
-    return `${seconds}秒`;
-  } else if (seconds < 3600) {
-    return `${Math.floor(seconds / 60)}分钟`;
-  } else {
-    return `${Math.floor(seconds / 3600)}小时`;
-  }
-}
-
-// 手动触发密钥池维护
-async function triggerPoolMaintenance() {
-  const button = document.getElementById('poolMaintenanceBtn');
-  if (!button) return;
-
-  // 保存原始状态
-  const originalHtml = button.innerHTML;
-  const originalDisabled = button.disabled;
-
-  try {
-    // 设置加载状态
-    button.disabled = true;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>维护中...</span>';
-
-    console.log("🔧 手动触发密钥池维护...");
-
-    const response = await fetch('/api/keys/pool/maintenance', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      console.log("✅ 密钥池维护成功:", data);
-      showNotification(
-        `维护成功！池大小: ${data.before.size} → ${data.after.size}`,
-        "success"
-      );
-
-      // 刷新密钥池状态
-      setTimeout(() => {
-        loadPoolStatus();
-      }, 1000);
-    } else {
-      console.error("❌ 密钥池维护失败:", data.message);
-      showNotification(`维护失败: ${data.message}`, "error");
-    }
-
-  } catch (error) {
-    console.error("❌ 维护请求失败:", error);
-    showNotification(`维护请求失败: ${error.message}`, "error");
-  } finally {
-    // 恢复按钮状态
-    setTimeout(() => {
-      button.innerHTML = originalHtml;
-      button.disabled = originalDisabled;
-    }, 1000);
-  }
 }

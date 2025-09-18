@@ -40,7 +40,7 @@ class TTSService:
         error_log_msg = ""
         try:
             client = genai.Client(api_key=api_key)
-            response =await client.aio.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=settings.TTS_MODEL,
                 contents=f"Speak in a {settings.TTS_SPEED} speed voice: {request.input}",
                 config={
@@ -48,7 +48,11 @@ class TTSService:
                     "speech_config": {
                         "voice_config": {
                             "prebuilt_voice_config": {
-                                "voice_name": request.voice if request.voice in TTS_VOICE_NAMES else settings.TTS_VOICE_NAME
+                                "voice_name": (
+                                    request.voice
+                                    if request.voice in TTS_VOICE_NAMES
+                                    else settings.TTS_VOICE_NAME
+                                )
                             }
                         }
                     },
@@ -59,7 +63,9 @@ class TTSService:
                 and response.candidates[0].content.parts
                 and response.candidates[0].content.parts[0].inline_data
             ):
-                raw_audio_data = response.candidates[0].content.parts[0].inline_data.data
+                raw_audio_data = (
+                    response.candidates[0].content.parts[0].inline_data.data
+                )
                 is_success = True
                 status_code = 200
                 return _create_wav_file(raw_audio_data)
@@ -83,13 +89,17 @@ class TTSService:
                     error_type="google-tts",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=request.input
-                 )
+                    request_msg=(
+                        request.input
+                        if settings.ERROR_LOG_RECORD_REQUEST_BODY
+                        else None
+                    ),
+                )
             await add_request_log(
                 model_name=settings.TTS_MODEL,
                 api_key=api_key,
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime
+                request_time=request_datetime,
             )

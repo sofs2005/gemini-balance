@@ -660,7 +660,11 @@ class OpenAIChatService:
                 error_type="openai-image-stream",
                 error_log=error_log_msg,
                 error_code=status_code,
-                request_msg={"image_data_truncated": image_data[:1000]},
+                request_msg=(
+                    {"image_data_truncated": image_data[:1000]}
+                    if settings.ERROR_LOG_RECORD_REQUEST_BODY
+                    else None
+                ),
                 request_datetime=request_datetime,
             )
             raise
@@ -710,7 +714,11 @@ class OpenAIChatService:
                 error_type="openai-image-non-stream",
                 error_log=error_log_msg,
                 error_code=status_code,
-                request_msg={"image_data_truncated": image_data[:1000]},
+                request_msg=(
+                    {"image_data_truncated": image_data[:1000]}
+                    if settings.ERROR_LOG_RECORD_REQUEST_BODY
+                    else None
+                ),
                 request_datetime=request_datetime,
             )
             raise

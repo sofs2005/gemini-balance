@@ -508,18 +508,16 @@ async def verify_key(
             return JSONResponse({"status": "valid"})
     except Exception as e:
         logger.error(f"Key verification failed: {str(e)}")
-        # Use centralized error handler to update key status, but ignore returned new_key
-        await handle_api_error_and_get_next_key(
-            key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
-        )
-        # Also log error to database
-        await log_api_error(
-            api_key=api_key,
-            error=e,
-            model_name=settings.TEST_MODEL,
-            error_type="key-verification-single"
-        )
-        return JSONResponse({"status": "invalid", "error": str(e)})
+
+        async with key_manager.failure_count_lock:
+            if api_key in key_manager.key_failure_counts:
+                key_manager.key_failure_counts[api_key] += 1
+                logger.warning(
+                    f"Verification exception for key: {redact_key_for_logging(api_key)}, incrementing failure count"
+                )
+
+        return JSONResponse({"status": "invalid", "error": e.args[1]})
+>>>>>>> 95b5aca (refactor(api): 优化错误处理和日志记录)
 
 
 @router.post("/verify-selected-keys")
@@ -563,22 +561,23 @@ async def verify_selected_keys(
             await key_manager.reset_key_failure_count(api_key)
             return api_key, "valid", None
         except Exception as e:
-            error_message = str(e)
+            error_message = e.args[1]
             logger.warning(
                 f"Key verification failed for {redact_key_for_logging(api_key)}: {error_message}"
             )
-            # Use centralized error handler to update key status
-            await handle_api_error_and_get_next_key(
-                key_manager, e, api_key, settings.TEST_MODEL, retries=settings.MAX_RETRIES
-            )
-            # Also log error to database
-            await log_api_error(
-                api_key=api_key,
-                error=e,
-                model_name=settings.TEST_MODEL,
-                error_type="key-verification-batch"
-            )
-            failed_keys[api_key] = error_message
+            async with key_manager.failure_count_lock:
+                if api_key in key_manager.key_failure_counts:
+                    key_manager.key_failure_counts[api_key] += 1
+                    logger.warning(
+                        f"Bulk verification exception for key: {redact_key_for_logging(api_key)}, incrementing failure count"
+                    )
+                else:
+                    key_manager.key_failure_counts[api_key] = 1
+                    logger.warning(
+                        f"Bulk verification exception for key: {redact_key_for_logging(api_key)}, initializing failure count to 1"
+                    )
+            failed_keys[api_key] = {"error_message": e.args[1], "error_code": e.args[0]}
+>>>>>>> 95b5aca (refactor(api): 优化错误处理和日志记录)
             return api_key, "invalid", error_message
 
     tasks = [_verify_single_key(key) for key in keys_to_verify]
@@ -589,11 +588,6 @@ async def verify_selected_keys(
             logger.error(
                 f"An unexpected error occurred during bulk verification task: {result}"
             )
-        elif result:
-            if not isinstance(result, Exception) and result:
-                key, status, error = result
-            elif isinstance(result, Exception):
-                logger.error(f"Task execution error during bulk verification: {result}")
 
     valid_count = len(successful_keys)
     invalid_count = len(failed_keys)

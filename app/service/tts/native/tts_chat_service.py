@@ -3,14 +3,16 @@
 继承自原始聊天服务，添加原生Gemini TTS支持（单人和多人），保持向后兼容
 """
 
-import time
 import datetime
+import time
 from typing import Any, Dict
-from app.service.chat.gemini_chat_service import GeminiChatService
-from app.service.tts.native.tts_response_handler import TTSResponseHandler
+
+from app.config.config import settings
+from app.database.services import add_error_log, add_request_log
 from app.domain.gemini_models import GeminiRequest
 from app.log.logger import get_gemini_logger
-from app.database.services import add_request_log, add_error_log
+from app.service.chat.gemini_chat_service import GeminiChatService
+from app.service.tts.native.tts_response_handler import TTSResponseHandler
 
 logger = get_gemini_logger()
 
@@ -28,7 +30,9 @@ class TTSGeminiChatService(GeminiChatService):
         super().__init__(base_url, key_manager)
         # 使用TTS响应处理器替换原始处理器
         self.response_handler = TTSResponseHandler()
-        logger.info("TTS Gemini Chat Service initialized with multi-speaker TTS support")
+        logger.info(
+            "TTS Gemini Chat Service initialized with multi-speaker TTS support"
+        )
 
     async def generate_content(
         self, model: str, request: GeminiRequest, api_key: str
@@ -55,7 +59,9 @@ class TTSGeminiChatService(GeminiChatService):
             logger.error(f"TTS API call failed with error: {e}")
             raise
 
-    async def _handle_tts_request(self, model: str, request: GeminiRequest, api_key: str) -> Dict[str, Any]:
+    async def _handle_tts_request(
+        self, model: str, request: GeminiRequest, api_key: str
+    ) -> Dict[str, Any]:
         """
         处理TTS特定的请求，包含完整的日志记录功能
         """
@@ -89,14 +95,24 @@ class TTSGeminiChatService(GeminiChatService):
             if request.generationConfig:
                 # 添加TTS特定字段
                 if request.generationConfig.responseModalities:
-                    payload["generationConfig"]["responseModalities"] = request.generationConfig.responseModalities
-                    logger.info(f"Added responseModalities: {request.generationConfig.responseModalities}")
+                    payload["generationConfig"][
+                        "responseModalities"
+                    ] = request.generationConfig.responseModalities
+                    logger.info(
+                        f"Added responseModalities: {request.generationConfig.responseModalities}"
+                    )
 
                 if request.generationConfig.speechConfig:
-                    payload["generationConfig"]["speechConfig"] = request.generationConfig.speechConfig
-                    logger.info(f"Added speechConfig: {request.generationConfig.speechConfig}")
+                    payload["generationConfig"][
+                        "speechConfig"
+                    ] = request.generationConfig.speechConfig
+                    logger.info(
+                        f"Added speechConfig: {request.generationConfig.speechConfig}"
+                    )
             else:
-                logger.warning("No generationConfig found in request, TTS fields may be missing")
+                logger.warning(
+                    "No generationConfig found in request, TTS fields may be missing"
+                )
 
             logger.info(f"TTS payload before API call: {payload}")
 
@@ -117,6 +133,7 @@ class TTSGeminiChatService(GeminiChatService):
 
             # 尝试从错误消息中提取状态码
             import re
+
             match = re.search(r"status code (\d+)", error_msg)
             if match:
                 status_code = int(match.group(1))
@@ -130,7 +147,11 @@ class TTSGeminiChatService(GeminiChatService):
                 error_type="tts-api-error",
                 error_log=error_msg,
                 error_code=status_code,
-                request_msg=request.model_dump(exclude_none=False)
+                request_msg=(
+                    request.model_dump(exclude_none=False)
+                    if settings.ERROR_LOG_RECORD_REQUEST_BODY
+                    else None
+                ),
             )
 
             logger.error(f"TTS API call failed: {error_msg}")
@@ -147,5 +168,5 @@ class TTSGeminiChatService(GeminiChatService):
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime
+                request_time=request_datetime,
             )

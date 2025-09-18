@@ -70,7 +70,11 @@ class EmbeddingService:
                     error_type="openai-embedding",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=request_msg_log,
+                    request_msg=(
+                        request_msg_log
+                        if settings.ERROR_LOG_RECORD_REQUEST_BODY
+                        else None
+                    ),
                     request_datetime=request_datetime,
                 )
             await add_request_log(
