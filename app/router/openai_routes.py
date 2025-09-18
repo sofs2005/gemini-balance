@@ -86,6 +86,7 @@ async def chat_completion(
     async with handle_route_errors(logger, operation_name):
         logger.info(f"Handling chat completion request for model: {request.model}")
         logger.debug(f"Request: \n{request.model_dump_json(indent=2)}")
+        logger.info(f"Using allowed token: {allowed_token}")
         logger.info(f"Using API key: {redact_key_for_logging(current_api_key)}")
 
         if not await model_service.check_model_support(request.model):
@@ -140,6 +141,7 @@ async def generate_image(
     operation_name = "generate_image"
     async with handle_route_errors(logger, operation_name):
         logger.info(f"Handling image generation request for prompt: {request.prompt}")
+        logger.info(f"Using allowed token: {allowed_token}")
         response = image_create_service.generate_images(request)
         return response
 
