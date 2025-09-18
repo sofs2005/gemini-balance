@@ -10,7 +10,6 @@ from pathlib import Path
 import logging
 
 from app.core.constants import DATA_URL_PATTERN, IMAGE_URL_PATTERN, VALID_IMAGE_RATIOS
-from app.config.config import settings
 
 helper_logger = logging.getLogger("app.utils")
 
@@ -193,16 +192,21 @@ def get_current_version(default_version: str = "0.0.0") -> str:
 
 
 def is_image_upload_configured() -> bool:
-    """Return True only if a valid upload provider is selected and all required settings for that provider are present."""
-    provider = getattr(settings, "UPLOAD_PROVIDER", "").strip().lower()
+    """Return True only if a valid upload provider is selected and all required settings for that provider are present. Uses lazy import to avoid circular imports."""
+    try:
+        from app.config.config import settings  # local import to avoid circular dependency at module import time
+    except Exception:
+        return False
+
+    provider = (getattr(settings, "UPLOAD_PROVIDER", "") or "").strip().lower()
     if provider == "smms":
-        return bool(getattr(settings, "SMMS_SECRET_TOKEN", None))
+        return bool(getattr(settings, "SMMS_SECRET_TOKEN", ""))
     if provider == "picgo":
-        return bool(getattr(settings, "PICGO_API_KEY", None))
+        return bool(getattr(settings, "PICGO_API_KEY", ""))
     if provider == "cloudflare_imgbed":
         return all([
-            getattr(settings, "CLOUDFLARE_IMGBED_URL", None),
-            getattr(settings, "CLOUDFLARE_IMGBED_AUTH_CODE", None),
-            getattr(settings, "CLOUDFLARE_IMGBED_UPLOAD_FOLDER", None),
+            getattr(settings, "CLOUDFLARE_IMGBED_URL", ""),
+            getattr(settings, "CLOUDFLARE_IMGBED_AUTH_CODE", ""),
+            getattr(settings, "CLOUDFLARE_IMGBED_UPLOAD_FOLDER", ""),
         ])
     return False
