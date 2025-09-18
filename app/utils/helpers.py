@@ -10,6 +10,7 @@ from pathlib import Path
 import logging
 
 from app.core.constants import DATA_URL_PATTERN, IMAGE_URL_PATTERN, VALID_IMAGE_RATIOS
+from app.config.config import settings
 
 helper_logger = logging.getLogger("app.utils")
 
@@ -189,3 +190,19 @@ def get_current_version(default_version: str = "0.0.0") -> str:
     except IOError as e:
         helper_logger.error(f"Error reading VERSION file ('{version_file}'): {e}. Using default version '{default_version}'.")
         return default_version
+
+
+def is_image_upload_configured() -> bool:
+    """Return True only if a valid upload provider is selected and all required settings for that provider are present."""
+    provider = getattr(settings, "UPLOAD_PROVIDER", "").strip().lower()
+    if provider == "smms":
+        return bool(getattr(settings, "SMMS_SECRET_TOKEN", None))
+    if provider == "picgo":
+        return bool(getattr(settings, "PICGO_API_KEY", None))
+    if provider == "cloudflare_imgbed":
+        return all([
+            getattr(settings, "CLOUDFLARE_IMGBED_URL", None),
+            getattr(settings, "CLOUDFLARE_IMGBED_AUTH_CODE", None),
+            getattr(settings, "CLOUDFLARE_IMGBED_UPLOAD_FOLDER", None),
+        ])
+    return False
