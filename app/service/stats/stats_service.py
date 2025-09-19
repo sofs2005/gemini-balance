@@ -5,11 +5,19 @@ from typing import Union
 
 from sqlalchemy import and_, case, func, or_, select
 
+from app.config.config import settings
 from app.database.connection import database
 from app.database.models import RequestLog
 from app.log.logger import get_stats_logger
 
 logger = get_stats_logger()
+
+
+def get_aware_now():
+    """获取时区感知的当前时间"""
+    import pytz
+    tz = pytz.timezone(settings.TIMEZONE)
+    return datetime.datetime.now(tz)
 
 
 class StatsService:
@@ -18,7 +26,7 @@ class StatsService:
     async def get_calls_in_last_seconds(self, seconds: int) -> dict[str, int]:
         """获取过去 N 秒内的调用次数 (总数、成功、失败)"""
         try:
-            cutoff_time = datetime.datetime.now() - datetime.timedelta(seconds=seconds)
+            cutoff_time = get_aware_now() - datetime.timedelta(seconds=seconds)
             query = select(
                 func.count(RequestLog.id).label("total"),
                 func.sum(
@@ -70,7 +78,7 @@ class StatsService:
     async def get_calls_in_current_month(self) -> dict[str, int]:
         """获取当前自然月内的调用次数 (总数、成功、失败)"""
         try:
-            now = datetime.datetime.now()
+            now = get_aware_now()
             start_of_month = now.replace(
                 day=1, hour=0, minute=0, second=0, microsecond=0
             )
@@ -153,7 +161,7 @@ class StatsService:
         Raises:
             ValueError: 如果 period 无效
         """
-        now = datetime.datetime.now()
+        now = get_aware_now()
         if period == "1m":
             start_time = now - datetime.timedelta(minutes=1)
         elif period == "1h":
@@ -211,7 +219,7 @@ class StatsService:
 
     async def get_all_api_call_details(self, period: str) -> list[dict]:
         """获取指定时间段内的所有API调用详情 (无分页)"""
-        now = datetime.datetime.now()
+        now = get_aware_now()
         if period == "1m":
             start_time = now - datetime.timedelta(minutes=1)
         elif period == "1h":
@@ -265,7 +273,7 @@ class StatsService:
 
     async def get_key_call_details(self, key: str, period: str) -> list[dict]:
         """获取指定密钥在指定时间段内的调用详情 (与 get_api_call_details 结构一致)"""
-        now = datetime.datetime.now()
+        now = get_aware_now()
         if period == "1m":
             start_time = now - datetime.timedelta(minutes=1)
         elif period == "1h":
@@ -326,7 +334,7 @@ class StatsService:
         Returns: [{"key": str, "count": int, "status_code": int}, ...] 按次数降序
         """
         try:
-            end_time = datetime.datetime.now()
+            end_time = get_aware_now()
             start_time = end_time - datetime.timedelta(hours=24)
 
             query = (
@@ -373,7 +381,7 @@ class StatsService:
         logger.info(
             f"Fetching usage details for key ending in ...{key[-4:]} for the last 24h."
         )
-        cutoff_time = datetime.datetime.now() - datetime.timedelta(hours=24)
+        cutoff_time = get_aware_now() - datetime.timedelta(hours=24)
 
         try:
             query = (

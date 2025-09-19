@@ -1486,27 +1486,29 @@ function bucketizeDetails(period, details) {
 
   const toKey = (ts) => {
     const d = new Date(ts);
+    const timeParts = getConfiguredTimezoneTimeParts(d);
+
     if (period === '1m') {
       // bucket by second within last minute
-      const mm = String(d.getMinutes()).padStart(2,'0');
-      const ss = String(d.getSeconds()).padStart(2,'0');
+      const mm = String(timeParts.minutes).padStart(2,'0');
+      const ss = String(timeParts.seconds).padStart(2,'0');
       return `${mm}:${ss}`;
     } else if (period === '1h') {
       // bucket by minute
-      const HH = String(d.getHours()).padStart(2,'0');
-      const mm = String(d.getMinutes()).padStart(2,'0');
+      const HH = String(timeParts.hours).padStart(2,'0');
+      const mm = String(timeParts.minutes).padStart(2,'0');
       return `${HH}:${mm}`;
     } else if (period === '8h') {
       // bucket by hour for 8h window (same as 24h)
-      const MM = String(d.getMonth()+1).padStart(2,'0');
-      const DD = String(d.getDate()).padStart(2,'0');
-      const HH = String(d.getHours()).padStart(2,'0');
+      const MM = String(timeParts.month).padStart(2,'0');
+      const DD = String(timeParts.day).padStart(2,'0');
+      const HH = String(timeParts.hours).padStart(2,'0');
       return `${MM}-${DD} ${HH}:00`;
     } else {
       // 24h: bucket by hour
-      const MM = String(d.getMonth()+1).padStart(2,'0');
-      const DD = String(d.getDate()).padStart(2,'0');
-      const HH = String(d.getHours()).padStart(2,'0');
+      const MM = String(timeParts.month).padStart(2,'0');
+      const DD = String(timeParts.day).padStart(2,'0');
+      const HH = String(timeParts.hours).padStart(2,'0');
       return `${MM}-${DD} ${HH}:00`;
     }
   };
@@ -1556,6 +1558,49 @@ function getLimit() {
   if (isNaN(v)) return 10;
   // clamp between 1 and 1000 to match input limits
   return Math.min(1000, Math.max(1, v));
+}
+
+// 时区感知的日期时间函数（使用配置的时区）
+function getConfiguredTimezoneOffset() {
+  // 根据配置的时区计算偏移量
+  if (!window.APP_TIMEZONE) return 8 * 60; // 默认Asia/Shanghai (UTC+8)
+
+  // 解析时区字符串，简单的映射
+  const timezoneMap = {
+    'Asia/Shanghai': 8 * 60,      // UTC+8
+    'Asia/Chongqing': 8 * 60,    // UTC+8
+    'Asia/Urumqi': 6 * 60,        // UTC+6
+    'Asia/Taipei': 8 * 60,       // UTC+8
+    'Asia/Hong_Kong': 8 * 60,    // UTC+8
+    'Asia/Macau': 8 * 60,        // UTC+8
+    'UTC': 0,                    // UTC
+    'Europe/London': 0,          // UTC+0 夏令时+1
+    'Europe/Paris': 1 * 60,       // UTC+1 夏令时+2
+    'America/New_York': -5 * 60,  // UTC-5 夏令时-4
+    'America/Los_Angeles': -8 * 60, // UTC-8 夏令时-7
+  };
+
+  return timezoneMap[window.APP_TIMEZONE] || 8 * 60; // 默认使用Asia/Shanghai
+}
+
+function getConfiguredTimezoneTime() {
+  // 返回配置时区的当前时间
+  const timezoneOffsetMinutes = getConfiguredTimezoneOffset();
+  return new Date(new Date().getTime() + (timezoneOffsetMinutes + new Date().getTimezoneOffset() / 60) * 60000);
+}
+
+function getConfiguredTimezoneTimeParts(date) {
+  // 将日期转换为配置的时区并返回时间部分
+  const timezoneOffsetMinutes = getConfiguredTimezoneOffset();
+  const configuredDate = new Date(date.getTime() + (timezoneOffsetMinutes + date.getTimezoneOffset() / 60) * 60000);
+  return {
+    year: configuredDate.getFullYear(),
+    month: configuredDate.getMonth() + 1, // 1-12
+    day: configuredDate.getDate(),
+    hours: configuredDate.getHours(),
+    minutes: configuredDate.getMinutes(),
+    seconds: configuredDate.getSeconds()
+  };
 }
 
 async function fetchAndRenderAttentionKeys(statusCode = 429, limit = 10) {
@@ -1900,10 +1945,13 @@ async function showApiCallDetails(
       periodText = "最近 1 分钟";
       break;
     case "1h":
-      periodText = "最近 1 小时";
+      periodText = "最近60分钟";
+      break;
+    case "8h":
+      periodText = "最近8小时";
       break;
     case "24h":
-      periodText = "最近 24 小时";
+      periodText = "最近24小时";
       break;
     default:
       periodText = "指定时间段";
@@ -2170,9 +2218,9 @@ window.showKeyUsageDetails = async function (key) {
   // 构建内容框架（时间范围按钮 + 图表 + 表格容器）
   const controlsHtml = `
     <div class="flex items-center gap-2 mb-3 text-xs">
-      <button id="keyBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
-      <button id="keyBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">8小时</button>
-      <button id="keyBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
+      <button id="keyBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近60分钟</button>
+      <button id="keyBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近8小时</button>
+      <button id="keyBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近24小时</button>
     </div>
     <div class="h-48 mb-4">
       <canvas id="keyUsageChart"></canvas>

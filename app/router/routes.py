@@ -133,6 +133,7 @@ def setup_page_routes(app: FastAPI) -> None:
                     "invalid_key_count": invalid_key_count,
                     "api_stats": api_stats,
                     "timestamp": int(time.time()),
+                    "timezone": settings.TIMEZONE,
                 },
             )
         except Exception as e:

@@ -2152,7 +2152,10 @@ endblock %} {% block head_extra_styles %}
 
 <!-- Footer is now in base.html -->
 
-{% endblock %} {% block body_scripts %}
+{% endblock %}
+{% block body_scripts %}
+// Global timezone configuration from backend settings
+window.APP_TIMEZONE = "{{ timezone }}";
 <script>
   // keys_status.html specific JavaScript initialization is now handled by keys_status.js
   // The DOMContentLoaded listener in keys_status.js will execute after the DOM is ready.
