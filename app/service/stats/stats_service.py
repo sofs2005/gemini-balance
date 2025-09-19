@@ -292,45 +292,19 @@ class StatsService:
 
             results = await database.fetch_all(query)
 
-            from app.database.models import ErrorLog
-
             details: list[dict] = []
             for row in results:
                 status = "failure"
-                if row["status_code"] is not None:
-                    status = "success" if 200 <= row["status_code"] < 300 else "failure"
+                if row["status_code"] in [200, 201]:
+                    status = "success"
+                elif row["status_code"] in [400, 404, 500]:
+                    status = "failure"
 
                 record = {
-                    "timestamp": row["timestamp"].isoformat(),
-                    "key": row["key"],
-                    "model": row["model"],
+                    "timestamp": row["timestamp"],
                     "status": status,
-                    "status_code": row["status_code"],
                     "latency_ms": row["latency_ms"],
                 }
-
-                if status == "failure" and row["key"]:
-                    try:
-                        ts = row["timestamp"]
-                        start_win = ts - datetime.timedelta(minutes=5)
-                        end_win = ts + datetime.timedelta(minutes=5)
-                        err_query = (
-                            select(ErrorLog.id)
-                            .where(
-                                ErrorLog.gemini_key == row["key"],
-                                ErrorLog.request_time >= start_win,
-                                ErrorLog.request_time < end_win,
-                            )
-                            .order_by(ErrorLog.request_time.desc())
-                            .limit(1)
-                        )
-                        err = await database.fetch_one(err_query)
-                        if err:
-                            record["error_log_id"] = err["id"]
-                    except Exception as _e:
-                        logger.debug(
-                            f"No matching error log found for key ending ...{row['key'][-4:] if row['key'] else ''}: {_e}"
-                        )
 
                 details.append(record)
 
@@ -352,29 +326,30 @@ class StatsService:
         Returns: [{"key": str, "count": int, "status_code": int}, ...] 按次数降序
         """
         try:
-            now = datetime.datetime.now()
-            start_time = now - datetime.timedelta(hours=24)
-            if not include_keys:
-                return []
+            end_time = datetime.datetime.now()
+            start_time = end_time - datetime.timedelta(hours=24)
+
             query = (
                 select(
-                    RequestLog.api_key.label("key"),
-                    func.count(RequestLog.id).label("count"),
+                    RequestLog.gemini_key.label("key"),
+                    func.count().label("count"),
+                    RequestLog.status_code,
                 )
                 .where(
                     RequestLog.request_time >= start_time,
+                    RequestLog.request_time <= end_time,
                     RequestLog.status_code == status_code,
-                    RequestLog.api_key.isnot(None),
-                    RequestLog.api_key.in_(list(include_keys)),
+                    RequestLog.gemini_key.in_(include_keys),
                 )
-                .group_by(RequestLog.api_key)
-                .order_by(func.count(RequestLog.id).desc())
+                .group_by(RequestLog.gemini_key, RequestLog.status_code)
+                .order_by(func.count().desc())
                 .limit(limit)
             )
-            rows = await database.fetch_all(query)
+
+            results = await database.fetch_all(query)
             return [
-                {"key": row["key"], "count": row["count"], "status_code": status_code}
-                for row in rows
+                {"key": row["key"], "count": row["count"], "status_code": row["status_code"]}
+                for row in results
                 if row["key"]
             ]
         except Exception as e:

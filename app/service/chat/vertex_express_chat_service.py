@@ -1,20 +1,22 @@
 # app/services/chat_service.py
 
+# app/services/chat_service.py
+
+import datetime
 import json
 import re
-import datetime
 import time
 from typing import Any, AsyncGenerator, Dict, List
+
 from app.config.config import settings
 from app.core.constants import GEMINI_2_FLASH_EXP_SAFETY_SETTINGS
+from app.database.services import add_error_log, add_request_log
 from app.domain.gemini_models import GeminiRequest
 from app.handler.response_handler import GeminiResponseHandler
 from app.handler.stream_optimizer import gemini_optimizer
-from app.handler.error_processor import handle_api_error_and_get_next_key
 from app.log.logger import get_gemini_logger
 from app.service.client.api_client import GeminiApiClient
 from app.service.key.key_manager import KeyManager
-from app.database.services import add_error_log, add_request_log
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_gemini_logger()
@@ -272,7 +274,8 @@ class GeminiChatService:
                 error_type="gemini-chat-non-stream",
                 error_log=error_log_msg,
                 error_code=status_code,
-                request_msg=payload
+                request_msg=payload,
+                request_datetime=request_datetime,
             )
             raise e
         finally:
@@ -284,7 +287,7 @@ class GeminiChatService:
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime
+                request_time=request_datetime,
             )
 
     async def stream_generate_content(
@@ -351,11 +354,12 @@ class GeminiChatService:
                     error_type="gemini-chat-stream",
                     error_log=error_log_msg,
                     error_code=status_code,
-                    request_msg=payload
+                    request_msg=payload,
+                    request_datetime=request_datetime,
                 )
 
-                api_key = await handle_api_error_and_get_next_key(
-                    self.key_manager, e, current_attempt_key, model, retries
+                api_key = await self.key_manager.handle_api_failure(
+                    current_attempt_key, retries
                 )
                 if api_key:
                     logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")

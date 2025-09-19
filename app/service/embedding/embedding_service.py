@@ -1,15 +1,14 @@
 import datetime
-import re
 import time
-from typing import List, Union
+import re
 
 import openai
 from openai import APIStatusError
 from openai.types import CreateEmbeddingResponse
 
 from app.config.config import settings
-from app.database.services import add_error_log, add_request_log
 from app.log.logger import get_embeddings_logger
+from app.database.services import add_error_log, add_request_log
 
 logger = get_embeddings_logger()
 
@@ -84,5 +83,5 @@ class EmbeddingService:
                 is_success=is_success,
                 status_code=status_code,
                 latency_ms=latency_ms,
-                request_time=request_datetime,
+                request_time=request_datetime
             )

@@ -3,19 +3,17 @@ import datetime
 import json
 import re
 import time
-from typing import Any, AsyncGenerator, Dict, Union
+from typing import Any, AsyncGenerator, Dict
 
 from app.config.config import settings
 from app.database.services import (
-    add_error_log,
     add_request_log,
 )
 from app.domain.openai_models import ChatRequest, ImageGenerationRequest
-from app.handler.error_processor import handle_api_error_and_get_next_key
+from app.log.logger import get_openai_compatible_logger
 from app.service.client.api_client import OpenaiApiClient
 from app.service.key.key_manager import KeyManager
 from app.utils.helpers import redact_key_for_logging
-from app.log.logger import get_openai_compatible_logger
 
 logger = get_openai_compatible_logger()
 
@@ -142,11 +140,19 @@ class OpenAICompatiableService:
                 else:
                     status_code = 500
 
-                # 错误日志将由 handle_api_error_and_get_next_key 统一处理
+                await add_error_log(
+                    gemini_key=current_attempt_key,
+                    model_name=model,
+                    error_type="openai-chat-stream",
+                    error_log=error_log_msg,
+                    error_code=status_code,
+                    request_msg=payload,
+                    request_datetime=request_datetime,
+                )
 
                 if self.key_manager:
-                    api_key = await handle_api_error_and_get_next_key(
-                        self.key_manager, e, current_attempt_key, model, retries
+                    api_key = await self.key_manager.handle_api_failure(
+                        current_attempt_key, retries
                     )
                     if api_key:
                         logger.info(f"Switched to new API key: {redact_key_for_logging(api_key)}")

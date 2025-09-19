@@ -136,27 +136,28 @@ This is the most recommended deployment method, which can start the application 
 
 ### Gemini API Format (`/gemini/v1beta`)
 
+This endpoint is directly forwarded to official Gemini API format endpoint, without advanced features.
+
 *   `GET /models`: List available Gemini models.
 *   `POST /models/{model_name}:generateContent`: Generate content.
-*   `POST /models/{model_name}:streamGenerateContent`: Stream generate content.
-*   `GET /files`: List uploaded files.
-*   `POST /files`: Upload files.
+*   `POST /models/{model_name}:streamGenerateContent`: Stream content generation.
+*   `POST /models/{model_name}:countTokens`: Count tokens.
 
-### OpenAI API Format
+#### Hugging Face (HF) Compatible
 
-#### HuggingFace (HF) Compatible Format
+If you want to use advanced features, like fake streaming, please use this endpoint.
 
 *   `GET /hf/v1/models`: List models.
-*   `POST /hf/v1/chat/completions`: Chat completions.
+*   `POST /hf/v1/chat/completions`: Chat completion.
 *   `POST /hf/v1/embeddings`: Create text embeddings.
-*   `POST /hf/v1/images/generations`: Generate images.
 
-#### Standard OpenAI Format
+#### Standard OpenAI
+
+This endpoint is directly forwarded to official OpenAI Compatible API format endpoint, without advanced features.
 
 *   `GET /openai/v1/models`: List models.
-*   `POST /openai/v1/chat/completions`: Chat completions (recommended, faster, prevents truncation).
+*   `POST /openai/v1/chat/completions`: Chat completion (Recommended).
 *   `POST /openai/v1/embeddings`: Create text embeddings.
-*   `POST /openai/v1/images/generations`: Generate images.
 
 ### Web Interface
 
