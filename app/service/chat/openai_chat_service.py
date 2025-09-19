@@ -560,6 +560,7 @@ class OpenAIChatService:
                     error_log=error_log_msg,
                     error_code=status_code,
                     request_msg=payload,
+                    request_datetime=request_datetime,
                 )
 
                 if self.key_manager:
@@ -673,6 +674,7 @@ class OpenAIChatService:
                 error_log=error_log_msg,
                 error_code=status_code,
                 request_msg={"image_data_truncated": image_data[:1000]},
+                request_datetime=request_datetime,
             )
             yield f"data: {json.dumps({'error': error_log_msg})}\n\n"
             yield "data: [DONE]\n\n"
@@ -723,6 +725,7 @@ class OpenAIChatService:
                 error_log=error_log_msg,
                 error_code=status_code,
                 request_msg={"image_data_truncated": image_data[:1000]},
+                request_datetime=request_datetime,
             )
             raise e
         finally:
