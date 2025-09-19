@@ -38,7 +38,7 @@ class ErrorLog(Base):
     error_log = Column(Text, nullable=True, comment="错误日志")
     error_code = Column(Integer, nullable=True, comment="错误代码")
     request_msg = Column(JSON, nullable=True, comment="请求消息")
-    request_time = Column(DateTime, default=datetime.datetime.now, comment="请求时间")
+    request_time = Column(DateTime, comment="请求时间")
     
     def __repr__(self):
         return f"<ErrorLog(id='{self.id}', gemini_key='{self.gemini_key}')>"

@@ -1257,12 +1257,12 @@ endblock %} {% block head_extra_styles %}
           </div>
           <div
             class="stat-item stat-info cursor-pointer hover:bg-blue-100"
-            title="点击查看1小时内调用详情"
+            title="点击查看60分钟内调用详情"
             data-period="1h"
             onclick="showApiCallDetails('1h', '{{ api_stats.calls_1h.total }}', '{{ api_stats.calls_1h.success }}', '{{ api_stats.calls_1h.failure }}')"
           >
             <div class="stat-value">{{ api_stats.calls_1h.total }}</div>
-            <div class="stat-label">1小时调用</div>
+            <div class="stat-label">60分钟调用</div>
             <i class="stat-icon fas fa-hourglass-half"></i>
           </div>
           <div
@@ -1349,9 +1349,9 @@ endblock %} {% block head_extra_styles %}
             <span>调用趋势图</span>
           </h3>
           <div class="flex items-center gap-2 text-xs">
-            <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">1小时</button>
-            <button id="chartBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">8小时</button>
-            <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">24小时</button>
+            <button id="chartBtn1h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近60分钟</button>
+            <button id="chartBtn8h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近8小时</button>
+            <button id="chartBtn24h" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">最近24小时</button>
           </div>
         </div>
         <div class="p-4 chart-container">

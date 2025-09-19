@@ -9,12 +9,20 @@ from typing import Any, Dict, List, Optional, Union
 
 from sqlalchemy import asc, delete, desc, func, insert, select, update
 
+from app.config.config import settings
 from app.database.connection import database
 from app.database.models import ErrorLog, FileRecord, FileState, RequestLog, Settings
 from app.log.logger import get_database_logger
 from app.utils.helpers import redact_key_for_logging
 
 logger = get_database_logger()
+
+
+def get_aware_now():
+    """获取时区感知的当前时间"""
+    import pytz
+    tz = pytz.timezone(settings.TIMEZONE)
+    return datetime.datetime.now(tz)
 
 
 async def get_all_settings() -> List[Dict[str, Any]]:
@@ -152,7 +160,7 @@ async def add_error_log(
             model_name=model_name,
             error_code=error_code,
             request_msg=request_msg_json,
-            request_time=(request_datetime if request_datetime else datetime.now()),
+            request_time=(request_datetime if request_datetime else get_aware_now()),
         )
         result = await database.execute(query)
         logger.info(f"Added error log for key: {redact_key_for_logging(gemini_key)}, result: {result}")

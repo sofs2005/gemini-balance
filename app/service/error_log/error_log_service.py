@@ -28,7 +28,9 @@ async def delete_old_error_logs():
         )
         return
 
-    cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+    import pytz
+    tz = pytz.timezone(settings.TIMEZONE)
+    cutoff_date = datetime.datetime.now(tz) - timedelta(days=days_to_keep)
 
     logger.info(
         f"Attempting to delete error logs older than {days_to_keep} days (before {cutoff_date.strftime('%Y-%m-%d %H:%M:%S %Z')})."
