@@ -12,9 +12,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Testing
 - **Run all tests**: `python tests/test_runner.py`
 - **Specific test**: `python -m unittest tests.test_ttl_cache.TestTTLCache.test_ttl_expiration`
+- **Individual test file**: `python -m unittest tests.test_key_manager_integration`
 
-### Database
-- **Fix settings table**: `python fix_settings_table.py` (use if database schema needs updates)
+### Development Setup
+- **Install dependencies**: `pip install -r requirements.txt`
+- **Environment setup**: Copy `.env.example` to `.env` and configure
+- **Database schema fix**: `python fix_settings_table.py` (use if database schema needs updates)
 
 ## Architecture Overview
 
@@ -97,6 +100,8 @@ This is a FastAPI-based Gemini API proxy and load balancer that manages multiple
 - API keys for Gemini and Vertex AI
 - Authentication tokens for admin access
 - Model-specific configurations and safety settings
+- Image generation and hosting provider settings
+- Proxy configurations for network environments
 
 **Database Configuration**: 
 - Uses MySQL by default in production
@@ -110,9 +115,19 @@ This is a FastAPI-based Gemini API proxy and load balancer that manages multiple
 - `KEY_TTL_HOURS`: Time before keys need revalidation
 - `POOL_MAINTENANCE_INTERVAL_MINUTES`: How often to check pool health
 
+**Advanced Features Configuration**:
+- `STREAM_OPTIMIZER_ENABLED`: Control stream response optimization
+- `FAKE_STREAM_ENABLED`: Enable fake streaming for compatibility
+- `SAFETY_SETTINGS`: Configure content filtering policies
+- `PROXIES`: Configure HTTP/SOCKS5 proxy settings
+- `TTS_MODEL`: Text-to-speech model configuration
+
 ### Development Patterns
 
 **Error Handling**: Comprehensive error logging with automatic cleanup
 **Configuration Changes**: Most configuration changes take effect immediately without restart
 **Testing**: Focus on key management and cache functionality in `tests/` directory
+- Test files: `test_ttl_cache.py`, `test_key_manager_integration.py`, `test_valid_key_pool.py`
 **Logging**: Multi-level logging with automatic retention policies
+**Database Models**: Use SQLAlchemy ORM with support for both MySQL and SQLite
+**Background Tasks**: APScheduler for key validation, pool maintenance, and file cleanup
