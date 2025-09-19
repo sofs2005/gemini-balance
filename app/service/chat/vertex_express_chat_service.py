@@ -377,5 +377,5 @@ class GeminiChatService:
                     is_success=is_success,
                     status_code=status_code,
                     latency_ms=latency_ms,
-                    request_time=request_datetime
+                    request_time=request_datetime,
                 )

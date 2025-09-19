@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
 from copy import deepcopy
+import json
 import asyncio
 import re
 from app.config.config import settings
@@ -178,7 +179,7 @@ async def stream_generate_content(
     _=Depends(security_service.verify_key_or_goog_api_key),
     api_key: str = Depends(get_next_working_key_for_model),
     key_manager: KeyManager = Depends(get_key_manager),
-    chat_service: GeminiChatService = Depends(get_chat_service)
+    chat_service: GeminiChatService = Depends(get_chat_service),
 ):
     """处理 Gemini 流式内容生成请求。"""
     operation_name = "gemini_stream_generate_content"
@@ -190,12 +191,44 @@ async def stream_generate_content(
         if not await model_service.check_model_support(model_name):
             raise HTTPException(status_code=400, detail=f"Model {model_name} is not supported")
 
-        response_stream = chat_service.stream_generate_content(
+        raw_stream = chat_service.stream_generate_content(
             model=model_name,
             request=request,
             api_key=api_key
         )
-        return StreamingResponse(response_stream, media_type="text/event-stream")
+        try:
+            # 尝试获取第一条数据，判断是正常 SSE（data: 前缀）还是错误 JSON
+            first_chunk = await raw_stream.__anext__()
+        except StopAsyncIteration:
+            # 如果流直接结束，退回标准 SSE 输出
+            async def empty_stream():
+                yield ""
+            return StreamingResponse(empty_stream(), media_type="text/event-stream")
+        except Exception as e:
+            # 初始化流异常，直接返回 500 错误
+            return JSONResponse(
+                content={"error": {"code": 500, "message": str(e)}},
+                status_code=500
+            )
+
+        # 如果以 "data:" 开头，代表正常 SSE，将首块和后续块一起发送
+        if isinstance(first_chunk, str) and first_chunk.startswith("data:"):
+            async def combined():
+                yield first_chunk
+                async for chunk in raw_stream:
+                    yield chunk
+
+            return StreamingResponse(combined(), media_type="text/event-stream")
+
+        # 否则把首块当作错误 JSON 处理
+        try:
+            err = json.loads(first_chunk)
+            code = err.get("error", {}).get("code", 500)
+        except json.JSONDecodeError:
+            err = {"error": {"code": 500, "message": first_chunk}}
+            code = 500
+
+        return JSONResponse(content=err, status_code=code)
 
 
 @router.post("/models/{model_name}:countTokens")
